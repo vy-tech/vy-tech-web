@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>RoarScore POC Test</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
+    <script src="https://kit.fontawesome.com/c38971e2c7.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" type="text/css" href="roarscore.css">
+    <script src="https://cdn.jsdelivr.net/gh/vanjs-org/van/public/van-1.5.2.nomodule.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanjs-ui@0.11.4/dist/van-ui.nomodule.min.js"></script>
+    <script type="text/javascript" src="rsui.js?v=2025020304"></script>
+    <script type="text/javascript" src="rsviz.js?v=2025020304"></script>
+    <script type="text/javascript" src="rsprofiles.js?v=2025020304"></script>
+    <script type="text/javascript" src="rsscenes.js?v=2025020304"></script>
+    <script type="text/javascript" src="rsjobs.js?v=2025020304"></script>
+    <script type="text/javascript" src="roarscore.js?v=2025020304"></script>
+
+
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-analytics.js";
+        import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-auth.js";
+        import { getFirestore, doc, collection, setDoc, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytesResumable } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-storage.js";
+
+        // TODO: Add SDKs for Firebase products that you want to use
+        // https://firebase.google.com/docs/web/setup#available-libraries
+        // Your web app's Firebase configuration
+        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+      
+        const firebaseConfig = {
+          apiKey: "AIzaSyDNLSneWSThYPb-jyjgM174iH_1g3a-kFU",
+          authDomain: "roarscore-1ddf5.firebaseapp.com",
+          projectId: "roarscore-1ddf5",
+          storageBucket: "roarscore-1ddf5.firebasestorage.app",
+          messagingSenderId: "680382994994",
+          appId: "1:680382994994:web:9ed378373adc13b4563a2b",
+          measurementId: "G-6VW7WCK4FW"
+        };
+      
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        
+        var fb = {
+          app: app,
+          analytics: analytics,
+          auth: auth,
+          db: db,
+          storage: storage,
+          signInWithEmailAndPassword: signInWithEmailAndPassword,
+          doc: doc,
+          collection: collection,
+          setDoc: setDoc,
+          addDoc: addDoc,
+          getDocs: getDocs,
+          deleteDoc: deleteDoc,
+          ref: ref,
+          uploadBytesResumable: uploadBytesResumable
+        };
+
+        var rs = new RoarScore(fb);
+        window.rs = rs;
+        rs.start();
+      </script>
+</head>
+
+<body>
+</body>
+
+</html>

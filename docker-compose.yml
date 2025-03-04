@@ -1,0 +1,11 @@
+services:
+    humepoc:
+        build:
+          context: .
+          dockerfile: ./Dockerfile
+        container_name: humepoc
+        hostname: humepoc
+        volumes:
+          - .:/usr/local/hume
+
+
