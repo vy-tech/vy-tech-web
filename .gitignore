@@ -2,6 +2,11 @@
 secret.py
 firebase-svc-cred.json
 
+.vscode
+
+*.mp4
+*.mov
+
 # Logs
 logs
 *.log
