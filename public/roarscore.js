@@ -21,6 +21,7 @@ class RoarScore extends EventTarget {
         await this.viz.setup();
         await this.profiles.setup();
         await this.scenes.setup();
+        await this.jobs.setup();
     }
 
     async start() {
@@ -43,3 +44,4 @@ class RoarScore extends EventTarget {
         });
     }
 }
+

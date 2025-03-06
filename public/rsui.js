@@ -1,11 +1,4 @@
-class RSUI extends EventTarget {
-    constructor(rs) {
-        super();
-
-        this.rs = rs;
-        this.lo = rs.lo;
-    }
-
+class RSUI extends RSObject {
     async setup() {
         this.computeLayout();
         this.showNavBar();
@@ -56,6 +49,7 @@ class RSUI extends EventTarget {
 
             span({ style: "flex: 2" }), () => {
                 if (this.rs.authState.val) {
+
                     return span(
 
                         a({ 

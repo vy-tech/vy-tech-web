@@ -1,13 +1,6 @@
-class RSViz extends EventTarget {
+class RSViz extends RSObject {
     BOX_SCALE = 5.0;
     HISTORY_LENGTH = 100;
-
-    constructor(rs) {
-        super();
-
-        this.rs = rs;
-        this.lo = rs.lo;
-    }
 
     async setup() {
         this.computeLayout();
@@ -16,7 +9,8 @@ class RSViz extends EventTarget {
         this.showGraphWindow();
         this.showContextWindow();
 
-        await this.loadData();
+        this.rs.scenes.addEventListener("sceneChanged", (e) => this.changeScene(e.detail.scene));
+        this.rs.profiles.addEventListener("profileChanged", (e) => this.changeProfile(e.detail.profile));
     }
 
     start() {
@@ -24,14 +18,44 @@ class RSViz extends EventTarget {
         this.action.play();
     }
 
-    async loadData() {
-        var response = await fetch("data.json?v=8");
+    async changeScene(scene) {
+        await this.loadData(scene);
+        document.getElementById('main_video').src = await this.createDownloadUrl(scene.audienceVideo);
+        document.getElementById('action_video').src = await this.createDownloadUrl(scene.contextVideo);
 
-        this.data = await response.json();
+        this.applyProfile();
+    }
 
-        this.currentIndex = 0;
-        this.paintData = [];
-        this.next = this.data[0];
+    changeProfile(profile) {
+        this.profile = profile;
+        this.applyProfile();
+    }
+
+    applyProfile() {
+        if (this.profile && this.data) {
+            console.log("Applying profile");
+
+            for (var row of this.data) {
+                for (var emotion of row.emotions) {
+                    if (this.profile.emotions[emotion.name]) {
+                        emotion.score = emotion.confidence * this.profile.emotions[emotion.name];
+                    }
+                }
+            }
+        }
+    }
+
+    async loadData(scene) {
+        if (scene && scene.results) {
+            this.data = await this.fetchData(scene.results);
+
+            this.currentIndex = 0;
+            this.paintData = [];
+            this.next = this.data[0];
+        }
+        else {
+            console.error("Could not change scene, was empty or missing results");
+        }
     }
 
     computeLayout() {        
@@ -294,7 +318,6 @@ class RSViz extends EventTarget {
             div({ id: "main_video_container", style: `width:${lo.videoWidth}px; height:${lo.videoHeight-35}px` }, 
                 video({ 
                     id: "main_video", 
-                    src:"RoarScore Sample 2.mp4?v=2025011501", 
                     controls: "controls",
                     loop: "loop", 
                     muted: "muted", 
@@ -408,7 +431,6 @@ class RSViz extends EventTarget {
             div(
                 video({ 
                     id: "action_video", 
-                    src:"RoarScore Action 2.mp4?v=2025011501", 
                     loop: "loop", 
                     muted: "muted", 
                     playsinline: "playsinline",

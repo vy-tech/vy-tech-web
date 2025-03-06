@@ -1,11 +1,7 @@
 
-class RSJobs extends EventTarget {
+class RSJobs extends RSObject {
     constructor(rs) {
-        super();
-
-        this.rs = rs;
-        this.fb = rs.fb;
-        this.lo = rs.lo;
+        super(rs);
 
         this.jobs = van.state({});
     }
@@ -18,11 +14,12 @@ class RSJobs extends EventTarget {
     computeLayout() {        
         var lo = this.lo || {};
 
-        lo.sceneWidth = 630;
-        lo.sceneHeight = 245;
-        lo.sceneX = lo.width/2 - lo.sceneWidth/2;
-        lo.sceneY = lo.height/2 - lo.sceneHeight/2;
+        lo.jobsWidth = 1200;
+        lo.jobsHeight = 400;
+        lo.jobsX = lo.width/2 - lo.jobsWidth/2;
+        lo.jobsY = lo.height/2 - lo.jobsHeight/2;
 
+        console.log(lo);
         this.lo = lo;
         return lo;
     }
@@ -30,15 +27,40 @@ class RSJobs extends EventTarget {
     async load() {
         // TODO Set to subscribe not just fetch
         console.log("Fetching jobs..");
-        var scenes = {};
-        const snapshot = await this.fb.getDocs(this.fb.collection(this.fb.db, "jobs"));
 
-        snapshot.forEach((doc) => {
-            scenes[doc.id] = doc.data();
+        const q = this.fb.query(this.fb.collection(this.fb.db, "jobs"));
+        this.unsubscribe = this.fb.onSnapshot(q, (snapshot) => {
+            var jobs = {};
+            snapshot.forEach((doc) => {
+                jobs[doc.id] = doc.data();
+            });
+
+            console.log("Setting jobs..");
+            this.jobs.val = jobs;
         });
 
-        console.log("Setting jobs..");
-        this.scenes.val = scenes;
+        // const snapshot = await this.fb.getDocs(this.fb.collection(this.fb.db, "jobs"));
+
+        // snapshot.forEach((doc) => {
+        //     jobs[doc.id] = doc.data();
+        // });
+
+        //console.log("Setting jobs..");
+        //this.jobs.val = jobs;
+    }
+
+    getRefName(type, id) {
+        if (type == "scene") {
+            var scene = this.rs.scenes.getById(id) || { name: "Not found" }
+            return scene.name;
+        }
+        else if (type == "profile") {
+            var profile = this.rs.profiles.getById(id) || { name: "Not found" }
+            return profile.name;
+        }
+        else {
+            return "Unknown";
+        }
     }
 
     showList() {
@@ -46,13 +68,14 @@ class RSJobs extends EventTarget {
         const { div, span, table, thead, tbody, tr, th, td, a, button } = van.tags;
         const closed = van.state(false);
 
-        var height = Math.max(lo.listHeight, 110 + (Object.keys(this.scenes.val).length +1) * 30);
+        var height = Math.max(lo.jobsHeight, 110 + (Object.keys(this.jobs.val).length +1) * 30);
         var y = lo.height/2 - height/2;
 
-        this.scenesList = FloatingWindow(
+        console.log(lo);
+        this.jobsList = FloatingWindow(
             {
                 title: "Jobs",
-                x: lo.listX, y: y, width: lo.listWidth, height: height,
+                x: lo.jobsX, y: y, width: lo.jobsWidth, height: height,
                 childrenContainerStyleOverrides: { padding: 0 },
                 closed, closeCross: null
             },
@@ -61,35 +84,33 @@ class RSJobs extends EventTarget {
                 style: "position: absolute; top: 8px; right: 8px;cursor: pointer;",
                 onclick: () => closed.val = true
             }, "×"),
-            div(
+            div(() =>
                 table({ class: "list" },
                     thead(
                         tr(
+                            th("Ref"),
                             th("Type"),
                             th("Status"),
-                            th("Created"),
                             th("Updated"),
-                            th("RefType"),
-                            th("RefId")
+                            th("Message")
                         )
                     ),
                     tbody(
-                        Object.values(this.scenes.val).map((scene) => tr(
-                            td(scene.type),
-                            td(scene.status),
-                            td(scene.created),
-                            td(scene.updated),
-                            td(scene.refType),
-                            td(scene.refId)
+                        Object.values(this.jobs.val).map((job) => tr(
+                            td(this.getRefName(job.refType,job.refId)),
+                            td(job.type),
+                            td(job.status),
+                            td(job.updated.toDate().toLocaleString()),
+                            td(job.message)
                         ))
                     )
                 )
             )
         );
         
-        this.scenesList.close = () => { closed.val = true; }
+        this.jobsList.close = () => { closed.val = true; }
 
-        van.add(document.body, this.scenesList);
+        van.add(document.body, this.jobsList);
     }
 
     async create(type, refType, refId) {
@@ -101,7 +122,8 @@ class RSJobs extends EventTarget {
             refId: refId,           // Id of refrenced object
             status: "requested",
             created: new Date(),
-            updated: new Date()
+            updated: new Date(),
+            message: ""
         };
 
         await this.fb.setDoc(docRef, job);
@@ -112,5 +134,25 @@ class RSJobs extends EventTarget {
         this.jobs.val = jobs;
 
         return job;
+    }
+
+    waitOnJob(jobId, progress) {
+        var self = this;
+        const check = function(jobId, resolve, reject, progress) {
+            var job = self.jobs.val[jobId];
+            
+            if (job.status == "completed") {
+                resolve(job);
+            }
+            else if (job.status == "failed") {
+                reject(job);
+            }
+            else {
+                progress(job, job.message || job.status);
+                setTimeout(() => { check(jobId, resolve, reject, progress); }, 1000);
+            }
+        }
+
+        return new Promise((resolve, reject) => check(jobId, resolve, reject, progress));
     }
 }

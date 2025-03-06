@@ -10,12 +10,13 @@
     <link rel="stylesheet" type="text/css" href="roarscore.css">
     <script src="https://cdn.jsdelivr.net/gh/vanjs-org/van/public/van-1.5.2.nomodule.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/vanjs-ui@0.11.4/dist/van-ui.nomodule.min.js"></script>
-    <script type="text/javascript" src="rsui.js?v=2025020304"></script>
-    <script type="text/javascript" src="rsviz.js?v=2025020304"></script>
-    <script type="text/javascript" src="rsprofiles.js?v=2025020304"></script>
-    <script type="text/javascript" src="rsscenes.js?v=2025020304"></script>
-    <script type="text/javascript" src="rsjobs.js?v=2025020304"></script>
-    <script type="text/javascript" src="roarscore.js?v=2025020304"></script>
+    <script type="text/javascript" src="rsobject.js?v=2025020305"></script>
+    <script type="text/javascript" src="rsui.js?v=2025020305"></script>
+    <script type="text/javascript" src="rsviz.js?v=2025020305"></script>
+    <script type="text/javascript" src="rsprofiles.js?v=2025020305"></script>
+    <script type="text/javascript" src="rsscenes.js?v=2025020305"></script>
+    <script type="text/javascript" src="rsjobs.js?v=2025020305"></script>
+    <script type="text/javascript" src="roarscore.js?v=2025020305"></script>
 
 
     <script type="module">
@@ -23,8 +24,8 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-analytics.js";
         import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-auth.js";
-        import { getFirestore, doc, collection, setDoc, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-firestore.js";
-        import { getStorage, ref, uploadBytesResumable } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-storage.js";
+        import { getFirestore, doc, collection, setDoc, addDoc, getDocs, deleteDoc, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.3.1/firebase-storage.js";
 
         // TODO: Add SDKs for Firebase products that you want to use
         // https://firebase.google.com/docs/web/setup#available-libraries
@@ -61,8 +62,12 @@
           addDoc: addDoc,
           getDocs: getDocs,
           deleteDoc: deleteDoc,
+          query: query,
+          where: where,
+          onSnapshot: onSnapshot,
           ref: ref,
-          uploadBytesResumable: uploadBytesResumable
+          uploadBytesResumable: uploadBytesResumable,
+          getDownloadURL: getDownloadURL
         };
 
         var rs = new RoarScore(fb);

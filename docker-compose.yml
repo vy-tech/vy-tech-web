@@ -1,11 +1,11 @@
 services:
-    humepoc:
+    roarscore-service:
         build:
           context: .
           dockerfile: ./Dockerfile
-        container_name: humepoc
-        hostname: humepoc
+        container_name: roarscore-service
+        hostname: roarscore-service
         volumes:
-          - .:/usr/local/hume
+          - .:/usr/local/roarscore
 
 

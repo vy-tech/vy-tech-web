@@ -1,12 +1,9 @@
 
-class RSScenes extends EventTarget {
+class RSScenes extends RSObject {
     constructor(rs) {
-        super();
+        super(rs);
 
-        this.rs = rs;
-        this.fb = rs.fb;
-        this.lo = rs.lo;
-
+        this.scene = van.state(null);
         this.scenes = van.state({});
     }
 
@@ -27,6 +24,11 @@ class RSScenes extends EventTarget {
         return lo;
     }
 
+    changeScene(sceneId) {
+        this.scene.val = this.scenes.val[sceneId];
+        this.dispatchEvent(new CustomEvent("sceneChanged", { detail: { scene: this.scene.val }}));
+    }
+
     async load() {
         console.log("Fetching scenes..");
         var scenes = {};
@@ -38,6 +40,10 @@ class RSScenes extends EventTarget {
 
         console.log("Setting scenes..");
         this.scenes.val = scenes;
+
+        if (Object.keys(scenes).length > 0) {
+            this.changeScene(Object.keys(scenes)[0]);
+        }
     }
 
     createSelector() {
@@ -50,7 +56,11 @@ class RSScenes extends EventTarget {
                     option({ value: key }, this.scenes.val[key].name)
                 );
 
-                return select({ id: "scene-selector", style: "width: 300px" }, options)
+                return select({ 
+                    id: "scene-selector",
+                    style: "width: 300px",
+                    onchange: () => this.changeScene(document.getElementById("scene-selector").value)
+                }, options)
             }
             ),
 
@@ -161,7 +171,8 @@ class RSScenes extends EventTarget {
 
                     div(
                         label({ for: "Audience Video" }, "Audience Video"),
-                        input({ type: "file", name: "Audience Video", required: true }),
+                        input({ id: "audience_file", type: "file", name: "Audience Video", required: true }),
+                        span({ id: "audience_message", style: "display: none" }),
                         progress({ id: "audience_progress", max: "100", value: "0", style: "visibility: hidden" })
                     ),
 
@@ -172,9 +183,12 @@ class RSScenes extends EventTarget {
                     ),
 
                     div({ class: "footer" }, 
-                        button({ type: "button", onclick: () => { 
+                        button({ type: "button", onclick: (e) => { 
+                            e.target.disabled = true;
                             var scene = this.getFromEditor(document.getElementById("scene_editor"));
-                            this.handleSave(scene).then(() => this.sceneEditor.close());
+                            this.handleSave(scene).then((createdJob) => { 
+                                this.sceneEditor.close()
+                            });
                             return false;
                         } }, "Save"), 
                         span(() => scene.id ? 
@@ -193,6 +207,10 @@ class RSScenes extends EventTarget {
         van.add(document.body, this.sceneEditor);
     }    
 
+    getById(id) {
+        return this.scenes.val[id];
+    }
+    
     // Get a scene from the editor form
     getFromEditor(form) {        
         var scene = {
@@ -217,7 +235,8 @@ class RSScenes extends EventTarget {
             var audienceVideoRef = this.fb.ref(this.fb.storage, `scenes/${scene.id}/audience.mp4`);
             var contextVideoRef = this.fb.ref(this.fb.storage, `scenes/${scene.id}/context.mp4`);
 
-            var tasks = []
+            var createJob = false;
+            
             if (scene.audienceVideo) {
                 var audienceProgress = document.getElementById("audience_progress");
                 var audienceTask = this.fb.uploadBytesResumable(audienceVideoRef, scene.audienceVideo);
@@ -226,7 +245,8 @@ class RSScenes extends EventTarget {
                     audienceProgress.style.visibility = "visible";
                     audienceProgress.value = progress;
                 });
-                tasks.push(audienceTask);
+                await audienceTask;
+                createJob = true;
             }
 
             if (scene.contextVideo) {
@@ -237,13 +257,7 @@ class RSScenes extends EventTarget {
                     contextProgress.style.visibility = "visible";
                     contextProgress.value = progress;
                 });
-                tasks.push(contextTask);
-            }
-
-            if (tasks.length > 0) {
-                await Promise.all(tasks);
-
-                this.rs.jobs.create("DetectFacialExpressions", "scene", scene.id);
+                await contextTask
             }
 
             scene.audienceVideo = audienceVideoRef.fullPath;
@@ -255,6 +269,25 @@ class RSScenes extends EventTarget {
             var scenes = { ...this.scenes.val };
             scenes[scene.id] = scene;
             this.scenes.val = scenes;
+
+            if (createJob) {
+                var job = await this.rs.jobs.create("DetectFacialExpressions", "scene", scene.id);
+                var progress = document.getElementById("audience_progress");
+                var span = document.getElementById("audience_message");
+                var file = document.getElementById("audience_file");
+
+                file.style.display = "none";
+                span.style.display = "inline-block";
+                span.innerText = "Processing..";
+                progress.removeAttribute('value');
+                progress.removeAttribute('max');
+
+                await this.rs.jobs.waitOnJob(job.id, (job, message) => {
+                    span.innerText = message;
+                });
+            }
+
+            return createJob;
         }
         catch (err) {
             console.error(err);

@@ -1,11 +1,8 @@
-class RSProfiles extends EventTarget {
+class RSProfiles extends RSObject {
     constructor(rs) {
-        super();
+        super(rs);
 
-        this.rs = rs;
-        this.fb = rs.fb;
-        this.lo = rs.lo;
-
+        this.profile = van.state(null);
         this.profiles = van.state({});
         this.defaultProfile = null;
     }
@@ -13,6 +10,11 @@ class RSProfiles extends EventTarget {
     async setup() {
         this.computeLayout();
         await this.load();
+    }
+
+    changeProfile(profileId) {
+        this.profile.val = this.getById(profileId);
+        this.dispatchEvent(new CustomEvent("profileChanged", { detail: { profile: this.profile.val }}));
     }
 
     computeLayout() {        
@@ -45,7 +47,12 @@ class RSProfiles extends EventTarget {
                         option({ value: key }, this.profiles.val[key].name)
                     );
 
-                    return select({ id: "profile-selector", style: "width: 300px" }, options)
+                    return select({ 
+                        id: "profile-selector", 
+                        style: "width: 300px",
+                        onchange: () => this.changeProfile(document.getElementById('profile-selector').value) 
+                    }, 
+                    options)
                 }
             ),
 
@@ -87,6 +94,10 @@ class RSProfiles extends EventTarget {
 
         console.log("Setting profiles..");
         this.profiles.val = profiles;
+
+        if (Object.keys(profiles).length) {
+            this.changeProfile(Object.keys(profiles)[0]);
+        }
     }
 
     // Gets a profile from the firestore collection "profiles"

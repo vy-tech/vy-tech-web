@@ -4,14 +4,13 @@ FROM ubuntu:latest
 RUN apt-get update
 RUN apt-get install -y build-essential
 RUN apt-get install -y curl
-#RUN apt-get install -y ffmpeg
 RUN apt-get install -y python3-pip
 
 # Set up the work dir
-RUN mkdir -p /usr/local/hume
-WORKDIR /usr/local/hume
+RUN mkdir -p /usr/local/roarscore
+WORKDIR /usr/local/roarscore
 
-RUN pip3 install --break-system-packages requests hume
+RUN pip3 install --break-system-packages requests hume firebase_admin
 
-ENTRYPOINT ["sleep","1000000000"]
+ENTRYPOINT ["python3","service.py"]
 

@@ -151,6 +151,11 @@ body {
     width: 250px !important;
 }
 
+#audience_message {
+    width: 250px;
+    font-size: small;
+}
+
 .editor .footer {
     clear:both;
 }
