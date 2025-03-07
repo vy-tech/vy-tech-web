@@ -16,7 +16,7 @@ class RSScenes extends RSObject {
         var lo = this.lo || {};
 
         lo.sceneWidth = 630;
-        lo.sceneHeight = 245;
+        lo.sceneHeight = 270;
         lo.sceneX = lo.width/2 - lo.sceneWidth/2;
         lo.sceneY = lo.height/2 - lo.sceneHeight/2;
 
@@ -30,20 +30,30 @@ class RSScenes extends RSObject {
     }
 
     async load() {
-        console.log("Fetching scenes..");
-        var scenes = {};
-        const snapshot = await this.fb.getDocs(this.fb.collection(this.fb.db, "scenes"));
+        const q = this.fb.query(this.fb.collection(this.fb.db, "scenes"));
+        this.unsubscribe = this.fb.onSnapshot(q, (snapshot) => {
+            var scenes = {};
+            snapshot.forEach((doc) => {
+                scenes[doc.id] = doc.data();
+            });
 
-        snapshot.forEach((doc) => {
-            scenes[doc.id] = doc.data();
+            this.scenes.val = scenes;
+
+            // On initial load set the scene to the first one
+            if (this.scene.val == null && Object.keys(scenes).length > 0) {
+                this.changeScene(Object.keys(scenes)[0]);
+            }    
         });
 
-        console.log("Setting scenes..");
-        this.scenes.val = scenes;
+        // var scenes = {};
+        // const snapshot = await this.fb.getDocs(this.fb.collection(this.fb.db, "scenes"));
 
-        if (Object.keys(scenes).length > 0) {
-            this.changeScene(Object.keys(scenes)[0]);
-        }
+        // snapshot.forEach((doc) => {
+        //     scenes[doc.id] = doc.data();
+        // });
+
+        // this.scenes.val = scenes;
+
     }
 
     createSelector() {
@@ -170,6 +180,11 @@ class RSScenes extends RSObject {
                     ),
 
                     div(
+                        label({ for: "Default Profile" }, "Default Profile"),
+                        this.rs.profiles.createSelect("Default Profile", scene.defaultProfile)
+                    ),
+
+                    div(
                         label({ for: "Audience Video" }, "Audience Video"),
                         input({ id: "audience_file", type: "file", name: "Audience Video", required: true }),
                         span({ id: "audience_message", style: "display: none" }),
@@ -217,6 +232,7 @@ class RSScenes extends RSObject {
             id: form.id.value,
             name: form.Name.value,
             description: form.Description.value,
+            defaultProfile: form["Default Profile"].value,
             audienceVideo: form["Audience Video"].files[0],
             contextVideo: form["Context Video"].files[0]
         };
@@ -224,45 +240,75 @@ class RSScenes extends RSObject {
         return scene;
     }
 
+    async handleUploadVideo(scene, name) {
+        var key = `${name}Video`
+        var videoRef = this.fb.ref(this.fb.storage, `scenes/${scene.id}/${name}.mp4`);
+        var progress = document.getElementById(`${name}_progress`);
+        var task = this.fb.uploadBytesResumable(videoRef, scene[key]);
+        task.on("state_changed", (snapshot) => {
+            var value = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            progress.style.visibility = "visible";
+            progress.value = value;
+        });
+        await task;
+        scene[key] = videoRef.fullPath;
+    }
+
+    async handleEditVideo(scene, oldScene, name) {
+        var key = `${name}Video`
+
+        // If a video was passed in, upload it, update the reference and return true
+        if (scene[key]) {
+            await this.handleUploadVideo(scene, name);
+            return true;
+        }
+        
+        // If it's an edit and no new video was passed in, copy the old reference
+        if (oldScene[key]) {
+            scene[key] = oldScene[key]
+            return false;
+        }
+
+        // Otherwise delete the key altogether
+        delete scene[key];
+        return false;
+    }
+
+    async handleCreateJob(scene) {
+        var job = await this.rs.jobs.create("DetectFacialExpressions", "scene", scene.id);
+        var progress = document.getElementById("audience_progress");
+        var span = document.getElementById("audience_message");
+        var file = document.getElementById("audience_file");
+
+        file.style.display = "none";
+        span.style.display = "inline-block";
+        span.innerText = "Processing..";
+        progress.removeAttribute('value');
+        progress.removeAttribute('max');
+
+        await this.rs.jobs.waitOnJob(job.id, (job, message) => {
+            span.innerText = message;
+        });
+    }
+
     // Save a scene to the firestore collection "scenes"
     async handleSave(scene) {
         try {
+            var oldScene = scene.id ? this.getById(scene.id) : {};
             var docRef = scene.id ?
                 this.fb.doc(this.fb.db, "scenes", scene.id) :
                 this.fb.doc(this.fb.collection(this.fb.db, "scenes"));
             scene.id = docRef.id;
 
-            var audienceVideoRef = this.fb.ref(this.fb.storage, `scenes/${scene.id}/audience.mp4`);
-            var contextVideoRef = this.fb.ref(this.fb.storage, `scenes/${scene.id}/context.mp4`);
+            // Upload the videos and update the scene object
+            var createJob = await this.handleEditVideo(scene, oldScene, "audience");
+            await this.handleEditVideo(scene, oldScene, "context");
 
-            var createJob = false;
-            
-            if (scene.audienceVideo) {
-                var audienceProgress = document.getElementById("audience_progress");
-                var audienceTask = this.fb.uploadBytesResumable(audienceVideoRef, scene.audienceVideo);
-                audienceTask.on("state_changed", (snapshot) => {
-                    var progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                    audienceProgress.style.visibility = "visible";
-                    audienceProgress.value = progress;
-                });
-                await audienceTask;
-                createJob = true;
-            }
+            // Copy the results over if we're not uploading a new audience video
+            if (oldScene.results && !createJob)
+                scene.results = oldScene.results;
 
-            if (scene.contextVideo) {
-                var contextProgress = document.getElementById("context_progress");
-                var contextTask = this.fb.uploadBytesResumable(contextVideoRef, scene.contextVideo);
-                contextTask.on("state_changed", (snapshot) => {
-                    var progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                    contextProgress.style.visibility = "visible";
-                    contextProgress.value = progress;
-                });
-                await contextTask
-            }
-
-            scene.audienceVideo = audienceVideoRef.fullPath;
-            scene.contextVideo = contextVideoRef.fullPath;
-
+            // Save the doc to firestore
             await this.fb.setDoc(docRef, scene);
 
             // Update the local scenes cache
@@ -270,21 +316,9 @@ class RSScenes extends RSObject {
             scenes[scene.id] = scene;
             this.scenes.val = scenes;
 
+            // Create and wait for the processing job if audienceVideo was changed
             if (createJob) {
-                var job = await this.rs.jobs.create("DetectFacialExpressions", "scene", scene.id);
-                var progress = document.getElementById("audience_progress");
-                var span = document.getElementById("audience_message");
-                var file = document.getElementById("audience_file");
-
-                file.style.display = "none";
-                span.style.display = "inline-block";
-                span.innerText = "Processing..";
-                progress.removeAttribute('value');
-                progress.removeAttribute('max');
-
-                await this.rs.jobs.waitOnJob(job.id, (job, message) => {
-                    span.innerText = message;
-                });
+                await this.handleCreateJob(scene);
             }
 
             return createJob;

@@ -8,8 +8,17 @@ class RSProfiles extends RSObject {
     }
 
     async setup() {
+        this.rs.scenes.addEventListener("sceneChanged", (e) => { this.onSceneChanged(e.detail.scene) });
         this.computeLayout();
+        await this.loadDefaultProfile();
         await this.load();
+    }
+
+    onSceneChanged(scene) {
+        if (scene.defaultProfile && scene.defaultProfile in this.profiles.val) {
+            document.getElementById('profile-selector').value = scene.defaultProfile;
+            this.changeProfile(scene.defaultProfile);
+        }
     }
 
     changeProfile(profileId) {
@@ -32,6 +41,21 @@ class RSProfiles extends RSObject {
 
         this.lo = lo;
         return lo;
+    }
+
+    createSelect(name, value) {
+        const { span, select, option } = van.tags;
+
+        return span(() => {
+                var options = Object.keys(this.profiles.val).map((key) => 
+                    option({ value: key }, this.profiles.val[key].name)
+                );
+
+                var ele = select({ name: name }, options)
+                ele.value = value;
+                return ele;
+            }
+        )
     }
 
     createSelector() {
@@ -78,26 +102,40 @@ class RSProfiles extends RSObject {
         return this.defaultProfile;
     }
 
-    async load() {
-        // TODO Change to fetch both asynchronously without awaits
-        console.log("Getting defualt profile..");
+    async loadDefaultProfile() {
         var response = await fetch("profile.json");
         this.defaultProfile = await response.json();
+    }
 
-        console.log("Fetching profiles..");
-        var profiles = {};
-        const snapshot = await this.fb.getDocs(this.fb.collection(this.fb.db, "profiles"));
+    async load() {
+        const q = this.fb.query(this.fb.collection(this.fb.db, "profiles"));
+        this.unsubscribe = this.fb.onSnapshot(q, (snapshot) => {
+            var profiles = {};
+            snapshot.forEach((doc) => {
+                profiles[doc.id] = doc.data();
+            });
 
-        snapshot.forEach((doc) => {
-            profiles[doc.id] = doc.data();
+            this.profiles.val = profiles;
+
+            // If no profile is selected, select the first one
+            if (this.profile.val == null && Object.keys(profiles).length) {
+                this.changeProfile(Object.keys(profiles)[0]);
+            }
         });
 
-        console.log("Setting profiles..");
-        this.profiles.val = profiles;
+        // var profiles = {};
+        // const snapshot = await this.fb.getDocs(this.fb.collection(this.fb.db, "profiles"));
 
-        if (Object.keys(profiles).length) {
-            this.changeProfile(Object.keys(profiles)[0]);
-        }
+        // snapshot.forEach((doc) => {
+        //     profiles[doc.id] = doc.data();
+        // });
+
+        // console.log("Setting profiles..");
+        // this.profiles.val = profiles;
+
+        // if (Object.keys(profiles).length) {
+        //     this.changeProfile(Object.keys(profiles)[0]);
+        // }
     }
 
     // Gets a profile from the firestore collection "profiles"

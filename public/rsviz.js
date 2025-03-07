@@ -15,13 +15,23 @@ class RSViz extends RSObject {
 
     start() {
         this.video.play();
-        this.action.play();
+        this.contextVideo.play();
     }
 
     async changeScene(scene) {
         await this.loadData(scene);
-        document.getElementById('main_video').src = await this.createDownloadUrl(scene.audienceVideo);
-        document.getElementById('action_video').src = await this.createDownloadUrl(scene.contextVideo);
+        this.video.src = await this.createDownloadUrl(scene.audienceVideo);
+
+        if (scene.contextVideo) {
+            document.getElementById("context_video_missing").style.display = "none";
+            this.contextVideo.style.display = "block";
+            this.contextVideo.src = await this.createDownloadUrl(scene.contextVideo);
+        }
+        else {
+            document.getElementById("context_video_missing").style.display = "flex";
+            this.contextVideo.style.display = "none";
+            this.contextVideo.removeAttribute("src");
+        }
 
         this.applyProfile();
     }
@@ -37,11 +47,12 @@ class RSViz extends RSObject {
 
             for (var row of this.data) {
                 for (var emotion of row.emotions) {
-                    if (this.profile.emotions[emotion.name]) {
+                    if (emotion.name in this.profile.emotions) {
                         emotion.score = emotion.confidence * this.profile.emotions[emotion.name];
                     }
                 }
             }
+            this.paintData = [];
         }
     }
 
@@ -133,8 +144,8 @@ class RSViz extends RSObject {
 
         this.lastMediaTime = mediaTime;
 
-        if (Math.abs(mediaTime-this.action.currentTime) > 1)
-            this.action.currentTime = mediaTime;
+        if (this.contextVideo.src && Math.abs(mediaTime-this.contextVideo.currentTime) > 1)
+            this.contextVideo.currentTime = mediaTime;
 
         this.calculate();
         this.paint();
@@ -208,6 +219,11 @@ class RSViz extends RSObject {
 
         for (var i=0; i<this.paintData.length; i++) {
             var row = this.paintData[i];
+            
+            // Don't heatmap zeros
+            if (row.emotions[0].score == 0)
+                continue;
+
             var w = row.box.w * this.BOX_SCALE;
             var h = row.box.h * this.BOX_SCALE;
             var x = row.box.x - (w - row.box.w)/2;
@@ -342,13 +358,13 @@ class RSViz extends RSObject {
             if (!this.videoFrameCallbackRunning)
                 this.requestVideoFrameCallback();
 
-            if (this.action.paused)
-                this.action.play();
+            if (this.contextVideo.src && this.contextVideo.paused)
+                this.contextVideo.play();
         });
 
         this.video.addEventListener("pause", () => {
-            if (!this.action.paused)
-                this.action.pause();
+            if (this.contextVideo.src && !this.contextVideo.paused)
+                this.contextVideo.pause();
         })
 
         this.overlay.addEventListener("click", () => {
@@ -430,17 +446,22 @@ class RSViz extends RSObject {
             },
             div(
                 video({ 
-                    id: "action_video", 
+                    id: "context_video", 
                     loop: "loop", 
                     muted: "muted", 
                     playsinline: "playsinline",
                     width: 1920, 
                     height: 1080,
                     style: `width:${lo.contextWidth}px; height:${lo.contextHeight-35}px`
-                })
+                }),
+                div({
+                    id: "context_video_missing",
+                    style: `width:${lo.contextWidth}px; height:${lo.contextHeight-35}px; display: none; justify-content: center; align-items: center;`
+                },
+                span("No context video available"))
             )
         ));
 
-        this.action = document.getElementById('action_video');
+        this.contextVideo = document.getElementById('context_video');
     }
 }

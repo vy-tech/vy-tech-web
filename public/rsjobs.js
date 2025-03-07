@@ -19,15 +19,11 @@ class RSJobs extends RSObject {
         lo.jobsX = lo.width/2 - lo.jobsWidth/2;
         lo.jobsY = lo.height/2 - lo.jobsHeight/2;
 
-        console.log(lo);
         this.lo = lo;
         return lo;
     }
 
     async load() {
-        // TODO Set to subscribe not just fetch
-        console.log("Fetching jobs..");
-
         const q = this.fb.query(this.fb.collection(this.fb.db, "jobs"));
         this.unsubscribe = this.fb.onSnapshot(q, (snapshot) => {
             var jobs = {};
@@ -35,7 +31,6 @@ class RSJobs extends RSObject {
                 jobs[doc.id] = doc.data();
             });
 
-            console.log("Setting jobs..");
             this.jobs.val = jobs;
         });
 
