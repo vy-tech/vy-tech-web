@@ -7,5 +7,27 @@ services:
         hostname: roarscore-service
         volumes:
           - .:/usr/local/roarscore
+    roarscore-web:
+        image: nginx:latest
+        container_name: roarscore-web
+        hostname: roarscore-web
+        ports:
+          - "5003:80"
+        volumes:
+          - ./public:/usr/share/nginx/html
+        environment:
+          - NGINX_HOST=dev.roarscore.ai
+          - NGINX_PORT=80
+    roarscore-tunnel:
+        image: cloudflare/cloudflared:latest
+        container_name: roarscore-tunnel
+        hostname: roarscore-tunnel
+        command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+        environment:
+          - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+          - TUNNEL_HOSTNAME=dev.roarscore.ai
+          - TUNNEL_PORT=5003
+        depends_on:
+          - roarscore-web
 
 

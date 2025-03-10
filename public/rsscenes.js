@@ -30,8 +30,8 @@ class RSScenes extends RSObject {
     }
 
     async load() {
-        const q = this.fb.query(this.fb.collection(this.fb.db, "scenes"));
-        this.unsubscribe = this.fb.onSnapshot(q, (snapshot) => {
+        const q = this.db.query(this.db.collection(this.db.instance, "scenes"));
+        this.unsubscribe = this.db.onSnapshot(q, (snapshot) => {
             var scenes = {};
             snapshot.forEach((doc) => {
                 scenes[doc.id] = doc.data();
@@ -44,16 +44,6 @@ class RSScenes extends RSObject {
                 this.changeScene(Object.keys(scenes)[0]);
             }    
         });
-
-        // var scenes = {};
-        // const snapshot = await this.fb.getDocs(this.fb.collection(this.fb.db, "scenes"));
-
-        // snapshot.forEach((doc) => {
-        //     scenes[doc.id] = doc.data();
-        // });
-
-        // this.scenes.val = scenes;
-
     }
 
     createSelector() {
@@ -111,7 +101,7 @@ class RSScenes extends RSObject {
                 class: "vanui-window-cross",
                 style: "position: absolute; top: 8px; right: 8px;cursor: pointer;",
                 onclick: () => closed.val = true
-            }, "×"),
+            }, "\u00D7"),
             div(
                 table({ class: "list" },
                     thead(
@@ -164,7 +154,7 @@ class RSScenes extends RSObject {
                 class: "vanui-window-cross",
                 style: "position: absolute; top: 8px; right: 8px;cursor: pointer;",
                 onclick: () => closed.val = true
-            }, "×"),
+            }, "\u00D7"),
             div(
                 form({ id: "scene_editor", class: "editor", style: "padding: 20px" },
                     input({ type:"hidden", name: "id", value: (scene.id || null) }),
@@ -242,9 +232,9 @@ class RSScenes extends RSObject {
 
     async handleUploadVideo(scene, name) {
         var key = `${name}Video`
-        var videoRef = this.fb.ref(this.fb.storage, `scenes/${scene.id}/${name}.mp4`);
+        var videoRef = this.storage.ref(this.storage.instance, `scenes/${scene.id}/${name}.mp4`);
         var progress = document.getElementById(`${name}_progress`);
-        var task = this.fb.uploadBytesResumable(videoRef, scene[key]);
+        var task = this.storage.uploadBytesResumable(videoRef, scene[key]);
         task.on("state_changed", (snapshot) => {
             var value = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
             progress.style.visibility = "visible";
@@ -296,8 +286,8 @@ class RSScenes extends RSObject {
         try {
             var oldScene = scene.id ? this.getById(scene.id) : {};
             var docRef = scene.id ?
-                this.fb.doc(this.fb.db, "scenes", scene.id) :
-                this.fb.doc(this.fb.collection(this.fb.db, "scenes"));
+                this.db.doc(this.db.instance, "scenes", scene.id) :
+                this.db.doc(this.db.collection(this.db.instance, "scenes"));
             scene.id = docRef.id;
 
             // Upload the videos and update the scene object
@@ -309,7 +299,7 @@ class RSScenes extends RSObject {
                 scene.results = oldScene.results;
 
             // Save the doc to firestore
-            await this.fb.setDoc(docRef, scene);
+            await this.db.setDoc(docRef, scene);
 
             // Update the local scenes cache
             var scenes = { ...this.scenes.val };
@@ -334,8 +324,8 @@ class RSScenes extends RSObject {
             return;
 
         try {
-            var docRef = this.fb.doc(this.fb.db, "scenes", scene.id);
-            await this.fb.deleteDoc(docRef);
+            var docRef = this.db.doc(this.db.instance, "scenes", scene.id);
+            await this.db.deleteDoc(docRef);
 
             // Update the local scenes cache
             var scenes = { ...this.scenes.val };

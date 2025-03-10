@@ -405,7 +405,7 @@ class RSViz extends RSObject {
                     class: "vanui-window-cross",
                     style: "position: absolute; top: 8px; right: 8px;cursor: pointer;",
                     onclick: () => closed.val = true,
-                }, "×"),
+                }, "\u00D7"),
                 Tabs({
                     style: "width: 100%; font-size: 16pt",
                     tabButtonActiveColor: "white",

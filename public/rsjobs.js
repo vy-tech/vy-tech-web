@@ -24,8 +24,8 @@ class RSJobs extends RSObject {
     }
 
     async load() {
-        const q = this.fb.query(this.fb.collection(this.fb.db, "jobs"));
-        this.unsubscribe = this.fb.onSnapshot(q, (snapshot) => {
+        const q = this.db.query(this.db.collection(this.db.instance, "jobs"));
+        this.unsubscribe = this.db.onSnapshot(q, (snapshot) => {
             var jobs = {};
             snapshot.forEach((doc) => {
                 jobs[doc.id] = doc.data();
@@ -33,15 +33,6 @@ class RSJobs extends RSObject {
 
             this.jobs.val = jobs;
         });
-
-        // const snapshot = await this.fb.getDocs(this.fb.collection(this.fb.db, "jobs"));
-
-        // snapshot.forEach((doc) => {
-        //     jobs[doc.id] = doc.data();
-        // });
-
-        //console.log("Setting jobs..");
-        //this.jobs.val = jobs;
     }
 
     getRefName(type, id) {
@@ -78,7 +69,7 @@ class RSJobs extends RSObject {
                 class: "vanui-window-cross",
                 style: "position: absolute; top: 8px; right: 8px;cursor: pointer;",
                 onclick: () => closed.val = true
-            }, "×"),
+            }, "\u00D7"),
             div(() =>
                 table({ class: "list" },
                     thead(
@@ -109,7 +100,7 @@ class RSJobs extends RSObject {
     }
 
     async create(type, refType, refId) {
-        var docRef = this.fb.doc(this.fb.collection(this.fb.db, "jobs"));
+        var docRef = this.db.doc(this.db.collection(this.db.instance, "jobs"));
         var job = {
             id: docRef.id,
             type: type,             // Hume, Download, etc..
@@ -121,7 +112,7 @@ class RSJobs extends RSObject {
             message: ""
         };
 
-        await this.fb.setDoc(docRef, job);
+        await this.db.setDoc(docRef, job);
 
         // Update the local scenes cache
         var jobs = { ...this.jobs.val };

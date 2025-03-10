@@ -3,17 +3,29 @@ class RSObject extends EventTarget {
         super();
 
         this.rs = rs;
-        this.fb = rs.fb;
         this.lo = rs.lo;
+    }
+
+    get fb() {
+        return RoarScore.firebase;
+    }
+    get db() {
+        return this.fb.db;
+    }
+    get storage() {
+        return this.fb.storage;
+    }
+    get auth() {
+        return this.fb.auth;
     }
 
     // Creates a url for downloading a file stored in bucket/type/id/path
     async createDownloadUrl(path) {
         try {
-            const fileRef = this.fb.ref(this.fb.storage, path);
+            const fileRef = this.storage.ref(this.storage.instance, path);
             
             // Get the download URL
-            const url = await this.fb.getDownloadURL(fileRef);
+            const url = await this.storage.getDownloadURL(fileRef);
             
             return url;
         } 

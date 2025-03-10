@@ -54,7 +54,7 @@ class RSUI extends RSObject {
 
                         a({ 
                             href: "#", style: "text-decoration: none; margin-right: 10px; color:black", 
-                            onclick: () => { this.fb.auth.signOut(this.fb.auth) } 
+                            onclick: () => { this.fb.auth.signOut(this.fb.auth.instance) } 
                         }, 
                         i({ class: "fa-solid fa-sign-out" }))
                     );
@@ -77,7 +77,7 @@ class RSUI extends RSObject {
 
     showSigninWindow() {
         let lo = this.lo;
-        const { div, form, label, input, button, h3, span } = van.tags;
+        const { div, form, label, input, button, h3, span, a } = van.tags;
         const closed = van.state(false);
 
         var email;
@@ -94,7 +94,7 @@ class RSUI extends RSObject {
                 class: "vanui-window-cross",
                 style: "position: absolute; top: 8px; right: 8px;cursor: pointer;",
                 onclick: () => closed.val = true,
-            }, "×"),
+            }, "\u00D7"),
             div(
                 form({ id: "signin", style: "padding: 20px" },
                     h3("Please sign in for access to this feature"),
@@ -105,9 +105,12 @@ class RSUI extends RSObject {
                     ),
                     div(
                         label({ for: "password" }, "Password"),
-                        password=input({ type: "password", required: true })
+                        password=input({ type: "password", required: true }),
                     ),
-                    div(button({ type: "button", onclick: (e) => { this.handleSignIn(email.value, password.value); return false; } }, "Sign In"))
+                    div(
+                        button({ type: "button", onclick: (e) => { this.handleSignIn(email.value, password.value); return false; } }, "Sign In"),
+                        button({ type: "button", style: "margin-left: 8px", onclick: (e) => { this.handleReset(email.value); return false; } }, "Reset"),
+                    )
                 )
             )
         );
@@ -119,11 +122,28 @@ class RSUI extends RSObject {
 
     async handleSignIn(email, password) {
         try {
-            var user = await this.fb.signInWithEmailAndPassword(this.fb.auth, email, password)
+            var user = await this.auth.signInWithEmailAndPassword(this.auth.instance, email, password)
             console.log(user);
             if (user) {
                 this.signinWindow.close();
             }
+        }
+        catch (e) {
+            console.error(e);
+        }
+    }
+
+    async handleReset(email) {
+        if (!email)
+            return alert('Please enter an email address');
+
+        if (!confirm(`Send password reset email to ${email}?`))
+            return
+
+        try {
+            await this.auth.sendPasswordResetEmail(this.auth.instance, email);
+            this.signinWindow.close();
+            console.log("Password reset email sent");
         }
         catch (e) {
             console.error(e);

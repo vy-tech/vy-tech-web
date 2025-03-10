@@ -108,8 +108,8 @@ class RSProfiles extends RSObject {
     }
 
     async load() {
-        const q = this.fb.query(this.fb.collection(this.fb.db, "profiles"));
-        this.unsubscribe = this.fb.onSnapshot(q, (snapshot) => {
+        const q = this.db.query(this.db.collection(this.db.instance, "profiles"));
+        this.unsubscribe = this.db.onSnapshot(q, (snapshot) => {
             var profiles = {};
             snapshot.forEach((doc) => {
                 profiles[doc.id] = doc.data();
@@ -122,20 +122,6 @@ class RSProfiles extends RSObject {
                 this.changeProfile(Object.keys(profiles)[0]);
             }
         });
-
-        // var profiles = {};
-        // const snapshot = await this.fb.getDocs(this.fb.collection(this.fb.db, "profiles"));
-
-        // snapshot.forEach((doc) => {
-        //     profiles[doc.id] = doc.data();
-        // });
-
-        // console.log("Setting profiles..");
-        // this.profiles.val = profiles;
-
-        // if (Object.keys(profiles).length) {
-        //     this.changeProfile(Object.keys(profiles)[0]);
-        // }
     }
 
     // Gets a profile from the firestore collection "profiles"
@@ -178,7 +164,7 @@ class RSProfiles extends RSObject {
                 class: "vanui-window-cross",
                 style: "position: absolute; top: 8px; right: 8px;cursor: pointer;",
                 onclick: () => closed.val = true
-            }, "×"),
+            }, "\u00D7"),
             div(
                 table({ class: "list" },
                     thead(
@@ -230,7 +216,7 @@ class RSProfiles extends RSObject {
                 class: "vanui-window-cross",
                 style: "position: absolute; top: 8px; right: 8px;cursor: pointer;",
                 onclick: () => closed.val = true
-            }, "×"),
+            }, "\u00D7"),
             div(
                 form({ id: "profile_editor", class:"editor", style: "padding: 20px" },
                     input({ type:"hidden", name: "id", value: (profile.id || null) }),
@@ -281,11 +267,11 @@ class RSProfiles extends RSObject {
     async handleSave(profile) {
         try {
             var docRef = profile.id ?
-                this.fb.doc(this.fb.db, "profiles", profile.id) :
-                this.fb.doc(this.fb.collection(this.fb.db, "profiles"));
+                this.db.doc(this.db.instance, "profiles", profile.id) :
+                this.db.doc(this.db.collection(this.db.instance, "profiles"));
             
             profile.id = docRef.id;
-            await this.fb.setDoc(docRef, profile);
+            await this.db.setDoc(docRef, profile);
 
             // Update the local profiles cache
             var profiles = { ...this.profiles.val };
@@ -304,8 +290,8 @@ class RSProfiles extends RSObject {
             return;
 
         try {
-            var docRef = this.fb.doc(this.fb.db, "profiles", profile.id);
-            await this.fb.deleteDoc(docRef);
+            var docRef = this.db.doc(this.db.instance, "profiles", profile.id);
+            await this.db.deleteDoc(docRef);
 
             // Update the local profiles cache
             var profiles = { ...this.profiles.val };

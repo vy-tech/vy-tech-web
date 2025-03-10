@@ -1,8 +1,13 @@
 class RoarScore extends EventTarget {
-    constructor(fb) {
+    static firebase = null;
+
+    static connectFirebase(firebase) {
+        RoarScore.firebase = firebase;
+    }
+
+    constructor() {
         super();
 
-        this.fb = fb;
         this.lo = {};
 
         this.authState = van.state(false);
@@ -12,6 +17,10 @@ class RoarScore extends EventTarget {
         this.profiles = new RSProfiles(this);
         this.scenes = new RSScenes(this);
         this.jobs = new RSJobs(this);
+    }
+
+    get fb() {
+        return RoarScore.firebase;
     }
 
     async setup() {
@@ -32,7 +41,9 @@ class RoarScore extends EventTarget {
     }
 
     setupAuth() {
-        this.fb.auth.onAuthStateChanged((user) => {
+        console.log(this.fb);
+        
+        this.fb.auth.instance.onAuthStateChanged((user) => {
             if (user) {
                 this.authState.val = true;
                 console.log("User signed in");
