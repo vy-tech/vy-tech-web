@@ -1,3 +1,4 @@
+
 services:
     roarscore-service:
         build:
@@ -7,6 +8,13 @@ services:
         hostname: roarscore-service
         volumes:
           - .:/usr/local/roarscore
+          - ./conf/mediamtx:/usr/local/mediamtx/conf
+          - ./log:/usr/local/mediamtx/log
+          - ./data:/usr/local/mediamtx/data
+        ports:
+          - "8554:8554"
+          - "8000:8000"
+          - "8001:8001"
     roarscore-web:
         image: nginx:latest
         container_name: roarscore-web
