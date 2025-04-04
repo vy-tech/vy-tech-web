@@ -1,12 +1,19 @@
 # Secrets
 secret.py
 firebase-svc-cred.json
-app-sercrets.conf
+service-sercrets.conf
 
 .vscode
 
+# Videos
 *.mp4
 *.mov
+
+# Data
+data/
+
+# Python
+*.pyc
 
 # Logs
 logs
