@@ -704,6 +704,9 @@ paths:
     runOnDemand: ffmpeg -re -stream_loop -1 -nostats -i data/sample.mov -c copy -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
     runOnDemandRestart: yes
 
+  camera1:
+    source: rtsp://10.12.17.10:554/stream1?username=admin&password=E10ADC3949BA59ABBE56E057F20F883E
+    
   # example:
   # my_camera:
   #   source: rtsp://my_camera

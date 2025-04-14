@@ -15,6 +15,8 @@ services:
           - "8554:8554"
           - "8000:8000"
           - "8001:8001"
+          - "8889:8889"
+          - "8189:8189/udp"
     roarscore-web:
         image: nginx:latest
         container_name: roarscore-web
@@ -23,6 +25,7 @@ services:
           - "5003:80"
         volumes:
           - ./public:/usr/share/nginx/html
+          - ./data:/usr/share/nginx/html/data
         environment:
           - NGINX_HOST=dev.roarscore.ai
           - NGINX_PORT=80

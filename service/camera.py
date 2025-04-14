@@ -14,7 +14,6 @@ from processor import Processor
 from jobs import JobManager
 
 
-
 class StopCameraProcessor(Processor):
     def __init__(self, parent):
         super().__init__(parent, "StopCamera")
@@ -143,7 +142,7 @@ class StartCameraProcessor(Processor):
         cmd = [
             "ffmpeg",
             "-rtsp_transport", "tcp",
-            "-i", rtsp_url,
+            "-i", f"\"{rtsp_url}\"",
             "-c:v", "copy",
             "-f", "segment",
             "-segment_time", "60",
@@ -175,6 +174,19 @@ class StartCameraProcessor(Processor):
 
         camera_ref.update(update)
 
+    def add_video_to_collection(self, camera, filename):
+        # Add the video to the videos collection
+        videos_ref = self.db.collection("videos")
+        video_ref = videos_ref.document()
+
+        video_ref.set({
+            "id": video_ref.id,
+            "cameraId": camera['id'],
+            "filename": filename,
+            "created": firestore.SERVER_TIMESTAMP,
+            "updated": firestore.SERVER_TIMESTAMP
+        })
+    
     def get_filename_from_line(self, line):
         mat = re.search(r"Opening '(.*?)' for writing", line)
         return (mat and mat.group(1)) or None
@@ -208,9 +220,10 @@ class StartCameraProcessor(Processor):
             self.log.info(f"[ffmpeg] {line}")
             filename = self.get_filename_from_line(line)
 
-            # If a filename was found, update the camera status
+            # If a filename was found, update the camera status, and add to the videos collection
             if filename:
                 self.update_camera_status(camera, "capturing", process.pid, filename)
+                self.add_video_to_collection(camera, filename)
 
         # Check the return code
         return_code = await process.wait()
