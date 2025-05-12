@@ -1,8 +1,7 @@
 # Secrets
 secret.py
 firebase-svc-cred.json
-conf/service/service-secrets.conf
-conf/mediamtx/server.*
+functions/lib/serviceAccountKey.json
 
 .vscode
 

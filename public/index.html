@@ -1,40 +1,25 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-    <title>RoarScore POC Test</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
-    <script src="https://kit.fontawesome.com/c38971e2c7.js" crossorigin="anonymous"></script>
-    <link rel="stylesheet" type="text/css" href="roarscore.css">
-    <script src="https://cdn.jsdelivr.net/gh/vanjs-org/van/public/van-1.5.2.nomodule.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vanjs-ui@0.11.4/dist/van-ui.nomodule.min.js"></script>
-
-
-
-
-    <script type="text/javascript" src="rsobject.js?v=202503101338"></script>
-    <script type="text/javascript" src="rsui.js?v=202503101338"></script>
-    <script type="text/javascript" src="rsviz.js?v=202503101338"></script>
-    <script type="text/javascript" src="rsprofiles.js?v=202503101338"></script>
-    <script type="text/javascript" src="rsscenes.js?v=202503101338"></script>
-    <script type="text/javascript" src="rsjobs.js?v=202503101338"></script>
-    <script type="text/javascript" src="roarscore.js?v=202503101338"></script>
-
-
-    <script type="module">
-      import { firebase } from "./jrfb.js?v=202503101338";
-
-      RoarScore.connectFirebase(firebase);
-      
-      var rs = new RoarScore();
-      window.rs = rs;
-      rs.start();
-    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RoarScore</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
 </head>
-
 <body>
+    <img src="/img/RoarScoreLogo.png" alt="RoarScore Logo">
 </body>
-
 </html>

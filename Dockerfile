@@ -3,25 +3,39 @@ FROM ubuntu:latest
 # Set up the basics
 RUN apt-get update
 RUN apt-get install -y build-essential
-RUN apt-get install -y curl
-RUN apt-get install -y python3-pip
-RUN apt-get install -y ffmpeg
+RUN apt-get install -y curl unzip vim
 
-# Extract the latest arm64 binary from github (needs to be periodically updated)
-RUN mkdir -p /usr/local/mediamtx
-WORKDIR /usr/local/mediamtx
-RUN mkdir -p bin log conf
-RUN curl -sL -o - https://github.com/bluenviron/mediamtx/releases/download/v1.9.3/mediamtx_v1.9.3_linux_arm64v8.tar.gz | tar zvxf -
-RUN mv mediamtx bin/mediamtx
-# Move the default config to a name that won't be confusing.
-# Moving to conf/ dir will hide it entirely when mounting conf/ as volume
-RUN mv mediamtx.yml mediamtx.yml.sample
+# Set up nginx
+RUN apt-get install -y nginx
+COPY conf/nginx.conf /etc/nginx/sites-available/default
 
-# Set up the work dir
-RUN mkdir -p /usr/local/roarscore
-WORKDIR /usr/local/roarscore
+# Install Node.js
+WORKDIR /usr/local
+RUN curl -Lo - https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-arm64.tar.gz | tar zvx
+RUN mv node-v22.14.0-linux-arm64 node
+RUN ln -s /usr/local/node/bin/node /usr/local/bin/node
+RUN ln -s /usr/local/node/bin/npm /usr/local/bin/npm
 
-RUN pip3 install --break-system-packages requests hume firebase_admin
+# Set up the work directory
+RUN mkdir /app
+WORKDIR /app
 
-ENTRYPOINT ["/bin/bash", "/usr/local/roarscore/entrypoint.sh"]
+# Copy files that we need (compose replaces with volume)
+COPY public ./public
+COPY server.js .
 
+# Copy the package.json and install the dependencies
+COPY functions/package.json ./functions/
+COPY functions/views ./functions/views
+COPY functions/lib ./functions/lib
+COPY functions/*.js ./functions/
+RUN cd functions && npm install
+
+# Install nodemon for hot reloading of development
+RUN npm install -g nodemon
+RUN ln -s /usr/local/node/bin/nodemon /usr/local/bin/nodemon
+
+COPY conf/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT [ "/app/entrypoint.sh" ]
