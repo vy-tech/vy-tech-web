@@ -11,6 +11,7 @@ services:
           - ./conf/mediamtx:/usr/local/mediamtx/conf
           - ./log:/usr/local/mediamtx/log
           - ./data:/usr/local/mediamtx/data
+        #network_mode: host
         ports:
           - "8554:8554"
           - "8000:8000"
@@ -40,5 +41,3 @@ services:
           - TUNNEL_PORT=5003
         depends_on:
           - roarscore-web
-
-

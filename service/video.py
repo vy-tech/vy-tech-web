@@ -6,7 +6,7 @@ import traceback
 
 from concurrent.futures import ProcessPoolExecutor
 
-from hume import AsyncHumeClient
+from hume import AsyncHumeClient, HumeClient
 from hume.expression_measurement.batch import Face, Models
 from hume.expression_measurement.batch.types import InferenceBaseRequest
 
@@ -27,23 +27,24 @@ class VideoProcessor(Processor):
             results_path = video_path.replace(".mp4", ".json")        
 
             # Process the video and save the results to a temp json file
+            self.log.info("Processing video...")
             await self.process_video(job, video_path, results_path)
-        
+    
             # Upload the results to firebase storage
+            self.log.info("Uploading results to firebase storage...")  
             remote_path = self.upload_results(job, results_path)
         
             # Update the scene with the results path
+            self.log.info("Updating scene with results path...")
             self.update_scene(job, remote_path)
 
             # Clean up the temp files
             os.remove(video_path)
             os.remove(results_path)
-
-            # Mark the job as completed
-            self.update_job_status(job, "completed")
         except Exception as e:
-            print(traceback.format_exc())
-            self.update_job_status(job, "failed", str(e))
+            self.log.error(traceback.format_exc())
+            raise e
+            #self.job_manager.update_job_status(job, "failed", str(e))
 
     def prepare_job(self, job):
         scene = self.get_scene_from_job(job)
@@ -64,12 +65,12 @@ class VideoProcessor(Processor):
     def download_video_from_scene(self, scene):
         local_path = tempfile.mktemp(suffix=".mp4")
         remote_path = f"scenes/{scene['id']}/audience.mp4"
-        self.log.info(f"Downloading {remote_path} to {local_path}...")
+        self.log.debug(f"Downloading {remote_path} to {local_path}...")
 
-        bucket = self.storage.bucket(self.bucket)
-        blob = bucket.blob(remote_path)
+        blob = self.storage.blob(remote_path)
         blob.download_to_filename(local_path)
 
+        self.log.debug(f"Downloaded {remote_path} to {local_path}")
         return local_path
 
     async def process_video(self, job, video_path, results_path):
@@ -77,14 +78,14 @@ class VideoProcessor(Processor):
         client = AsyncHumeClient(api_key=self.hume_api_key)
 
         # Upload the video and start the job on Hume
-        self.update_job_status(job, "processing", f"Starting Hume job..")
+        self.job_manager.update_job_status(job, "processing", f"Starting Hume job..")
         hume_job_id = await self.start_hume_job(client, video_path)
 
         # Wait for the job to complete and periodically update status
         await self.wait_for_hume_job(job, client, hume_job_id)
 
         # Get the results from the job
-        self.update_job_status(job, "processing", f"Getting predictions..")
+        self.job_manager.update_job_status(job, "processing", f"Getting predictions..")
         output = await self.get_hume_job_results(client, hume_job_id)
         
         # Write the results to the path requested
@@ -116,7 +117,7 @@ class VideoProcessor(Processor):
     async def wait_for_hume_job(self, job, client, hume_job_id):
         n = 0
         while True:
-            self.update_job_status(job, "processing", f"Waiting on Hume job.. {n}s")
+            self.job_manager.update_job_status(job, "processing", f"Waiting on Hume job.. {n}s")
             n += 10
             self.log.info("Waiting for job completion..")
             await asyncio.sleep(10)
@@ -132,11 +133,36 @@ class VideoProcessor(Processor):
                 self.log.error(f"Hume Job failed: {details['state']['message']}")
                 raise Exception(f"Hume Job failed: {details['state']['message']}")
 
+    def fetch_hume_job(self, hume_job_id):
+        client = HumeClient(api_key=self.hume_api_key)
+        results = client.expression_measurement.batch.get_job_predictions(id=hume_job_id)
+        data = results[0].dict()
+        self.log.info(data)
+        
     async def get_hume_job_results(self, client, hume_job_id):
         results = await client.expression_measurement.batch.get_job_predictions(id=hume_job_id)
         data = results[0].dict()
 
-        predictions = data['results']['predictions'][0]['models']['face']['grouped_predictions'][0]['predictions']
+        # Get all predictions
+        predictions = data['results']['predictions']
+
+        # If it's empty, log and raise an error
+        if len(predictions) == 0:
+            self.log.error("No predictions found in Hume job results:")
+            self.log.error(data)
+            raise Exception("No predictions found in Hume job results")
+        
+        # Get the face predictions
+        predictions = predictions[0]['models']['face']['grouped_predictions']
+        
+        # If it's empty, log and raise an error
+        if len(predictions) == 0:
+            self.log.error("No face predictions found in Hume job results:")    
+            self.log.error(data)
+            raise Exception("No face predictions found in Hume job results")
+        
+        # Get the list of face predictions
+        predictions = predictions[0]['predictions']
 
         output = []
 
@@ -167,10 +193,9 @@ class VideoProcessor(Processor):
     def upload_results(self, job, results_path):
         remote_path = f"scenes/{job['refId']}/results.json"
         self.log.info(f"Uploading {results_path} to {remote_path}...")
-        self.update_job_status(job, "processing", "Uploading results..")
+        self.job_manager.update_job_status(job, "processing", "Uploading results..")
 
-        bucket = storage.bucket(self.bucket)
-        blob = bucket.blob(remote_path)
+        blob = self.storage.blob(remote_path)
         blob.upload_from_filename(results_path)
 
         return remote_path

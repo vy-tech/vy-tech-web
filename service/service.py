@@ -26,6 +26,7 @@ class RoarscoreService:
         parser.add_argument('-v', '--verbose', action='store_true')
         parser.add_argument('-f', '--config', type=str, default='conf/service/service.conf')
         parser.add_argument('--create-job', type=str)
+        parser.add_argument('--fetch-hume-job', type=str)
         
         self.args = parser.parse_args()
 
@@ -71,6 +72,13 @@ class RoarscoreService:
         job_manager.create_job(ref_type, ref_id)
         self.log.info(f"Created job {job_type} for {ref_type}:{ref_id}")
 
+    def fetch_hume_job(self):
+        hume_job_id = self.args.fetch_hume_job
+        self.log.info(f"Fetching Hume job {hume_job_id}")
+        video = VideoProcessor(self)
+        video.fetch_hume_job(hume_job_id)
+        self.log.info(f"Fetched Hume job {hume_job_id}")
+
     async def run(self):
         if self.args.create_job:
             self.create_job()
@@ -78,6 +86,10 @@ class RoarscoreService:
 
         self.tasks = set()
 
+        if self.args.fetch_hume_job:
+            self.fetch_hume_job()
+            return
+        
         self.log.info("Starting service...")
 
         self.log.info("Starting video processor...")
