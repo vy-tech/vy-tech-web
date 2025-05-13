@@ -16,9 +16,20 @@
             }
         };
     </script>
+
+    <script type="module">
+        import { Auth } from '/js/rsauth.js';
+        const auth = new Auth();
+        
+        console.log(auth);
+
+        auth.setReturnUrl();
+        auth.addSignInForm(document.body);
+    </script>
 </head>
-<body class="flex flex-col items-center h-screen bg-gray-800 m-0 pt-[25vh]">
-    <img src="/img/RoarScoreLogo.png" alt="RoarScore Logo" class="w-1/2 h-auto">
-    <a href="/users/login?return_url=%2Fdashboard" class="mt-10 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Sign In</a>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div class="flex justify-center items-center">
+        <img src="/img/RoarScoreLogo.png" alt="RoarScore Logo" class="w-1/4 mt-4">
+    </div>
 </body>
 </html>
