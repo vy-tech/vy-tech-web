@@ -41,8 +41,8 @@ Handlebars.registerHelper("default", function (value, defaultValue) {
 const loginTemplate = Handlebars.compile(
   readFileSync(join(__dirname, "views", "login.hbs"), "utf8")
 );
-const dashboardTemplate = Handlebars.compile(
-  readFileSync(join(__dirname, "views", "dashboard.hbs"), "utf8")
+const appTemplate = Handlebars.compile(
+  readFileSync(join(__dirname, "views", "app.hbs"), "utf8")
 );
 
 app.get("/users/login", (req, res) => {
@@ -54,12 +54,26 @@ app.get("/users/login", (req, res) => {
   );
 });
 
-app.get("/dashboard", (req, res) => {
-  res.send(
-    dashboardTemplate({
-      error: req.query.error,
-    })
-  );
+const appEndpoints = [
+  "dashboard",
+  "locations",
+  "schedule",
+  "reports",
+  "settings",
+  "profile",
+];
+
+// Add the app endpoints to the express app
+appEndpoints.forEach((endpoint) => {
+  app.get(`/${endpoint}`, (req, res) => {
+    res.send(
+      appTemplate({
+        error: req.query.error,
+        endpoint: endpoint,
+        Endpoint: endpoint.charAt(0).toUpperCase() + endpoint.slice(1),
+      })
+    );
+  });
 });
 
 export const _app = app;

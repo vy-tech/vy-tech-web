@@ -13,13 +13,25 @@ class Auth {
     this.auth = getAuth(app);
     this.auth.onAuthStateChanged((user) => this.handleAuthState(user));
     this.user = null;
+    this.isSignInEnabled = false;
     this.returnUrl = null;
   }
 
+  enableSignIn() {
+    this.setReturnUrl();
+    this.isSignInEnabled = true;
+  }
+
+  hideBusyIndicator() {
+    const busy = document.getElementById("busy");
+    if (busy) {
+      busy.classList.add("hidden");
+    }
+  }
+
   handleAuthState(user) {
+    this.hideBusyIndicator();
     if (user) {
-      // User is signed in.
-      console.log("User is signed in:", user);
       this.user = user;
       if (this.returnUrl) {
         // Redirect to the return URL if it exists
@@ -27,8 +39,10 @@ class Auth {
       }
     } else {
       // No user is signed in.
-      console.log("No user is signed in.");
       this.user = null;
+      if (this.isSignInEnabled) {
+        this.addSignInElements(document.body);
+      }
     }
   }
 
@@ -42,7 +56,7 @@ class Auth {
     }
   }
 
-  addSignInForm(parentElement) {
+  addSignInElements(parentElement) {
     const { button, div, input, label } = van.tags;
 
     van.add(
@@ -119,7 +133,6 @@ class Auth {
       .then((userCredential) => {
         // Signed in
         this.user = userCredential.user;
-        console.log("User signed in:", this.user);
         // Redirect to the return URL
         window.location.href = this.returnUrl;
       })
@@ -143,4 +156,5 @@ class Auth {
   }
 }
 
-export { Auth };
+const auth = new Auth();
+export { Auth, auth };
