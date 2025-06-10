@@ -9,6 +9,7 @@ import {
   getDocs,
   deleteDoc,
   Form,
+  List,
 } from "/js/rsdb.js";
 
 class Locations {
@@ -20,6 +21,7 @@ class Locations {
 
   init() {
     this.addElements();
+    this.addListElements(document.getElementById("location-list"));
     this.addFormElements(document.getElementById("location-form"));
   }
 
@@ -33,9 +35,19 @@ class Locations {
       main(
         { class: "w-[90%] p-4 overflow-auto" },
         h1("Locations"),
+        div({ id: "location-list" }),
         div({ id: "location-form" })
       )
     );
+  }
+
+  addListElements(parentElement) {
+    var list = new List("locations", [
+      { name: "name", displayName: "Location", row: 0 },
+      { name: "city", displayName: "City", row:1, containerClass: "w-1/2" },
+      { name: "state", displayName: "State", row:1, containerClass: "w-1/2" },
+    ]);
+    list.addElements(parentElement);
   }
 
   addFormElements(parentElement) {
