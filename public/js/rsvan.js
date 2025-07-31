@@ -1,5 +1,6 @@
 import van from "https://cdn.jsdelivr.net/gh/vanjs-org/van/public/van-1.5.5.min.js";
 import { events } from "/js/rsevents.js";
+
 const rsv = {
   tags: {
     button: function (attrs = {}, ...children) {
