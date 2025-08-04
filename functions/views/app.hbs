@@ -1,46 +1,48 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RoarScore</title>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>RoarScore</title>
 
-    <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.tailwindcss.com"></script>
 
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Mako','Roboto','Arial','sans-serif'] }
-                }
-            }
-        };
-    </script>
-    <style>
-        .vjs-control-bar {
-            position: absolute !important;
-            bottom: -30px !important; 
-            z-index: 1000 !important;
-            opacity: 1 !important;
-        }
-    </style>
+        <script>
+            tailwind.config = { theme: { extend: { fontFamily: { sans:
+            ['Mako','Roboto','Arial','sans-serif'] } } } };
+        </script>
+        <style>
+            .vjs-control-bar { position: absolute !important; bottom: -35px
+            !important; z-index: 1000 !important; opacity: 1 !important; }
+        </style>
 
-    <!-- Icon8 Line Awesome icons -->
-    <link rel= "stylesheet" href= "https://maxst.icons8.com/vue-static/landings/line-awesome/line-awesome/1.3.0/css/line-awesome.min.css" >
+        <!-- Icon8 Line Awesome icons -->
+        <link
+            rel="stylesheet"
+            href="https://maxst.icons8.com/vue-static/landings/line-awesome/line-awesome/1.3.0/css/line-awesome.min.css"
+        />
 
-    <link href="https://vjs.zencdn.net/8.23.3/video-js.css" rel="stylesheet" />
-    <script src="https://vjs.zencdn.net/8.23.3/video.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-    
+        <link
+            href="https://vjs.zencdn.net/8.23.3/video-js.css"
+            rel="stylesheet"
+        />
+        <script src="https://vjs.zencdn.net/8.23.3/video.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+        <script type="text/javascript" src="/js/smoothie.js"></script>
+        <script
+            type="text/javascript"
+            src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"
+        ></script>
 
-    <script type="module">
-        import { auth } from '/js/rsauth.js';
-        import { nav } from '/js/rsnav.js';
-        import { {{endpoint}} } from '/js/rs{{endpoint}}.js?v=2025073102';
-        {{endpoint}}.init();
-    </script>
-</head>
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-    <div id="container" class="flex h-screen"></div>
-</body>
+        <script type="module">
+            import { auth } from '/js/rsauth.js'; import { nav } from
+            '/js/rsnav.js'; import {
+            {{endpoint}}
+            } from '/js/rs{{endpoint}}.js?v=2025080401';
+            {{endpoint}}.init();
+        </script>
+    </head>
+    <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+        <div id="container" class="flex h-screen"></div>
+    </body>
 </html>
