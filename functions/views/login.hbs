@@ -8,15 +8,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
     <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Mako','Roboto','Arial','sans-serif'] }
-                }
-            }
-        };
+        tailwind.config = { theme: { extend: { fontFamily: { sans:
+        ['Mako','Roboto','Arial','sans-serif'] } } } };
     </script>
-
+    
     <script type="module">
         import { Auth } from '/js/rsauth.js';
         const auth = new Auth();

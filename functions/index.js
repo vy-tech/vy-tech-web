@@ -36,132 +36,136 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 Handlebars.registerHelper("default", function (value, defaultValue) {
-  return value !== undefined ? value : defaultValue;
+    return value !== undefined ? value : defaultValue;
 });
 const loginTemplate = Handlebars.compile(
-  readFileSync(join(__dirname, "views", "login.hbs"), "utf8")
+    readFileSync(join(__dirname, "views", "login.hbs"), "utf8")
 );
 const appTemplate = Handlebars.compile(
-  readFileSync(join(__dirname, "views", "app.hbs"), "utf8")
+    readFileSync(join(__dirname, "views", "app.hbs"), "utf8")
 );
 
 app.get("/users/login", (req, res) => {
-  res.send(
-    loginTemplate({
-      error: req.query.error,
-      return_url: req.query.return_url,
-    })
-  );
+    res.send(
+        loginTemplate({
+            error: req.query.error,
+            return_url: req.query.return_url,
+        })
+    );
 });
 
 const STORAGE_URLS = {
-  firebase: {
-    prefix:
-      "https://firebasestorage.googleapis.com/v0/b/roarscore-1ddf5.firebasestorage.app/o/",
-    suffix: "?alt=media&ext=.mp4",
-    placeholder: "videos%2Fvideo-placeholder.mp4",
-    encoded: true,
-  },
-  minio: {
-    prefix: "https://storage.roarscore.ai/production/",
-    suffix: "",
-    placeholder: "videos/playback-placeholder.mp4",
-    encoded: false,
-  },
+    firebase: {
+        prefix: "https://firebasestorage.googleapis.com/v0/b/roarscore-1ddf5.firebasestorage.app/o/",
+        suffix: "?alt=media&ext=.mp4",
+        placeholder: "videos%2Fvideo-placeholder.mp4",
+        encoded: true,
+    },
+    minio: {
+        prefix: "https://storage.roarscore.ai/production/",
+        suffix: "",
+        placeholder: "videos/playback-placeholder.mp4",
+        encoded: false,
+    },
 };
 
 const getVideoUrl = (storageType, path) => {
-  const { prefix, suffix, encoded } = STORAGE_URLS[storageType || "firebase"];
+    const { prefix, suffix, encoded } = STORAGE_URLS[storageType || "firebase"];
 
-  var resultPath = path;
-  if (encoded) resultPath = encodeURIComponent(resultPath);
-  if (resultPath.startsWith("/") && prefix.endsWith("/"))
-    resultPath = resultPath.substring(1); // Remove leading slash if prefix ends with slash
+    if (!path) return "";
 
-  return `${prefix}${resultPath}${suffix}`;
+    var resultPath = path;
+    if (encoded) resultPath = encodeURIComponent(resultPath);
+    if (resultPath.startsWith("/") && prefix.endsWith("/"))
+        resultPath = resultPath.substring(1); // Remove leading slash if prefix ends with slash
+
+    return `${prefix}${resultPath}${suffix}`;
 };
 
 const getPlaceholderVideoUrl = (storageType) => {
-  storageType = storageType || "firebase"; // Default to firebase if not specified
-  const { prefix, suffix, placeholder } = STORAGE_URLS[storageType];
+    storageType = storageType || "firebase"; // Default to firebase if not specified
+    const { prefix, suffix, placeholder } = STORAGE_URLS[storageType];
 
-  return `${prefix}${placeholder}${suffix}`;
+    return `${prefix}${placeholder}${suffix}`;
 };
 
 const cleanupChunks = (chunks) => {
-  // Sort by minuteOfDay
-  chunks.sort((a, b) => a.minuteOfDay - b.minuteOfDay);
+    // Sort by minuteOfDay
+    chunks.sort((a, b) => a.minuteOfDay - b.minuteOfDay);
 
-  // Filter out any that cannot be played
-  chunks = chunks.filter((c) => {
-    if (!c.playbackPrefix) {
-      console.warn(`Chunk ${c.id} is missing playbackPrefix, skipping.`);
-      return false;
-    }
-    return true;
-  });
+    // Filter out any that cannot be played
+    chunks = chunks.filter((c) => {
+        if (!c.playbackPrefix) {
+            console.warn(`Chunk ${c.id} is missing playbackPrefix, skipping.`);
+            return false;
+        }
+        return true;
+    });
 
-  // Remove duplicates and prioritize those with expressionsPath
-  var unique = {};
-  chunks.forEach((c) => {
-    if (!unique[c.minuteOfDay] || c.expressionsPath) {
-      unique[c.minuteOfDay] = c;
-    }
-  });
-  chunks = Object.values(unique);
+    // Remove duplicates and prioritize those with expressionsPath
+    var unique = {};
+    chunks.forEach((c) => {
+        if (!unique[c.minuteOfDay] || c.expressionsPath) {
+            unique[c.minuteOfDay] = c;
+        }
+    });
+    chunks = Object.values(unique);
 
-  return chunks;
+    return chunks;
 };
 
 app.get("/playlist/:location-:date-:camera-:quality.m3u8", async (req, res) => {
-  const { location, date, camera, quality } = req.params;
-  if (!location || !date || !camera || !quality) {
-    return res
-      .status(400)
-      .send(
-        "Missing 'location', 'date', 'camera', or 'quality' query parameter."
-      );
-  }
-
-  const hierarchy = `${location}:${date}:${camera}`;
-  const colRef = db.collection("chunks");
-  const query = colRef.where("hierarchy", "==", hierarchy);
-  const snapshot = await query.get();
-  if (snapshot.empty) {
-    return res
-      .status(404)
-      .send("No video segments found for this location, date, and camera.");
-  }
-
-  var chunks = cleanupChunks(snapshot.docs.map((doc) => doc.data()));
-
-  var playlistLines = [
-    "#EXTM3U",
-    "#EXT-X-VERSION:7",
-    "#EXT-X-TARGETDURATION:6",
-    "#EXT-X-MEDIA-SEQUENCE:0",
-    "#EXT-X-PLAYLIST-TYPE:VOD",
-  ];
-
-  for (const chunk of chunks) {
-    var prefix = `${chunk.playbackPrefix}-${quality}`;
-    var initUrl = getVideoUrl(chunk.storage, `${prefix}-init.mp4`);
-    playlistLines.push(`#EXT-X-MAP:URI="${initUrl}"`);
-    for (var i = 0; i < chunk.playbackSegments; i++) {
-      var segmentNum = i.toString().padStart(3, "0");
-      var segmentUrl = getVideoUrl(
-        chunk.storage,
-        `${prefix}-${segmentNum}.mp4`
-      );
-      playlistLines.push(`#EXTINF:${chunk.playbackDurations[i]},`);
-      playlistLines.push(segmentUrl);
+    const { location, date, camera, quality } = req.params;
+    if (!location || !date || !camera || !quality) {
+        return res
+            .status(400)
+            .send(
+                "Missing 'location', 'date', 'camera', or 'quality' query parameter."
+            );
     }
-    playlistLines.push("#EXT-X-DISCONTINUITY");
-  }
-  playlistLines.push("#EXT-X-ENDLIST");
 
-  res.set("Content-Type", "application/vnd.apple.mpegurl");
-  res.send(playlistLines.join("\n"));
+    const hierarchy = `${location}:${date}:${camera}`;
+    const colRef = db.collection("chunks");
+    const query = colRef.where("hierarchy", "==", hierarchy);
+    const snapshot = await query.get();
+    if (snapshot.empty) {
+        return res
+            .status(404)
+            .send(
+                "No video segments found for this location, date, and camera."
+            );
+    }
+
+    var chunks = cleanupChunks(snapshot.docs.map((doc) => doc.data()));
+
+    var playlistLines = [
+        "#EXTM3U",
+        "#EXT-X-VERSION:7",
+        "#EXT-X-TARGETDURATION:6",
+        "#EXT-X-MEDIA-SEQUENCE:0",
+        "#EXT-X-PLAYLIST-TYPE:VOD",
+    ];
+
+    for (const chunk of chunks) {
+        var prefix = `${chunk.playbackPrefix}-${quality}`;
+        var initUrl = getVideoUrl(chunk.storage, `${prefix}-init.mp4`);
+        var exprUrl = getVideoUrl(chunk.storage, chunk.expressionsPath);
+        playlistLines.push(`#EXT-X-MAP:URI="${initUrl}#${exprUrl}"`);
+        for (var i = 0; i < chunk.playbackSegments; i++) {
+            var segmentNum = i.toString().padStart(3, "0");
+            var segmentUrl = getVideoUrl(
+                chunk.storage,
+                `${prefix}-${segmentNum}.mp4`
+            );
+            playlistLines.push(`#EXTINF:${chunk.playbackDurations[i]},`);
+            playlistLines.push(segmentUrl);
+        }
+        playlistLines.push("#EXT-X-DISCONTINUITY");
+    }
+    playlistLines.push("#EXT-X-ENDLIST");
+
+    res.set("Content-Type", "application/vnd.apple.mpegurl");
+    res.send(playlistLines.join("\n"));
 });
 
 // app.get("/playlist/:event/:camera/play.m3u8", async (req, res) => {
@@ -307,29 +311,30 @@ app.get("/playlist/:location-:date-:camera-:quality.m3u8", async (req, res) => {
 // });
 
 const appEndpoints = [
-  "dashboard",
-  "locations",
-  "schedule",
-  "reports",
-  "settings",
-  "profile",
+    "dashboard",
+    "locations",
+    "schedule",
+    "reports",
+    "settings",
+    "profile",
+    "admin",
 ];
 
 // Add the app endpoints to the express app
 appEndpoints.forEach((endpoint) => {
-  app.get(`/${endpoint}/:location?/:date?/:camera?`, (req, res) => {
-    const { location, date, camera } = req.params;
-    res.send(
-      appTemplate({
-        error: req.query.error,
-        endpoint: endpoint,
-        Endpoint: endpoint.charAt(0).toUpperCase() + endpoint.slice(1),
-        location,
-        date,
-        camera,
-      })
-    );
-  });
+    app.get(`/${endpoint}/:location?/:date?/:camera?`, (req, res) => {
+        const { location, date, camera } = req.params;
+        res.send(
+            appTemplate({
+                error: req.query.error,
+                endpoint: endpoint,
+                Endpoint: endpoint.charAt(0).toUpperCase() + endpoint.slice(1),
+                location,
+                date,
+                camera,
+            })
+        );
+    });
 });
 
 export const _app = app;

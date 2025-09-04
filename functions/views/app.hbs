@@ -5,12 +5,14 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>RoarScore</title>
 
+
         <script src="https://cdn.tailwindcss.com"></script>
 
         <script>
             tailwind.config = { theme: { extend: { fontFamily: { sans:
             ['Mako','Roboto','Arial','sans-serif'] } } } };
         </script>
+   
         <style>
             .vjs-control-bar { position: absolute !important; bottom: -35px
             !important; z-index: 1000 !important; opacity: 1 !important; }
@@ -28,17 +30,19 @@
         />
         <script src="https://vjs.zencdn.net/8.23.3/video.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-        <script type="text/javascript" src="/js/smoothie.js"></script>
+        <script type="text/javascript" src="/npm/smoothie.js"></script>
         <script
             type="text/javascript"
             src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"
         ></script>
 
+        <script type="text/javascript" src="https://www.youtube.com/iframe_api"></script>
+
         <script type="module">
             import { auth } from '/js/rsauth.js'; import { nav } from
             '/js/rsnav.js'; import {
             {{endpoint}}
-            } from '/js/rs{{endpoint}}.js?v=2025080401';
+            } from '/js/rs{{endpoint}}.js?v=2025090401';
             {{endpoint}}.init();
         </script>
     </head>

@@ -1,26 +1,30 @@
-import van from "https://cdn.jsdelivr.net/gh/vanjs-org/van/public/van-1.5.5.min.js";
+import { v as van } from './chunks/van-t8DywzvC.js';
 
 class Dashboard {
-  constructor() {}
+    constructor() {}
 
-  init() {
-    this.addElements();
-  }
+    init() {
+        this.addElements();
+    }
 
-  addElements(parentElement) {
-    const { a, div, main, h1 } = van.tags;
-    parentElement =
-      parentElement || document.getElementById("container") || document.body;
+    addElements(parentElement) {
+        const { a, div, main, h1 } = van.tags;
+        parentElement =
+            parentElement ||
+            document.getElementById("container") ||
+            document.body;
 
-    van.add(
-      parentElement,
-      main(
-        { class: "w-[90%] p-4 overflow-auto" },
-        div({ class: "flex justify-center items-center" }, h1("Hello"))
-      )
-    );
-  }
+        van.add(
+            parentElement,
+            main(
+                { class: "w-[90%] p-4 overflow-auto" },
+                div({ class: "flex justify-center items-center" }, h1("Hello"))
+            )
+        );
+    }
 }
 
 const dashboard = new Dashboard();
+
 export { Dashboard, dashboard };
+//# sourceMappingURL=rsdashboard.js.map
