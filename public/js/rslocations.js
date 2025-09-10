@@ -1,11 +1,11 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { e as events } from './chunks/rsevents-BE9Wom91.js';
-import { L as List, F as Form } from './chunks/rsdb-Dlec61Ym.js';
-import './chunks/rsfirebase-B6bae4XU.js';
+import { e as eventBus } from './chunks/eventbus-B2NG0GvW.js';
+import { L as List, F as Form } from './chunks/rsdb-CUSZDmYY.js';
+import './chunks/rsfirebase-IdUc1I6T.js';
 
 class Locations {
     constructor() {
-        events.addEventListener("addLocationClick", (e) =>
+        eventBus.addEventListener("addLocationClick", (e) =>
             this.handleAddLocation(e)
         );
     }

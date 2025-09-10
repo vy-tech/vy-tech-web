@@ -1,42 +1,45 @@
 {
-  "hosting": {
-    "public": "public",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ]
-  },
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ]
-    }
-  ],
-  "storage": {
-    "rules": "storage.rules"
-  },
-  "emulators": {
-    "functions": {
-      "port": 5001
-    },
     "hosting": {
-      "port": 5000
+        "public": "public",
+        "rewrites": [
+            {
+                "regex": "^/(api|user|users|dashboard|locations|schedule|settings|report|reports|profile|playlist|admin)(?:/.*)?$",
+                "function": { "functionId": "app", "region": "us-central1" }
+            },
+            { "source": "**", "destination": "/index.html" }
+        ],
+        "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
     },
-    "ui": {
-      "enabled": false
+    "firestore": {
+        "rules": "firestore.rules",
+        "indexes": "firestore.indexes.json"
     },
-    "singleProjectMode": true
-  }
+    "functions": [
+        {
+            "source": "functions",
+            "codebase": "default",
+            "ignore": [
+                "node_modules",
+                ".git",
+                "firebase-debug.log",
+                "firebase-debug.*.log",
+                "*.local"
+            ]
+        }
+    ],
+    "storage": {
+        "rules": "storage.rules"
+    },
+    "emulators": {
+        "functions": {
+            "port": 5001
+        },
+        "hosting": {
+            "port": 5000
+        },
+        "ui": {
+            "enabled": false
+        },
+        "singleProjectMode": true
+    }
 }

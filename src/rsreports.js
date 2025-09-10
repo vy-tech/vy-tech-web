@@ -1,7 +1,12 @@
 import van from "vanjs-core";
-import { events } from "./rsevents.js";
+
+import { eventBus } from "./eventbus.js";
 import { CoreNames, EmotionCoreMap, Score } from "./vyscore.js";
 import Viz from "./vyviz.js";
+import { events } from "./events.js";
+import { summarizer } from "./summarizer.js";
+import { profiler } from "./profiler.js";
+import { activeBoxManager } from "./activeBoxManager.js";
 
 class Reports {
     constructor() {
@@ -17,37 +22,10 @@ class Reports {
         this.transcript = [];
         this.tsIndex = 0;
 
-        this.embedVideos = {
-            20250711: { id: "AadogpCu63M", offset: -1 * 25 * 60 - 1 },
-            20250712: { id: "2xYgquM67sk", offset: -1 * 26 * 60 + 2 },
-        };
         this.embedPlayer = null;
         this.embedVideoId = null;
         this.embedOffset = null;
-
-        events.addEventListener("cameraChangeRequest", (e) => {
-            const camera = e.detail.camera;
-            console.log("Camera change requested:", camera);
-
-            this.currentCamera = camera;
-            let newHierarchy = this.hierarchy.split("-").slice(0, 2).join("-");
-            newHierarchy += `-${camera.toString().padStart(2, "0")}`;
-            this.hierarchy = newHierarchy;
-            this.startTimeOffset = this.player.currentTime();
-            console.log("Time offset set to:", this.startTimeOffset);
-            this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
-            this.score.resetActiveBoxes();
-            this.score.resetWindow();
-            this.hls.loadSource(this.playlistUrl);
-            this.player.play();
-        });
-
-        events.addEventListener("playerSeekRequest", (e) => {
-            const time = e.detail.time;
-
-            const seconds = this.timeToSeconds(time);
-            this.player.currentTime(seconds);
-        });
+        this.event = null;
     }
 
     async loadTranscript() {
@@ -110,16 +88,57 @@ class Reports {
     }
 
     async init() {
-        await this.score.loadProfile(this.profileId);
+        this.initEvents();
+
+        await profiler.loadFromFirestore(this.profileId);
+
+        this.event = await events.getEventByHierarchy(
+            this.hierarchy.replaceAll("-", ":")
+        );
 
         this.addElements();
 
-        await this.score.ensureSummaries(this.hierarchy);
+        //await this.score.ensureSummaries(this.hierarchy);
+        await summarizer.ensure(this.hierarchy);
         this.score.findMoments();
 
         this.addMoments();
 
         this.transcript = await this.loadTranscript();
+    }
+
+    initEvents() {
+        eventBus.addEventListener("cameraChangeRequest", (e) => {
+            const camera = e.detail.camera;
+            console.log("Camera change requested:", camera);
+
+            this.currentCamera = camera;
+            let newHierarchy = this.hierarchy.split("-").slice(0, 2).join("-");
+            newHierarchy += `-${camera.toString().padStart(2, "0")}`;
+            this.hierarchy = newHierarchy;
+            this.startTimeOffset = this.player.currentTime();
+            console.log("Time offset set to:", this.startTimeOffset);
+            this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
+            activeBoxManager.reset();
+            this.score.resetWindow();
+            this.hls.loadSource(this.playlistUrl);
+            this.player.play();
+        });
+
+        eventBus.addEventListener("playerSeekRequest", (e) => {
+            const time = e.detail.time;
+
+            const seconds = this.timeToSeconds(time);
+            this.player.currentTime(seconds);
+        });
+
+        eventBus.addEventListener("eventSelected", (e) => {
+            const hierarchy = e.detail;
+            console.log("Event selected:", hierarchy);
+
+            const pathname = `/reports/${hierarchy.replaceAll(":", "/")}`;
+            window.location.pathname = pathname;
+        });
     }
 
     getHierarchyFromPath() {
@@ -156,7 +175,7 @@ class Reports {
     }
 
     addElements(parentElement) {
-        const { div, span, a, main, video, canvas, select, option } = van.tags;
+        const { div, main, video, canvas, button } = van.tags;
         parentElement =
             parentElement ||
             document.getElementById("container") ||
@@ -306,30 +325,13 @@ class Reports {
                             id: "report-center",
                             class: "w-full max-w-4xl flex flex-col",
                         },
-                        div(
-                            {},
-                            select(
-                                {
-                                    id: "report-event-select",
-                                    class: "w-full text-black p-1",
-                                    onchange: (e) => {
-                                        let path = e.target.value.replaceAll(
-                                            "-",
-                                            "/"
-                                        );
-                                        window.location.href = `/reports/${path}`;
-                                    },
-                                },
-                                option(
-                                    { value: "raimondi-20250711-01" },
-                                    "Fri Jul 11 - Oakland Ballers vs. Rocky Mountain Vibes"
-                                ),
-                                option(
-                                    { value: "raimondi-20250712-01" },
-                                    "Sat Jul 12 - Oakland Ballers vs. Rocky Mountain Vibes"
-                                )
-                            )
+
+                        // Event selector
+                        events.createSelectorElement(
+                            this.hierarchy.replaceAll("-", ":")
                         ),
+
+                        // Video section
                         div(
                             { class: "relative w-full pt-[62.8125%] mt-4" },
                             video({
@@ -412,6 +414,24 @@ class Reports {
                                         height: 126,
                                     })
                                 )
+                            )
+                        ),
+
+                        div(
+                            {
+                                class: "text-sm text-gray-700",
+                            },
+                            button(
+                                {
+                                    type: "button",
+                                    class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600",
+                                    onclick: () => {
+                                        eventBus.fire("summarizer.rebuild", {
+                                            hierarchy: this.hierarchy,
+                                        });
+                                    },
+                                },
+                                "Rebuild Summary"
                             )
                         )
                     ),
@@ -559,12 +579,13 @@ class Reports {
 
                 await this.score.handleTimeUpdate(currentTime);
                 this.viz.paintCameraMap(
-                    this.score.summaries,
+                    //this.score.summaries,
+                    summarizer.summaries,
                     Math.floor(currentTime)
                 );
                 this.viz.paintActiveHeatmap(
                     this.overlay,
-                    this.score.activeBoxes
+                    activeBoxManager.get()
                 );
                 // this.viz.paintHeatmap(
                 //     this.overlay,
@@ -575,7 +596,8 @@ class Reports {
                 // );
                 this.viz.paintEkg(this.score.currentScore);
                 this.viz.paintSpider(this.score.currentCores);
-                this.viz.paintPpl(this.score.summaries[this.currentCamera - 1]);
+                //this.viz.paintPpl(this.score.summaries[this.currentCamera - 1]);
+                this.viz.paintPpl(summarizer.summaries[this.currentCamera - 1]);
                 //this.viz.paintPct(this.score.percentiles);
 
                 this.updateTranscript();
@@ -708,7 +730,8 @@ class Reports {
 
     addEmbed() {
         const [token, date, camera] = this.hierarchy.split("-");
-        const embedVideo = this.embedVideos[date];
+        //const embedVideo = this.embedVideos[date];
+        const embedVideo = this.event.embed;
 
         if (!embedVideo) {
             console.error(`No embed found for ${date}`);
@@ -719,9 +742,10 @@ class Reports {
         this.embedOffset = embedVideo.offset;
 
         const videoId = this.embedVideoId;
+        const origin = `https://${window.location.host}`;
         document.getElementById("report-embed").innerHTML =
             '<iframe id="report-embed-player" width="500" height="281" ' +
-            `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=https://dev.roarscore.ai"` +
+            `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${origin}"` +
             ' title="YouTube video player" frameborder="0" allow="accelerometer; ' +
             "autoplay; clipboard-write; encrypted-media; gyroscope; " +
             'picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" ' +
@@ -733,14 +757,16 @@ class Reports {
         if (this.embedPlayer) {
             let embedTime = this.embedPlayer.getCurrentTime();
             let embedState = this.embedPlayer.getPlayerState();
+            let duration = this.embedPlayer.getDuration();
             let targetTime = currentTime + this.embedOffset;
 
-            if (targetTime < 0) {
+            if (targetTime < 0 || targetTime > duration) {
                 if (embedState == 1) {
                     console.log(
                         `Target time is ${targetTime}, pausing embed..`
                     );
                     this.embedPlayer.pauseVideo();
+                    this.embedPlayer.mute();
                 }
             } else {
                 if (Math.abs(targetTime - embedTime) > 1) {
@@ -751,6 +777,9 @@ class Reports {
                     console.log(`Playing embedded video..`);
                     this.embedPlayer.playVideo();
                 }
+                if (this.embedPlayer.isMuted()) {
+                    this.embedPlayer.unMute();
+                }
             }
         }
     }
@@ -759,7 +788,7 @@ class Reports {
         const debugDiv = document.getElementById("report-box-debug");
         debugDiv.classList.remove("hidden");
 
-        const profile = this.score.profile.emotions;
+        const profile = profiler.profile.emotions;
 
         let html =
             '<table class="w-full"><tr><th>Emotion</th><th>Core</th><th>Confidence</th><th>Profile</th><th>Score</th></tr>';

@@ -1,16 +1,10 @@
-import van from "vanjs-core";
-import {
-    firestore,
-    doc,
-    getDoc,
-    getDocs,
-    setDoc,
-    query,
-    collection,
-    where,
-} from "./rsdb.js";
+//import van from "vanjs-core";
+import { firestore, doc, getDoc } from "./rsdb.js";
+//import { Modal } from "vanjs-ui";
 
-import { Modal } from "vanjs-ui";
+import { activeBoxManager } from "./activeBoxManager.js";
+import { summarizer } from "./summarizer.js";
+import { profiler } from "./profiler.js";
 
 const Box = Object.freeze({
     X: 0,
@@ -22,15 +16,15 @@ const Box = Object.freeze({
     INDEX: 6, // Index in the original window array
 });
 
-const ActiveBox = Object.freeze({
-    X: 0,
-    Y: 1,
-    W: 2,
-    H: 3,
-    SCORE: 4,
-    EXPIRES: 5,
-    INDEX: 6, // Index in the original window array
-});
+// const ActiveBox = Object.freeze({
+//     X: 0,
+//     Y: 1,
+//     W: 2,
+//     H: 3,
+//     SCORE: 4,
+//     EXPIRES: 5,
+//     INDEX: 6, // Index in the original window array
+// });
 
 const Core = Object.freeze({
     ANGER: 0,
@@ -111,7 +105,6 @@ const EmotionCoreMap = Object.freeze({
 class Score {
     constructor() {
         this.expressionsUrl = null;
-        this.profile = {};
 
         this.windowSize = 3.0;
         this.window = [];
@@ -126,7 +119,7 @@ class Score {
         this.lastTime = null;
         this.currentSecond = null;
         this.lastSecond = null;
-        this.activeBoxes = [];
+        //this.activeBoxes = [];
         this.currentScore = 0;
         this.currentCores = [0, 0, 0, 0, 0, 0, 0];
         this.softmaxAlpha = 0.01; // controls how spiky per-row scoring is
@@ -140,56 +133,7 @@ class Score {
 
         this.dampenAlpha = 0.05;
 
-        this.summaries = [];
         this.currentCamera = 0;
-    }
-
-    showProgress(message = "Loading...") {
-        const { h3, div, button, progress } = van.tags;
-        const pct = van.state(0);
-        const closed = van.state(false);
-        van.add(
-            document.body,
-            Modal(
-                {
-                    closed,
-                    backgroundStyleOverrides: {
-                        "align-items": "flex-start", // Align to top instead of center
-                        "padding-top": "20vh", // Add some padding from the top
-                    },
-                },
-                div(
-                    { class: "p-4 w-80" },
-                    h3({ class: "text-black" }, message),
-                    progress({
-                        id: "loading-progress",
-                        class: "w-full h-4 mt-2",
-                        value: pct,
-                        max: 100,
-                    })
-                )
-            )
-        );
-        return { closed, pct };
-    }
-
-    //
-    async loadProfile(profileId) {
-        /**
-         * Load a profile by its ID.
-         * @param {string} profileId - The ID of the profile to load.
-         */
-
-        var docRef = doc(firestore, "profiles", profileId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            console.log("Profile loaded:", docSnap.data());
-            this.profile = docSnap.data();
-            return this.profile;
-        } else {
-            console.error("No profile found with ID:", profileId);
-            return null;
-        }
     }
 
     async loadExpressions(url, timeOffset = 0.0) {
@@ -198,12 +142,12 @@ class Score {
          * @param {string} url - The URL to fetch expressions from.
          */
 
-        var profile = (this.profile && this.profile.emotions) || {};
+        var profile = (profiler.profile && profiler.profile.emotions) || {};
 
         //console.log(`Loading ${url} with time offset ${timeOffset}`);
         const response = await fetch(url);
         if (!response.ok) {
-            console.error(`Error loaindg ${url}: ${response.statusText}`);
+            console.error(`Error loading ${url}: ${response.statusText}`);
             return [];
         }
         const rows = await response.json();
@@ -426,12 +370,18 @@ class Score {
         await this.ensureWindowLoaded();
         this.moveWindow();
         this.updateCurrentFromWindow();
-        this.expireActiveBoxes();
+        //this.expireActiveBoxes();
+
+        // TODO Move to event
+        activeBoxManager.expire((this.currentTime - this.lastTime) * 1000);
     }
 
     async handleTimeSeek(currentTime) {
         this.resetWindow();
-        this.resetActiveBoxes();
+
+        // TODO Move to event
+        activeBoxManager.reset();
+        //this.resetActiveBoxes();
 
         this.currentTime = null;
         this.currentSecond = null;
@@ -536,17 +486,27 @@ class Score {
         ) {
             const row = this.window[this.windowEndIndex];
             this.windowScore += row.score;
-            this.windowBoxes.push(
-                new Int32Array([
-                    row.box.x,
-                    row.box.y,
-                    row.box.w,
-                    row.box.h,
-                    row.score,
-                    1,
-                    this.windowEndIndex,
-                ])
-            );
+            // this.windowBoxes.push(
+            //     new Int32Array([
+            //         row.box.x,
+            //         row.box.y,
+            //         row.box.w,
+            //         row.box.h,
+            //         row.score,
+            //         1,
+            //         this.windowEndIndex,
+            //     ])
+            // );
+
+            this.windowBoxes.push({
+                x: row.box.x,
+                y: row.box.y,
+                w: row.box.w,
+                h: row.box.h,
+                score: row.score,
+                count: 1,
+                index: this.windowEndIndex,
+            });
 
             this.windowEndIndex++;
         }
@@ -641,7 +601,10 @@ class Score {
             this.currentCores.fill(0);
         }
 
-        this.updateActiveBoxes(this.windowBoxes);
+        // TODO Refactor, only call for new boxes in the window
+        // TODO Refactor, make event based?
+        activeBoxManager.update(this.windowBoxes);
+        //this.updateActiveBoxes(this.windowBoxes);
         this.updatePercentiles();
     }
 
@@ -679,65 +642,65 @@ class Score {
         return this.clamp(Math.round(ui), 0, 1000);
     }
 
-    resetActiveBoxes() {
-        /**
-         * Resets the active boxes to an empty array.
-         */
-        this.activeBoxes = [];
-    }
+    // resetActiveBoxes() {
+    //     /**
+    //      * Resets the active boxes to an empty array.
+    //      */
+    //     this.activeBoxes = [];
+    // }
 
-    expireActiveBoxes() {
-        /**
-         * Expires boxes from activeBoxes that have not been updated in 10 seconds.
-         */
-        for (let i = this.activeBoxes.length - 1; i >= 0; i--) {
-            const activeBox = this.activeBoxes[i];
-            const dt = Math.floor((this.currentTime - this.lastTime) * 1000);
-            activeBox[ActiveBox.EXPIRES] -= dt;
-            if (activeBox[ActiveBox.EXPIRES] <= 0) {
-                this.activeBoxes.splice(i, 1); // Remove expired box
-            }
-        }
-    }
+    // expireActiveBoxes() {
+    //     /**
+    //      * Expires boxes from activeBoxes that have not been updated in 10 seconds.
+    //      */
+    //     for (let i = this.activeBoxes.length - 1; i >= 0; i--) {
+    //         const activeBox = this.activeBoxes[i];
+    //         const dt = Math.floor((this.currentTime - this.lastTime) * 1000);
+    //         activeBox[ActiveBox.EXPIRES] -= dt;
+    //         if (activeBox[ActiveBox.EXPIRES] <= 0) {
+    //             this.activeBoxes.splice(i, 1); // Remove expired box
+    //         }
+    //     }
+    // }
 
-    updateActiveBoxes(boxes) {
-        /**
-         * Updates the active boxes based on the current second,
-         * adds any non-overlapping boxes to activeBoxes.
-         */
+    // updateActiveBoxes(boxes) {
+    //     /**
+    //      * Updates the active boxes based on the current second,
+    //      * adds any non-overlapping boxes to activeBoxes.
+    //      */
 
-        for (const box of boxes) {
-            // Check if the box is already active
-            var activeBox = this.activeBoxes.find((activeBox) => {
-                if (this.boxesAreSame(activeBox, box)) {
-                    return activeBox;
-                }
-            });
+    //     for (const box of boxes) {
+    //         // Check if the box is already active
+    //         var activeBox = this.activeBoxes.find((activeBox) => {
+    //             if (this.boxesAreSame(activeBox, box)) {
+    //                 return activeBox;
+    //             }
+    //         });
 
-            if (activeBox) {
-                activeBox[ActiveBox.X] = box[Box.X];
-                activeBox[ActiveBox.Y] = box[Box.Y];
-                activeBox[ActiveBox.W] = box[Box.W];
-                activeBox[ActiveBox.H] = box[Box.H];
-                activeBox[ActiveBox.SCORE] = box[Box.SCORE] / box[Box.COUNT];
-                activeBox[ActiveBox.EXPIRES] = Math.floor(
-                    this.windowSize * 1000
-                ); // Update the expiration time
-                activeBox[ActiveBox.INDEX] = box[Box.INDEX];
-            } else {
-                // If not active, create it and add it to activeBoxes
-                // Ensure score is averaged because we're reusing the count
-                activeBox = new Int32Array(box);
-                activeBox[ActiveBox.SCORE] = box[Box.SCORE] / box[Box.COUNT];
-                activeBox[ActiveBox.EXPIRES] = Math.floor(
-                    this.windowSize * 1000
-                );
-                activeBox[ActiveBox.INDEX] = box[Box.INDEX];
+    //         if (activeBox) {
+    //             activeBox[ActiveBox.X] = box[Box.X];
+    //             activeBox[ActiveBox.Y] = box[Box.Y];
+    //             activeBox[ActiveBox.W] = box[Box.W];
+    //             activeBox[ActiveBox.H] = box[Box.H];
+    //             activeBox[ActiveBox.SCORE] = box[Box.SCORE] / box[Box.COUNT];
+    //             activeBox[ActiveBox.EXPIRES] = Math.floor(
+    //                 this.windowSize * 1000
+    //             ); // Update the expiration time
+    //             activeBox[ActiveBox.INDEX] = box[Box.INDEX];
+    //         } else {
+    //             // If not active, create it and add it to activeBoxes
+    //             // Ensure score is averaged because we're reusing the count
+    //             activeBox = new Int32Array(box);
+    //             activeBox[ActiveBox.SCORE] = box[Box.SCORE] / box[Box.COUNT];
+    //             activeBox[ActiveBox.EXPIRES] = Math.floor(
+    //                 this.windowSize * 1000
+    //             );
+    //             activeBox[ActiveBox.INDEX] = box[Box.INDEX];
 
-                this.activeBoxes.push(activeBox);
-            }
-        }
-    }
+    //             this.activeBoxes.push(activeBox);
+    //         }
+    //     }
+    // }
 
     boxAt(x, y) {
         /**
@@ -747,20 +710,15 @@ class Score {
          * @returns {Object|null}
          **/
 
-        for (const box of this.activeBoxes) {
-            if (
-                x >= box[ActiveBox.X] &&
-                x < box[ActiveBox.X] + box[ActiveBox.W] &&
-                y >= box[ActiveBox.Y] &&
-                y < box[ActiveBox.Y] + box[ActiveBox.H]
-            ) {
-                const row = this.window[box[ActiveBox.INDEX]];
+        let box = activeBoxManager.getAt(x, y);
 
-                return {
-                    activeBox: box,
-                    row: row,
-                };
-            }
+        if (box) {
+            const row = this.window[box.index];
+
+            return {
+                activeBox: box,
+                row: row,
+            };
         }
 
         return null;
@@ -782,183 +740,6 @@ class Score {
 
             hls.loadSource(playlistUrl);
         });
-    }
-
-    async createSummary(fragments) {
-        this.resetWindow();
-        let scores = {};
-
-        console.log("Creating summary...");
-        var { closed, pct } = this.showProgress("Creating summary...");
-
-        for (let i = 0; i < fragments.length; i++) {
-            const fragment = fragments[i];
-            pct.val = (i / fragments.length) * 100;
-
-            for (let dt = 0; dt < fragment.duration; dt += 0.25) {
-                const newTime = fragment.start + dt;
-                const second = Math.floor(newTime);
-
-                await this.handleTimeUpdate(newTime);
-                const score = (scores[second] = scores[second] || {
-                    startTime: 99999999,
-                    endTime: 0,
-                    score: 0,
-                    count: 0,
-                    people: 0,
-                });
-                score.startTime = Math.min(score.startTime, newTime);
-                score.endTime = Math.max(score.endTime, newTime);
-                score.score += this.currentScore;
-                score.people += this.activeBoxes.length;
-                score.count += 1;
-            }
-        }
-
-        for (const second in scores) {
-            const score = scores[second];
-            score.score = Math.round(score.score / score.count);
-            score.people = Math.round(score.people / score.count);
-            score.startTime = score.startTime.toFixed(2);
-            score.endTime = score.endTime.toFixed(2);
-        }
-
-        closed.val = true;
-        return Object.values(scores);
-    }
-
-    checkPeople(summary) {
-        let lastScore = summary[0];
-        for (const score of summary) {
-            const delta = Math.abs(lastScore.people - score.people);
-            if (delta / lastScore.people > 0.5) {
-                console.log(lastScore, score);
-            }
-            lastScore = score;
-        }
-    }
-
-    getSummaryUrl(token, date, camera) {
-        const urlPrefix = "https://storage.roarscore.ai/production/play/";
-        // Make sure camera is zero padded two digits
-        camera = parseInt(camera).toString().padStart(2, "0");
-
-        return (
-            `${urlPrefix}${token}/${date}/${camera}/` +
-            `summary-${token}-${date}-${camera}.json`
-        );
-    }
-
-    async loadSummary(url) {
-        console.log(`Loading summary ${url}..`);
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error(`Error loaindg ${url}: ${response.statusText}`);
-            return [];
-        }
-        const rows = await response.json();
-
-        for (const row of rows) {
-            row.startTime = parseFloat(row.startTime);
-            row.endTime = parseFloat(row.endTime);
-        }
-
-        return rows;
-    }
-
-    async loadSummaries(hierarchy, cameras = 5) {
-        console.log(`Loading sumamries for ${hierarchy}...`);
-        this.summaries = [];
-
-        const [token, date] = hierarchy.split("-");
-        for (let camera = 1; camera <= cameras; camera++) {
-            const url = this.getSummaryUrl(token, date, camera);
-            this.summaries.push(await this.loadSummary(url));
-        }
-    }
-
-    async storeSummary(hierarchy, summary) {
-        var { closed, pct } = this.showProgress("Saving summary...");
-
-        const batchSize = 1000;
-        for (let i = 0; i < summary.length; i += batchSize) {
-            pct.val = (i / summary.length) * 100;
-
-            const key = `${hierarchy}-${i.toString().padStart(5, "0")}`;
-            const rows = summary.slice(i, i + batchSize);
-            const data = {
-                hierarchy: hierarchy,
-                offset: i,
-                rows: rows,
-            };
-
-            const docRef = doc(firestore, "summaries", key);
-            await setDoc(docRef, data);
-        }
-
-        closed.val = true;
-    }
-
-    async restoreSummary(hierarchy) {
-        let result = [];
-        let batches = [];
-
-        // Get summaries by hierarchy
-        const summariesRef = collection(firestore, "summaries");
-        const q = query(summariesRef, where("hierarchy", "==", hierarchy));
-        const snap = await getDocs(q);
-
-        // Ensure they're sorted by offset
-        snap.forEach((doc) => {
-            batches.push(doc.data());
-        });
-        batches.sort((a, b) => a.offset - b.offset);
-
-        // Splice into the result
-        for (const batch of batches) {
-            for (const row of batch.rows) {
-                row.startTime = parseFloat(row.startTime);
-                row.endTime = parseFloat(row.endTime);
-            }
-            result.splice(batch.offset, 0, ...batch.rows);
-        }
-
-        return result;
-    }
-
-    async ensureSummaries(hierarchy, cameras = 5) {
-        const [token, date] = hierarchy.split("-");
-
-        console.log(`Ensuring summaries for ${token}-${date}...`);
-
-        var { closed, pct } = this.showProgress("Loading summaries..");
-
-        for (let camera = 1; camera <= cameras; camera++) {
-            camera = parseInt(camera).toString().padStart(2, "0");
-            const h = `${token}-${date}-${camera}`;
-
-            console.log(`Restoring ${h}..`);
-            let summary = await this.restoreSummary(h);
-
-            if (!summary || !summary.length) {
-                console.warn(
-                    `SUMMARY ${h} MISSING.  CREATING.  THIS WILL TAKE AWHILE...`
-                );
-
-                var score = new Score();
-                score.profile = this.profile;
-                const fragments = await score.getFragments(h);
-                await score.initLoadSchedule(fragments);
-                summary = await score.createSummary(fragments);
-
-                await this.storeSummary(h, summary);
-            }
-
-            pct.val = (camera / cameras) * 100;
-            this.summaries.push(summary);
-        }
-
-        closed.val = true;
     }
 
     isSameMoment(s1, s2) {
@@ -989,7 +770,7 @@ class Score {
     }
 
     findMoments(summary) {
-        summary = summary || this.summaries[0];
+        summary = summary || summarizer.summaries[0];
         let sorted = [...summary];
         let moments = [];
 
@@ -1025,4 +806,4 @@ class Score {
 }
 
 export default Score;
-export { Box, ActiveBox, Core, CoreNames, EmotionCoreMap, Score };
+export { Box, Core, CoreNames, EmotionCoreMap, Score };

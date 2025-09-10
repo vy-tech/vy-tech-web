@@ -1,4 +1,4 @@
-import { events } from "./rsevents.js";
+import { eventBus } from "./eventbus.js";
 
 class Viz {
     scoreToHue(score) {
@@ -95,8 +95,12 @@ class Viz {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         for (const box of activeBoxes) {
-            // Use array destructuring for Int32Array
-            const [ox, oy, ow, oh, score, expires] = box;
+            const ox = box.x;
+            const oy = box.y;
+            const ow = box.w;
+            const oh = box.h;
+            const score = Math.floor(box.score);
+            const expires = box.expires;
 
             // Scale the box coordinates to the canvas size
             const x = (ox / 3840) * canvas.width;
@@ -237,7 +241,7 @@ class Viz {
             if (point) {
                 this.cameraMapActive = point;
                 this.paintCameraMap();
-                events.dispatchEvent(
+                eventBus.dispatchEvent(
                     new CustomEvent("cameraChangeRequest", {
                         detail: { camera: point },
                     })
@@ -504,7 +508,7 @@ class Viz {
                 //     this.pplChart.data.datasets[firstPoint.datasetIndex].data[
                 //         firstPoint.index
                 //     ];
-                events.dispatchEvent(
+                eventBus.dispatchEvent(
                     new CustomEvent("playerSeekRequest", {
                         detail: { time: label },
                     })

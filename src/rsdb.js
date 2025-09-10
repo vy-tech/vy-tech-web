@@ -1,6 +1,6 @@
 import { van, rsv } from "./rsvan.js";
 import { app } from "./rsfirebase.js";
-import { events } from "./rsevents.js";
+import { eventBus } from "./eventbus.js";
 
 import {
     getFirestore,
@@ -24,7 +24,7 @@ class Form {
     constructor(collection, fields) {
         this.collection = collection;
         this.fields = fields;
-        events.addEventListener(`${this.collection}FormSubmitClick`, (e) => {
+        eventBus.addEventListener(`${this.collection}FormSubmitClick`, (e) => {
             this.handleSubmit();
         });
     }

@@ -1,12 +1,8 @@
 [
-  {
-    "origin": [
-      "https://roarscore.ai",
-      "https://dev.roarscore.ai",
-      "https://poc.roarscore.ai"
-    ],
-    "method": ["GET"],
-    "responseHeader": ["Content-Type"],
-    "maxAgeSeconds": 3600
-  }
+    {
+        "origin": ["*"],
+        "method": ["GET"],
+        "responseHeader": ["Content-Type"],
+        "maxAgeSeconds": 3600
+    }
 ]

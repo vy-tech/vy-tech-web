@@ -1,10 +1,10 @@
 import { van, rsv } from "./rsvan.js";
-import { events } from "./rsevents.js";
+import { eventBus } from "./eventbus.js";
 import { auth } from "./rsauth.js";
 
 class Profile {
     constructor() {
-        events.addEventListener("signOutClick", () => this.handleSignout());
+        eventBus.addEventListener("signOutClick", () => this.handleSignout());
     }
 
     init() {

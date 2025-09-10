@@ -1,11 +1,11 @@
-import { e as events, r as rsv } from './chunks/rsevents-BE9Wom91.js';
+import { e as eventBus, r as rsv } from './chunks/eventbus-B2NG0GvW.js';
 import { auth } from './rsauth.js';
 import { v as van } from './chunks/van-t8DywzvC.js';
-import './chunks/rsfirebase-B6bae4XU.js';
+import './chunks/rsfirebase-IdUc1I6T.js';
 
 class Profile {
     constructor() {
-        events.addEventListener("signOutClick", () => this.handleSignout());
+        eventBus.addEventListener("signOutClick", () => this.handleSignout());
     }
 
     init() {

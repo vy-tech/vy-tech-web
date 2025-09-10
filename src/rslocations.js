@@ -1,5 +1,5 @@
 import { van, rsv } from "./rsvan.js";
-import { events } from "./rsevents.js";
+import { eventBus } from "./eventbus.js";
 import {
     firestore,
     doc,
@@ -14,7 +14,7 @@ import {
 
 class Locations {
     constructor() {
-        events.addEventListener("addLocationClick", (e) =>
+        eventBus.addEventListener("addLocationClick", (e) =>
             this.handleAddLocation(e)
         );
     }
