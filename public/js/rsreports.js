@@ -34,15 +34,46 @@ class Geometry {
         const overlapRatio = intersectionArea / smallerArea;
         return overlapRatio >= threshold;
     }
+
+    isPointInTriangle(px, py, x1, y1, x2, y2, x3, y3) {
+        const area = (x1, y1, x2, y2, x3, y3) =>
+            0.5 * Math.abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
+
+        const A = area(x1, y1, x2, y2, x3, y3);
+        const A1 = area(px, py, x2, y2, x3, y3);
+        const A2 = area(x1, y1, px, py, x3, y3);
+        const A3 = area(x1, y1, x2, y2, px, py);
+
+        return A === A1 + A2 + A3;
+    }
+
+    findTriangleContainingPoint(x, y, triangles) {
+        for (let i = 0; i < triangles.length; i++) {
+            const triangle = triangles[i];
+            const [x1, y1, x2, y2, x3, y3] = triangle;
+            if (this.isPointInTriangle(x, y, x1, y1, x2, y2, x3, y3)) {
+                return i + 1; // Return 1-based index
+            }
+        }
+        return null; // No triangle found
+    }
 }
 
-const geom = new Geometry();
+const geomUtil = new Geometry();
 
 const EXPIRE_TIME = 5000;
 
 class ActiveBoxManager {
     constructor() {
         this.activeBoxes = [];
+
+        eventBus.addEventListener("scoring.timeUpdate", (e) => {
+            this.expire(e.detail.elapsedMillis);
+        });
+
+        eventBus.addEventListener("scoring.timeSeek", (e) => {
+            this.reset();
+        });
     }
 
     reset() {
@@ -74,7 +105,7 @@ class ActiveBoxManager {
         for (const box of boxes) {
             // Check if the box is already active
             var activeBox = this.activeBoxes.find((activeBox) => {
-                if (geom.boxesAreSame(activeBox, box)) {
+                if (geomUtil.boxesAreSame(activeBox, box)) {
                     return activeBox;
                 }
             });
@@ -2511,12 +2542,25 @@ const progress = new Progress();
 
 class Summarizer {
     constructor() {
+        this.currentCamera = 1;
         this.summaries = [];
 
-        eventBus.addEventListener("summarizer.rebuild", async (e) => {
+        eventBus.addEventListener("ui.requestSummaryRebuild", async (e) => {
             const { hierarchy } = e.detail;
             await this.rebuild(hierarchy);
         });
+
+        eventBus.addEventListener("viz.cameraChanged", (e) => {
+            this.currentCamera = e.detail.camera;
+        });
+    }
+
+    getCurrent() {
+        return this.summaries[this.currentCamera - 1];
+    }
+
+    getAll() {
+        return this.summaries;
     }
 
     async rebuild(hierarchy) {
@@ -2580,6 +2624,7 @@ class Summarizer {
         }
 
         closed.val = true;
+
         return Object.values(scores);
     }
 
@@ -2744,6 +2789,9 @@ class Summarizer {
         }
 
         closed.val = true;
+
+        eventBus.fire("summarizer.ready");
+
         return this.summaries;
     }
 }
@@ -2775,6 +2823,50 @@ class Profiler {
 }
 
 const profiler = new Profiler();
+
+class Time {
+    constructor() {}
+
+    format(seconds, includeSeconds = false) {
+        let hours = Math.floor(seconds / 3600);
+        seconds -= hours * 3600;
+        let minutes = Math.floor(seconds / 60);
+        seconds = Math.floor(seconds - minutes * 60);
+
+        let result =
+            hours.toString().padStart(2, "0") +
+            ":" +
+            minutes.toString().padStart(2, "0");
+
+        if (!includeSeconds) return result;
+
+        return result + ":" + seconds.toString().padStart(2, "0");
+    }
+
+    toSeconds(time, isMMSS = false) {
+        let parts = time.split(":");
+        let seconds = 0;
+        let i = 0;
+
+        if (parts.length == 1) {
+            return parseFloat(parts);
+        } else if (parts.length == 2 && !isMMSS) {
+            i = 1;
+        } else if (parts.length > 3) {
+            throw new Error(`Invalid time ${time}`);
+        }
+
+        while (parts.length) {
+            let part = parts.pop();
+            seconds += parseInt(part) * 60 ** i;
+            i += 1;
+        }
+
+        return seconds;
+    }
+}
+
+const timeUtil = new Time();
 
 //import van from "vanjs-core";
 
@@ -3129,29 +3221,38 @@ class Score {
         this.lastSecond = this.currentSecond;
         this.currentSecond = Math.floor(this.currentTime);
 
+        eventBus.fire("scoring.timeUpdate", {
+            lastTime: this.lastTime,
+            currentTime: this.currentTime,
+            elapsed: this.currentTime - this.lastTime,
+            elapsedMillis: (this.currentTime - this.lastTime) * 1000,
+        });
+
         await this.ensureWindowLoaded();
         this.moveWindow();
         this.updateCurrentFromWindow();
-        //this.expireActiveBoxes();
 
         // TODO Move to event
-        activeBoxManager.expire((this.currentTime - this.lastTime) * 1000);
+        //this.expireActiveBoxes();
+        //activeBoxManager.expire((this.currentTime - this.lastTime) * 1000);
     }
 
     async handleTimeSeek(currentTime) {
         this.resetWindow();
-
-        // TODO Move to event
-        activeBoxManager.reset();
-        //this.resetActiveBoxes();
 
         this.currentTime = null;
         this.currentSecond = null;
         this.currentScore = 0;
         this.currentCores = [0, 0, 0, 0, 0, 0, 0];
 
+        eventBus.fire("scoring.timeSeek", { currentTime: currentTime });
+
         await this.resetLoadSchedule(currentTime + 5);
         await this.handleTimeUpdate(currentTime);
+
+        // TODO Move to event
+        //activeBoxManager.reset();
+        //this.resetActiveBoxes();
     }
 
     boxesAreSame(box1, box2, threshold = 0.4) {
@@ -3404,66 +3505,6 @@ class Score {
         return this.clamp(Math.round(ui), 0, 1000);
     }
 
-    // resetActiveBoxes() {
-    //     /**
-    //      * Resets the active boxes to an empty array.
-    //      */
-    //     this.activeBoxes = [];
-    // }
-
-    // expireActiveBoxes() {
-    //     /**
-    //      * Expires boxes from activeBoxes that have not been updated in 10 seconds.
-    //      */
-    //     for (let i = this.activeBoxes.length - 1; i >= 0; i--) {
-    //         const activeBox = this.activeBoxes[i];
-    //         const dt = Math.floor((this.currentTime - this.lastTime) * 1000);
-    //         activeBox[ActiveBox.EXPIRES] -= dt;
-    //         if (activeBox[ActiveBox.EXPIRES] <= 0) {
-    //             this.activeBoxes.splice(i, 1); // Remove expired box
-    //         }
-    //     }
-    // }
-
-    // updateActiveBoxes(boxes) {
-    //     /**
-    //      * Updates the active boxes based on the current second,
-    //      * adds any non-overlapping boxes to activeBoxes.
-    //      */
-
-    //     for (const box of boxes) {
-    //         // Check if the box is already active
-    //         var activeBox = this.activeBoxes.find((activeBox) => {
-    //             if (this.boxesAreSame(activeBox, box)) {
-    //                 return activeBox;
-    //             }
-    //         });
-
-    //         if (activeBox) {
-    //             activeBox[ActiveBox.X] = box[Box.X];
-    //             activeBox[ActiveBox.Y] = box[Box.Y];
-    //             activeBox[ActiveBox.W] = box[Box.W];
-    //             activeBox[ActiveBox.H] = box[Box.H];
-    //             activeBox[ActiveBox.SCORE] = box[Box.SCORE] / box[Box.COUNT];
-    //             activeBox[ActiveBox.EXPIRES] = Math.floor(
-    //                 this.windowSize * 1000
-    //             ); // Update the expiration time
-    //             activeBox[ActiveBox.INDEX] = box[Box.INDEX];
-    //         } else {
-    //             // If not active, create it and add it to activeBoxes
-    //             // Ensure score is averaged because we're reusing the count
-    //             activeBox = new Int32Array(box);
-    //             activeBox[ActiveBox.SCORE] = box[Box.SCORE] / box[Box.COUNT];
-    //             activeBox[ActiveBox.EXPIRES] = Math.floor(
-    //                 this.windowSize * 1000
-    //             );
-    //             activeBox[ActiveBox.INDEX] = box[Box.INDEX];
-
-    //             this.activeBoxes.push(activeBox);
-    //         }
-    //     }
-    // }
-
     boxAt(x, y) {
         /**
          * Finds the first active box which contains the point (x, y).
@@ -3503,703 +3544,20 @@ class Score {
             hls.loadSource(playlistUrl);
         });
     }
-
-    isSameMoment(s1, s2) {
-        const buffer = 180;
-        return (
-            (s2.startTime >= s1.startTime - buffer &&
-                s2.startTime <= s1.endTime + buffer) ||
-            (s2.endTime >= s1.startTime - buffer &&
-                s2.endTime <= s1.endTime + buffer)
-        );
-    }
-
-    // TODO REFACTOR move to Util
-    formatTime(seconds, includeSeconds = false) {
-        let hours = Math.floor(seconds / 3600);
-        seconds -= hours * 3600;
-        let minutes = Math.floor(seconds / 60);
-        seconds = Math.floor(seconds - minutes * 60);
-
-        let result =
-            hours.toString().padStart(2, "0") +
-            ":" +
-            minutes.toString().padStart(2, "0");
-
-        if (!includeSeconds) return result;
-
-        return result + ":" + seconds.toString().padStart(2, "0");
-    }
-
-    findMoments(summary) {
-        summary = summary || summarizer.summaries[0];
-        let sorted = [...summary];
-        let moments = [];
-
-        // Sort by score and limit to top 100
-        sorted.sort((a, b) => b.score - a.score);
-        sorted.splice(100, sorted.length - 100);
-
-        // Top score is our first moment
-        moments.push(sorted.shift());
-
-        while (moments.length < 10 && sorted.length > 0) {
-            let moment = sorted.shift();
-
-            // Find any same moment and merge them, or add a new one
-            let merge = moments.find((a) => this.isSameMoment(a, moment));
-            if (merge) {
-                merge.startTime = Math.min(moment.startTime, merge.startTime);
-                merge.endTime = Math.max(moment.endTime, merge.endTime);
-            } else {
-                console.log("Adding..", moment);
-                moments.push(moment);
-            }
-        }
-
-        // Sort moments by time and add time label
-        moments.sort((a, b) => a.startTime - b.startTime);
-        moments.forEach((a) => (a.label = this.formatTime(a.startTime)));
-
-        this.moments = moments;
-
-        return moments;
-    }
 }
 
-class Viz {
-    scoreToHue(score) {
-        let hueOffset = (score / 1000.0) * 64;
-        if (hueOffset < 0) hueOffset = Math.max(hueOffset, -64);
-        else hueOffset = Math.min(hueOffset, 64);
-        const hue = 64 + hueOffset;
-        return hue;
-    }
-
-    paintHeatmap(canvas, window, start, end, windowSize) {
-        if (!canvas) {
-            console.error("Canvas element not found");
-            return;
-        }
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-            console.error("Failed to get canvas context");
-            return;
-        }
-
-        // Clear the canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        if (!window[end]) return;
-
-        let endTime = window[end].time;
-
-        for (let i = end; i >= start; i--) {
-            const row = window[i];
-            if (!row) break;
-
-            //if (row.frame != frame) break;
-
-            const ox = row.box.x;
-            const oy = row.box.y;
-            const ow = row.box.w;
-            const oh = row.box.h;
-            const score = row.score;
-            const age = (row.time - endTime) / windowSize;
-
-            // Scale the box coordinates to the canvas size
-            const x = (ox / 3840) * canvas.width;
-            const y = (oy / 2160) * canvas.height;
-            const w = (ow / 3840) * canvas.width;
-            const h = (oh / 2160) * canvas.height;
-
-            // Calculate center and radiuses for the radial gradient
-            const cx = x + w / 2;
-            const cy = y + h / 2;
-            const rw = w * 2; //10.0;
-            const rh = h * 2; //10.0;
-            const rx = cx - rw / 2;
-            const ry = cy - rh / 2;
-            const innerR = 1;
-            const outerR = rh / 2;
-
-            // Create the hue based on the score
-            var hueOffset = (score / 1000.0) * 64;
-            if (hueOffset < 0) hueOffset = Math.max(hueOffset, -64);
-            else hueOffset = Math.min(hueOffset, 64);
-            const hue = 64 + hueOffset;
-            const gradient = ctx.createRadialGradient(
-                cx,
-                cy,
-                innerR,
-                cx,
-                cy,
-                outerR
-            );
-            const alpha = (windowSize - age) * 50;
-
-            gradient.addColorStop(0, `hsl(${hue}, 100%, 50%, ${alpha}%)`);
-            gradient.addColorStop(1, `hsl(${hue}, 100%, 50%, 0%)`);
-            ctx.fillStyle = gradient;
-            ctx.strokeStyle = `hsl(${hue}, 100%, 50%, ${alpha}%)`;
-            ctx.lineWidth = 1;
-            //ctx.fillRect(rx, ry, rw, rh);
-            ctx.strokeRect(rx, ry, rw, rh);
-        }
-    }
-    paintActiveHeatmap(canvas, activeBoxes) {
-        if (!canvas) {
-            console.error("Canvas element not found");
-            return;
-        }
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-            console.error("Failed to get canvas context");
-            return;
-        }
-
-        // Clear the canvas
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        for (const box of activeBoxes) {
-            const ox = box.x;
-            const oy = box.y;
-            const ow = box.w;
-            const oh = box.h;
-            const score = Math.floor(box.score);
-            const expires = box.expires;
-
-            // Scale the box coordinates to the canvas size
-            const x = (ox / 3840) * canvas.width;
-            const y = (oy / 2160) * canvas.height;
-            const w = (ow / 3840) * canvas.width;
-            const h = (oh / 2160) * canvas.height;
-
-            // Calculate center and radiuses for the radial gradient
-            const cx = x + w / 2;
-            const cy = y + h / 2;
-            const rw = w * 5.0;
-            const rh = h * 5.0;
-            const rx = cx - rw / 2;
-            const ry = cy - rh / 2;
-            const innerR = 1;
-            const outerR = rh * 0.25;
-
-            // Create the hue based on the score
-            var hueOffset = (score / 1000.0) * 64;
-            if (hueOffset < 0) hueOffset = Math.max(hueOffset, -64);
-            else hueOffset = Math.min(hueOffset, 64);
-            const hue = 64 + hueOffset;
-            const gradient = ctx.createRadialGradient(
-                cx,
-                cy,
-                innerR,
-                cx,
-                cy,
-                outerR
-            );
-            const alpha = Math.floor((expires / 3000.0) * 80);
-            gradient.addColorStop(0, `hsl(${hue}, 100%, 50%, ${alpha}%)`);
-            gradient.addColorStop(1, `hsl(${hue}, 100%, 50%, 0%)`);
-            ctx.fillStyle = gradient;
-
-            ctx.fillRect(rx, ry, rw, rh);
-        }
-    }
-
-    isPointInTriangle(px, py, x1, y1, x2, y2, x3, y3) {
-        const area = (x1, y1, x2, y2, x3, y3) =>
-            0.5 * Math.abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
-
-        const A = area(x1, y1, x2, y2, x3, y3);
-        const A1 = area(px, py, x2, y2, x3, y3);
-        const A2 = area(x1, y1, px, py, x3, y3);
-        const A3 = area(x1, y1, x2, y2, px, py);
-
-        return A === A1 + A2 + A3;
-    }
-
-    findTriangleContainingPoint(x, y, triangles) {
-        for (let i = 0; i < triangles.length; i++) {
-            const triangle = triangles[i];
-            const [x1, y1, x2, y2, x3, y3] = triangle;
-            if (this.isPointInTriangle(x, y, x1, y1, x2, y2, x3, y3)) {
-                return i + 1; // Return 1-based index
-            }
-        }
-        return null; // No triangle found
-    }
-
-    initCameraMap(cameraMapCanvas) {
-        this.cameraMapActive = 1;
-        this.cameraMapHover = null;
-        this.cameraMapCanvas = cameraMapCanvas;
-
-        this.cameraMapTriangles = [
-            [390, 84, 499, 7, 499, 125],
-            [-20, -40, 107, 80, 0, 103],
-            [303, 180, 376, 249, 279, 249],
-            [195, 180, 172, 249, 250, 249],
-            [479, 145, 407, 233, 360, 180],
-        ];
-
-        this.cameraMapLabels = [
-            [408, 87, 1],
-            [83, 79, 2],
-            [301, 200, 3],
-            [192, 202, 4],
-            [452, 166, 5],
-        ];
-
-        this.cameraMapSummaryLabels = [
-            [408, 87, 1],
-            [83, 79, 2],
-            [301, 200, 3],
-            [192, 202, 4],
-            [452, 166, 5],
-        ];
-
-        // Load /img/raimondi-seat-map.png
-        this.cameraMapImg = new Image();
-        this.cameraMapImg.src = "/img/raimondi-seat-map.png";
-        this.cameraMapImg.onload = () => {
-            this.paintCameraMap();
-        };
-        this.cameraMapImg.onerror = () => {
-            console.error("Failed to load the seat map image.");
-        };
-
-        this.cameraMapCanvas.addEventListener("mousemove", (event) => {
-            const rect = this.cameraMapCanvas.getBoundingClientRect();
-            // Calculate the mouse position relative to the canvas
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-
-            // Find the triangle that contains the mouse position
-            const point = this.findTriangleContainingPoint(
-                x,
-                y,
-                this.cameraMapTriangles
-            );
-            this.cameraMapHover = point;
-            this.paintCameraMap();
-
-            // Set mouse pointer if hovering over a triangle
-            this.cameraMapCanvas.style.cursor = point ? "pointer" : "default";
-        });
-
-        this.cameraMapCanvas.addEventListener("mouseout", () => {
-            this.cameraMapHover = null;
-            this.paintCameraMap();
-        });
-
-        this.cameraMapCanvas.addEventListener("click", (event) => {
-            const rect = this.cameraMapCanvas.getBoundingClientRect();
-            // Calculate the mouse position relative to the canvas
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-
-            // Find the triangle that contains the mouse position
-            const point = this.findTriangleContainingPoint(
-                x,
-                y,
-                this.cameraMapTriangles
-            );
-            if (point) {
-                this.cameraMapActive = point;
-                this.paintCameraMap();
-                eventBus.dispatchEvent(
-                    new CustomEvent("cameraChangeRequest", {
-                        detail: { camera: point },
-                    })
-                );
-            }
-        });
-    }
-
-    initEkg(ekg, label) {
-        this.ekgLabel = label;
-        this.smoothie = new SmoothieChart({
-            responsive: true,
-            interpolation: "bezier",
-            minValue: -1e3,
-            maxValue: 1000,
-            grid: {
-                strokeStyle: "rgb(200, 200, 200)",
-                fillStyle: "rgb(255,255,255)",
-                lineWidth: 1,
-                millisPerLine: 1000,
-                verticalSections: 4,
-            },
-            labels: {
-                fillStyle: "rgb(0, 0, 0)",
-                strokeStyle: "rgb(255, 255, 0)",
-                fontFamily: "Arial",
-                fontSize: 16,
-                precision: 0,
-                showIntermediateLabels: true,
-            },
-        });
-
-        this.smoothie.streamTo(ekg, 1000);
-        window.setTimeout(() => this.smoothie.stop(), 10);
-        this.timeSeries = new TimeSeries();
-
-        this.smoothie.addTimeSeries(this.timeSeries, {
-            strokeStyle: "rgb(0, 0, 255)",
-            fillStyle: "rgba(0,0,255, 0.4)",
-            lineWidth: 3,
-        });
-
-        // this.smoothie.addTimeSeries(this.posTimeSeries, {
-        //     strokeStyle: "rgb(0, 255, 0, 0.4)",
-        //     fillStyle: "rgba(0, 255, 0, 0.0)",
-        //     lineWidth: 3,
-        // });
-        // this.smoothie.addTimeSeries(this.negTimeSeries, {
-        //     strokeStyle: "rgb(255, 0, 0, 0.4)",
-        //     fillStyle: "rgba(255, 0, 0, 0.0)",
-        //     lineWidth: 3,
-        // });
-    }
-
-    paintCameraMap(summaries, second) {
-        // Save summaries and second for mousemove events.  Please refactor.
-        summaries = this.pcmSummaries = summaries || this.pcmSummaries;
-        second = this.pcmSecond = second || this.pcmSecond;
-
-        var ctx = this.cameraMapCanvas.getContext("2d");
-        ctx.drawImage(
-            this.cameraMapImg,
-            0,
-            0,
-            this.cameraMapCanvas.width,
-            this.cameraMapCanvas.height
-        );
-
-        ctx.fillStyle = "rgba(200,200,200,0.5)";
-        ctx.fillRect(
-            0,
-            0,
-            this.cameraMapCanvas.width,
-            this.cameraMapCanvas.height
-        );
-
-        ctx.lineWidth = 2;
-        for (let i = 0; i < this.cameraMapTriangles.length; i++) {
-            let score =
-                summaries &&
-                summaries[i] &&
-                summaries[i][second] &&
-                summaries[i][second].score;
-
-            if (this.cameraMapHover === i + 1) {
-                ctx.strokeStyle = "#6d0098ff";
-                ctx.fillStyle = "#6d00987F";
-            } else if (this.cameraMapActive === i + 1) {
-                ctx.strokeStyle = "#3fa7d7ff";
-                ctx.fillStyle = "#3fa7d77f";
-            } else if (score) {
-                const hue = this.scoreToHue(score);
-                ctx.strokeStyle = `hsl(${hue}, 100%, 50%, 1)`;
-                ctx.fillStyle = `hsl(${hue}, 100%, 50%, 0.5)`;
-            } else {
-                ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
-                ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-            }
-            const triangle = this.cameraMapTriangles[i];
-            const [x1, y1, x2, y2, x3, y3] = triangle;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.lineTo(x3, y3);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-
-            const label = this.cameraMapLabels[i];
-            const [lx, ly, ltext] = label;
-            ctx.font = "16px Arial";
-            ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-            ctx.fillText(ltext, lx, ly);
-        }
-    }
-
-    paintEkg(score) {
-        this.timeSeries.append(Date.now(), score);
-        this.ekgLabel.innerText = score.toFixed(0);
-    }
-
-    initSpider(spider) {
-        var ctx = spider.getContext("2d");
-
-        var labels = [
-            "Anger", //0
-            "Disgust", //1
-            "Fear", //2
-            "Happiness", //3
-            "Sadness", //4
-            "Surprise", //5
-            "Neutral", //6
-        ];
-
-        // GROSS TODO FIXME
-        let d = labels.splice(3, 1);
-        labels.splice(6, 0, ...d);
-        d = labels.splice(4, 1);
-        labels.splice(0, 0, ...d);
-        d = labels.splice(4, 1);
-        labels.splice(1, 0, ...d);
-        d = labels.splice(5, 1);
-        labels.splice(4, 0, ...d);
-
-        this.spiderDataMap = {};
-        for (var i = 0; i < labels.length; i++) {
-            this.spiderDataMap[labels[i]] = i;
-        }
-
-        if (this.spiderChart) this.spiderChart.destroy();
-
-        this.spiderChart = new Chart(ctx, {
-            type: "radar",
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: "T=0",
-                        data: labels.map(() => 0),
-                        fill: true,
-                        backgroundColor: "rgba(0, 0, 255, 0.2)",
-                        borderColor: "rgb(0, 0, 255)",
-                        pointBackgroundColor: "rgb(0, 0, 255)",
-                        pointBorderColor: "#fff",
-                        pointHoverBackgroundColor: "#fff",
-                        pointHoverBorderColor: "rgb(0, 0, 255)",
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: false,
-                    },
-                },
-                scales: {
-                    r: {
-                        beginAtZero: true,
-                        suggestedMin: 0,
-                        suggestedMax: 1000,
-                        pointLabels: {
-                            font: {
-                                size: 16,
-                                family: "Arial",
-                            },
-                        },
-                    },
-                },
-            },
-        });
-        this.spiderChart.update();
-    }
-
-    paintSpider(cores) {
-        if (!this.spiderChart) return;
-
-        let data = cores.map((c) => Math.min(1000, Math.abs(c)));
-
-        let d = data.splice(3, 1);
-        data.splice(6, 0, ...d);
-        d = data.splice(4, 1);
-        data.splice(0, 0, ...d);
-        d = data.splice(4, 1);
-        data.splice(1, 0, ...d);
-        d = data.splice(5, 1);
-        data.splice(4, 0, ...d);
-
-        // Update the spider chart data
-        this.spiderChart.data.datasets[0].data = data;
-        this.spiderChart.update();
-    }
-
-    initPpl(canvas) {
-        const ctx = canvas.getContext("2d");
-
-        const labels = [];
-        const borderColors = [];
-
-        for (let i = 0; i < 100; i++) {
-            labels.push(`${i + 1}%`);
-            borderColors.push("#3fa7d7");
-        }
-
-        if (this.pplChart) this.pplChart.destroy();
-
-        this.pplChart = new Chart(ctx, {
-            type: "line",
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: "People",
-                        data: labels.map(() => 0),
-                        fill: false,
-                        borderColor: borderColors,
-                        borderWidth: 1,
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: false,
-                    },
-                },
-            },
-        });
-        this.pplChart.update();
-
-        canvas.addEventListener("click", (evt) => {
-            const points = this.pplChart.getElementsAtEventForMode(
-                evt,
-                "nearest",
-                { intersect: true },
-                true
-            );
-
-            if (points.length) {
-                const firstPoint = points[0];
-                const label = this.pplChart.data.labels[firstPoint.index];
-                // const value =
-                //     this.pplChart.data.datasets[firstPoint.datasetIndex].data[
-                //         firstPoint.index
-                //     ];
-                eventBus.dispatchEvent(
-                    new CustomEvent("playerSeekRequest", {
-                        detail: { time: label },
-                    })
-                );
-            }
-        });
-    }
-
-    initDemo(canvas, title, labels, data) {
-        const ctx = canvas.getContext("2d");
-
-        var demoChart = new Chart(ctx, {
-            type: "bar",
-            data: {
-                labels: [title],
-                datasets: [
-                    {
-                        label: labels[0],
-                        data: [data[0]],
-                        fill: true,
-                        borderWidth: 1,
-                        borderColor: ["#d94d507f"],
-                        backgroundColor: ["#d94d50"],
-                    },
-
-                    {
-                        label: labels[1],
-                        data: [data[1]],
-                        fill: true,
-                        borderWidth: 1,
-                        borderColor: ["#3fa7d77f"],
-                        backgroundColor: ["#3fa7d7"],
-                    },
-                ],
-            },
-            options: {
-                indexAxis: "y",
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: false,
-                    },
-                },
-                scale: {
-                    x: {
-                        stacked: true,
-                    },
-                    y: {
-                        stacked: true,
-                    },
-                },
-            },
-        });
-        demoChart.update();
-    }
-
-    formatTime(seconds) {
-        let hours = Math.floor(seconds / 3600);
-        seconds -= hours * 3600;
-        let minutes = Math.floor(seconds / 60);
-        seconds = Math.floor(seconds - minutes * 60);
-
-        return (
-            hours.toString().padStart(2, "0") +
-            ":" +
-            minutes.toString().padStart(2, "0")
-        );
-    }
-
-    paintPpl(summary) {
-        if (!this.pplChart) return;
-
-        // Only paint it when the summary changes..
-        if (this.pplChartSummary === summary) return;
-        this.pplChartSummary = summary;
-
-        let data = [];
-        let labels = [];
-
-        // for (let i = 0; i < 100; i++) {
-        //     let idx = Math.floor(i * (summary.length / 100));
-        //     labels.push(this.formatTime(summary[idx].startTime));
-        //     data.push(summary[idx].people);
-        // }
-
-        let step = Math.floor(summary.length / 100);
-
-        for (let i = 0; i < 100; i++) {
-            let idx = i * step;
-            let people = 0;
-            let time = 0;
-
-            for (let j = 0; j < step; j++) {
-                people += summary[idx + j].people;
-                time += parseInt(summary[idx + j].startTime);
-            }
-
-            data.push(people / step);
-            labels.push(this.formatTime(time / step));
-        }
-
-        // Update the spider chart data
-        this.pplChart.data.labels = labels;
-        this.pplChart.data.datasets[0].data = data;
-        this.pplChart.update();
-    }
-
-    reset() {
-        this.timeSeries.clear();
-    }
-
-    play() {
-        this.smoothie.start();
-    }
-
-    pause() {
-        this.smoothie.stop();
-    }
-}
+const scoring = new Score();
 
 class Events {
-    constructor() {}
+    constructor() {
+        this.current = null;
+    }
 
-    async getEventByHierarchy(hierarchy) {
+    get() {
+        return this.current;
+    }
+
+    async loadFromFirestore(hierarchy) {
         const firestore = getFirestore(app);
         const eventsRef = collection(firestore, "events");
         const q = query(
@@ -4210,12 +3568,14 @@ class Events {
         const docs = await getDocs(q);
 
         if (docs.empty) {
+            this.current = null;
             return null;
         } else {
             let eventData = null;
             docs.forEach((doc) => {
                 eventData = { id: doc.id, ...doc.data() };
             });
+            this.current = eventData;
             return eventData;
         }
     }
@@ -4279,7 +3639,9 @@ class Events {
 
             sel.addEventListener("change", (e) => {
                 eventBus.dispatchEvent(
-                    new CustomEvent("eventSelected", { detail: e.target.value })
+                    new CustomEvent("ui.requestEvent", {
+                        detail: e.target.value,
+                    })
                 );
             });
 
@@ -4292,6 +3654,923 @@ class Events {
 
 const events = new Events();
 
+class Heatmap {
+    constructor() {
+        this.canvas = null;
+
+        eventBus.addEventListener("viz.paint", (e) => {
+            this.paint();
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+
+        let merged = {
+            id: "report-viz-heatmap",
+            width: 1280,
+            height: 720,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.canvas.addEventListener("click", (e) => {
+            eventBus.fire("heatmap.click", {});
+        });
+        this.canvas.addEventListener("mousemove", (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            // Calculate the mouse position relative to the canvas
+            // and scale it to the original video resolution (3840x2160)
+            const x = Math.floor(((e.clientX - rect.left) / rect.width) * 3840);
+            const y = Math.floor(((e.clientY - rect.top) / rect.height) * 2160);
+
+            eventBus.fire("heatmap.mousemove", { x: x, y: y });
+        });
+
+        return this.canvas;
+    }
+
+    paint() {
+        if (!this.canvas) {
+            console.error("Canvas element not found");
+            return;
+        }
+        const ctx = this.canvas.getContext("2d");
+        if (!ctx) {
+            console.error("Failed to get canvas context");
+            return;
+        }
+
+        // Clear the canvas
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        const activeBoxes = activeBoxManager.get();
+        for (const box of activeBoxes) {
+            const ox = box.x;
+            const oy = box.y;
+            const ow = box.w;
+            const oh = box.h;
+            const score = Math.floor(box.score);
+            const expires = box.expires;
+
+            // Scale the box coordinates to the canvas size
+            const x = (ox / 3840) * this.canvas.width;
+            const y = (oy / 2160) * this.canvas.height;
+            const w = (ow / 3840) * this.canvas.width;
+            const h = (oh / 2160) * this.canvas.height;
+
+            // Calculate center and radiuses for the radial gradient
+            const cx = x + w / 2;
+            const cy = y + h / 2;
+            const rw = w * 5.0;
+            const rh = h * 5.0;
+            const rx = cx - rw / 2;
+            const ry = cy - rh / 2;
+            const innerR = 1;
+            const outerR = rh * 0.25;
+
+            // Create the hue based on the score
+            var hueOffset = (score / 1000.0) * 64;
+            if (hueOffset < 0) hueOffset = Math.max(hueOffset, -64);
+            else hueOffset = Math.min(hueOffset, 64);
+            const hue = 64 + hueOffset;
+            const gradient = ctx.createRadialGradient(
+                cx,
+                cy,
+                innerR,
+                cx,
+                cy,
+                outerR
+            );
+            const alpha = Math.floor((expires / 3000.0) * 80);
+            gradient.addColorStop(0, `hsl(${hue}, 100%, 50%, ${alpha}%)`);
+            gradient.addColorStop(1, `hsl(${hue}, 100%, 50%, 0%)`);
+            ctx.fillStyle = gradient;
+
+            ctx.fillRect(rx, ry, rw, rh);
+        }
+    }
+}
+
+const heatmap = new Heatmap();
+
+class CameraMap {
+    constructor() {
+        this.canvas = null;
+        this.second = null;
+
+        eventBus.addEventListener("viz.paint", (e) => {
+            this.second = Math.floor(e.detail.currentTime);
+            this.paint();
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+
+        let merged = {
+            id: "report-viz-cameramap",
+            class: "w-full h-full",
+            width: 500,
+            height: 250,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.init();
+
+        return this.canvas;
+    }
+
+    scoreToHue(score) {
+        let hueOffset = (score / 1000.0) * 64;
+        if (hueOffset < 0) hueOffset = Math.max(hueOffset, -64);
+        else hueOffset = Math.min(hueOffset, 64);
+        const hue = 64 + hueOffset;
+        return hue;
+    }
+
+    init() {
+        this.active = 1;
+        this.hover = null;
+
+        this.triangles = [
+            [390, 84, 499, 7, 499, 125],
+            [-20, -40, 107, 80, 0, 103],
+            [303, 180, 376, 249, 279, 249],
+            [195, 180, 172, 249, 250, 249],
+            [479, 145, 407, 233, 360, 180],
+        ];
+
+        this.labels = [
+            [408, 87, 1],
+            [83, 79, 2],
+            [301, 200, 3],
+            [192, 202, 4],
+            [452, 166, 5],
+        ];
+
+        this.summaryLabels = [
+            [408, 87, 1],
+            [83, 79, 2],
+            [301, 200, 3],
+            [192, 202, 4],
+            [452, 166, 5],
+        ];
+
+        // Load /img/raimondi-seat-map.png
+        this.img = new Image();
+        this.img.src = "/img/raimondi-seat-map.png";
+        this.img.onload = () => {
+            this.paint();
+        };
+        this.img.onerror = () => {
+            console.error("Failed to load the seat map image.");
+        };
+
+        this.canvas.addEventListener("mousemove", (event) => {
+            const rect = this.canvas.getBoundingClientRect();
+            // Calculate the mouse position relative to the canvas
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            // Find the triangle that contains the mouse position
+            const point = geomUtil.findTriangleContainingPoint(
+                x,
+                y,
+                this.triangles
+            );
+            this.hover = point;
+            this.paint();
+
+            // Set mouse pointer if hovering over a triangle
+            this.canvas.style.cursor = point ? "pointer" : "default";
+        });
+
+        this.canvas.addEventListener("mouseout", () => {
+            this.hover = null;
+            this.paint();
+        });
+
+        this.canvas.addEventListener("click", (event) => {
+            const rect = this.canvas.getBoundingClientRect();
+            // Calculate the mouse position relative to the canvas
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+
+            // Find the triangle that contains the mouse position
+            const point = geomUtil.findTriangleContainingPoint(
+                x,
+                y,
+                this.triangles
+            );
+            if (point) {
+                this.active = point;
+                this.paint();
+                eventBus.fire("ui.requestCamera", { camera: point });
+            }
+        });
+    }
+
+    paint() {
+        let second = this.second;
+        let summaries = summarizer.getAll();
+
+        var ctx = this.canvas.getContext("2d");
+        ctx.drawImage(this.img, 0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.fillStyle = "rgba(200,200,200,0.5)";
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.lineWidth = 2;
+        for (let i = 0; i < this.triangles.length; i++) {
+            let score =
+                summaries &&
+                summaries[i] &&
+                summaries[i][second] &&
+                summaries[i][second].score;
+
+            if (this.hover === i + 1) {
+                ctx.strokeStyle = "#6d0098ff";
+                ctx.fillStyle = "#6d00987F";
+            } else if (this.active === i + 1) {
+                ctx.strokeStyle = "#3fa7d7ff";
+                ctx.fillStyle = "#3fa7d77f";
+            } else if (score) {
+                const hue = this.scoreToHue(score);
+                ctx.strokeStyle = `hsl(${hue}, 100%, 50%, 1)`;
+                ctx.fillStyle = `hsl(${hue}, 100%, 50%, 0.5)`;
+            } else {
+                ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
+                ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+            }
+            const triangle = this.triangles[i];
+            const [x1, y1, x2, y2, x3, y3] = triangle;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(x3, y3);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            const label = this.labels[i];
+            const [lx, ly, ltext] = label;
+            ctx.font = "16px Arial";
+            ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+            ctx.fillText(ltext, lx, ly);
+        }
+    }
+}
+
+const cameramap = new CameraMap();
+
+class Ekg {
+    constructor() {
+        this.canvas = null;
+        this.container = null;
+        this.score = null;
+
+        eventBus.addEventListener("viz.paint", (e) => {
+            this.paint();
+        });
+
+        eventBus.addEventListener("viz.pause", () => {
+            this.smoothie.stop();
+        });
+
+        eventBus.addEventListener("viz.play", () => {
+            this.smoothie.start();
+        });
+
+        eventBus.addEventListener("viz.timeSeek", () => {
+            this.timeSeries.clear();
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas, div } = van.tags;
+
+        let merged = { ...options };
+
+        this.canvas = canvas({
+            id: "report-viz-ekg",
+            class: "w-full h-full",
+            width: 500,
+            height: 250,
+        });
+        this.label = div(
+            {
+                id: "report-viz-ekg-score",
+                class: "absolute top-0 left-0 p-1 text-xl text-black",
+            },
+            "0"
+        );
+        this.container = div(merged, this.canvas, this.label);
+
+        this.init();
+
+        return this.container;
+    }
+
+    init() {
+        this.smoothie = new SmoothieChart({
+            responsive: true,
+            interpolation: "bezier",
+            minValue: -1e3,
+            maxValue: 1000,
+            grid: {
+                strokeStyle: "rgb(200, 200, 200)",
+                fillStyle: "rgb(255,255,255)",
+                lineWidth: 1,
+                millisPerLine: 1000,
+                verticalSections: 4,
+            },
+            labels: {
+                fillStyle: "rgb(0, 0, 0)",
+                strokeStyle: "rgb(255, 255, 0)",
+                fontFamily: "Arial",
+                fontSize: 16,
+                precision: 0,
+                showIntermediateLabels: true,
+            },
+        });
+
+        this.smoothie.streamTo(this.canvas, 1000);
+        window.setTimeout(() => this.smoothie.stop(), 10);
+        this.timeSeries = new TimeSeries();
+
+        this.smoothie.addTimeSeries(this.timeSeries, {
+            strokeStyle: "rgb(0, 0, 255)",
+            fillStyle: "rgba(0,0,255, 0.4)",
+            lineWidth: 3,
+        });
+    }
+
+    paint() {
+        let score = scoring.currentScore;
+        this.timeSeries.append(Date.now(), score);
+        this.label.innerText = score.toFixed(0);
+    }
+}
+
+const ekg = new Ekg();
+
+class Spider {
+    constructor() {
+        this.canvas = null;
+
+        eventBus.addEventListener("viz.paint", (e) => {
+            this.paint();
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+
+        let merged = {
+            id: "report-viz-spider",
+            class: "w-full h-full",
+            width: 500,
+            height: 500,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.init();
+
+        return this.canvas;
+    }
+
+    init() {
+        var ctx = this.canvas.getContext("2d");
+
+        var labels = [
+            "Anger", //0
+            "Disgust", //1
+            "Fear", //2
+            "Happiness", //3
+            "Sadness", //4
+            "Surprise", //5
+            "Neutral", //6
+        ];
+
+        // GROSS TODO FIXME (this is a hack to reorder the labels)
+        let d = labels.splice(3, 1);
+        labels.splice(6, 0, ...d);
+        d = labels.splice(4, 1);
+        labels.splice(0, 0, ...d);
+        d = labels.splice(4, 1);
+        labels.splice(1, 0, ...d);
+        d = labels.splice(5, 1);
+        labels.splice(4, 0, ...d);
+
+        this.spiderDataMap = {};
+        for (var i = 0; i < labels.length; i++) {
+            this.spiderDataMap[labels[i]] = i;
+        }
+
+        if (this.spiderChart) this.spiderChart.destroy();
+
+        this.spiderChart = new Chart(ctx, {
+            type: "radar",
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "T=0",
+                        data: labels.map(() => 0),
+                        fill: true,
+                        backgroundColor: "rgba(0, 0, 255, 0.2)",
+                        borderColor: "rgb(0, 0, 255)",
+                        pointBackgroundColor: "rgb(0, 0, 255)",
+                        pointBorderColor: "#fff",
+                        pointHoverBackgroundColor: "#fff",
+                        pointHoverBorderColor: "rgb(0, 0, 255)",
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false,
+                    },
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        suggestedMin: 0,
+                        suggestedMax: 1000,
+                        pointLabels: {
+                            font: {
+                                size: 16,
+                                family: "Arial",
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        this.spiderChart.update();
+    }
+
+    paint() {
+        if (!this.spiderChart) return;
+        let cores = scoring.currentCores;
+        let data = cores.map((c) => Math.min(1000, Math.abs(c)));
+
+        let d = data.splice(3, 1);
+        data.splice(6, 0, ...d);
+        d = data.splice(4, 1);
+        data.splice(0, 0, ...d);
+        d = data.splice(4, 1);
+        data.splice(1, 0, ...d);
+        d = data.splice(5, 1);
+        data.splice(4, 0, ...d);
+
+        // Update the spider chart data
+        this.spiderChart.data.datasets[0].data = data;
+        this.spiderChart.update();
+    }
+}
+
+const spider = new Spider();
+
+class People {
+    constructor() {
+        this.canvas = null;
+        this.isStale = true;
+
+        eventBus.addEventListener("viz.paint", (e) => {
+            if (this.isStale) this.paint();
+            this.isStale = false;
+        });
+
+        eventBus.addEventListener("viz.cameraChanged", (e) => {
+            this.isStale = true;
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+
+        let merged = {
+            id: "report-viz-ppl",
+            class: "w-full h-auto aspect-[calc(16/4.5)] mt-2",
+            width: 1280,
+            height: 360,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.init();
+
+        return this.canvas;
+    }
+
+    init() {
+        const ctx = this.canvas.getContext("2d");
+
+        const labels = [];
+        const borderColors = [];
+
+        for (let i = 0; i < 100; i++) {
+            labels.push(`${i + 1}%`);
+            borderColors.push("#3fa7d7");
+        }
+
+        if (this.chart) this.chart.destroy();
+
+        this.chart = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "People",
+                        data: labels.map(() => 0),
+                        fill: false,
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false,
+                    },
+                },
+            },
+        });
+        this.chart.update();
+
+        this.canvas.addEventListener("click", (evt) => {
+            const points = this.chart.getElementsAtEventForMode(
+                evt,
+                "nearest",
+                { intersect: true },
+                true
+            );
+
+            if (points.length) {
+                const firstPoint = points[0];
+                const label = this.chart.data.labels[firstPoint.index];
+                // const value =
+                //     this.pplChart.data.datasets[firstPoint.datasetIndex].data[
+                //         firstPoint.index
+                //     ];
+                eventBus.fire("ui.requestTimeSeek", { time: label });
+            }
+        });
+    }
+
+    paint() {
+        let summary = summarizer.getCurrent();
+        if (!this.chart) return;
+
+        // // Only paint it when the summary changes..
+        // if (this.lastSummary === summary) return;
+        // this.lastSummary = summary;
+
+        let data = [];
+        let labels = [];
+
+        // for (let i = 0; i < 100; i++) {
+        //     let idx = Math.floor(i * (summary.length / 100));
+        //     labels.push(this.formatTime(summary[idx].startTime));
+        //     data.push(summary[idx].people);
+        // }
+
+        let step = Math.floor(summary.length / 100);
+
+        for (let i = 0; i < 100; i++) {
+            let idx = i * step;
+            let people = 0;
+            let elapsedTime = 0;
+
+            for (let j = 0; j < step; j++) {
+                people += summary[idx + j].people;
+                elapsedTime += parseInt(summary[idx + j].startTime);
+            }
+
+            data.push(people / step);
+            labels.push(timeUtil.format(elapsedTime / step));
+        }
+
+        // Update the spider chart data
+        this.chart.data.labels = labels;
+        this.chart.data.datasets[0].data = data;
+        this.chart.update();
+    }
+}
+
+const people = new People();
+
+class Demographics {
+    constructor(title, labels, data) {
+        this.canvas = null;
+        this.title = title;
+        this.labels = labels;
+        this.data = data;
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+        let merged = {
+            id: "report-viz-demo",
+            width: 448,
+            height: 126,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.init();
+
+        return this.canvas;
+    }
+
+    init() {
+        const ctx = this.canvas.getContext("2d");
+
+        var demoChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: [this.title],
+                datasets: [
+                    {
+                        label: this.labels[0],
+                        data: [this.data[0]],
+                        fill: true,
+                        borderWidth: 1,
+                        borderColor: ["#d94d507f"],
+                        backgroundColor: ["#d94d50"],
+                    },
+
+                    {
+                        label: this.labels[1],
+                        data: [this.data[1]],
+                        fill: true,
+                        borderWidth: 1,
+                        borderColor: ["#3fa7d77f"],
+                        backgroundColor: ["#3fa7d7"],
+                    },
+                ],
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false,
+                    },
+                },
+                scale: {
+                    x: {
+                        stacked: true,
+                    },
+                    y: {
+                        stacked: true,
+                    },
+                },
+            },
+        });
+        demoChart.update();
+    }
+}
+
+const genderDemo = new Demographics("Gender", ["male", "female"], [60, 40]);
+const ageDemo = new Demographics("Age", ["adult", "child"], [80, 20]);
+
+class MomentFinder {
+    constructor() {
+        this.moments = null;
+
+        eventBus.addEventListener("summarizer.ready", () => {
+            this.find();
+        });
+
+        eventBus.addEventListener("viz.cameraChanged", () => {
+            this.find();
+        });
+    }
+
+    get() {
+        return this.moments;
+    }
+
+    isSame(s1, s2) {
+        const buffer = 180;
+        return (
+            (s2.startTime >= s1.startTime - buffer &&
+                s2.startTime <= s1.endTime + buffer) ||
+            (s2.endTime >= s1.startTime - buffer &&
+                s2.endTime <= s1.endTime + buffer)
+        );
+    }
+
+    find() {
+        let summary = summarizer.getCurrent();
+        let sorted = [...summary];
+        let moments = [];
+
+        // Sort by score and limit to top 100
+        sorted.sort((a, b) => b.score - a.score);
+        sorted.splice(100, sorted.length - 100);
+
+        // Top score is our first moment
+        moments.push(sorted.shift());
+
+        while (moments.length < 10 && sorted.length > 0) {
+            let moment = sorted.shift();
+
+            // Find any same moment and merge them, or add a new one
+            let merge = moments.find((a) => this.isSame(a, moment));
+            if (merge) {
+                merge.startTime = Math.min(moment.startTime, merge.startTime);
+                merge.endTime = Math.max(moment.endTime, merge.endTime);
+            } else {
+                console.log("Adding..", moment);
+                moments.push(moment);
+            }
+        }
+
+        // Sort moments by time and add time label
+        moments.sort((a, b) => a.startTime - b.startTime);
+        moments.forEach((a) => (a.label = timeUtil.format(a.startTime)));
+
+        this.moments = moments;
+
+        eventBus.fire("momentFinder.changed");
+
+        return moments;
+    }
+}
+
+const momentFinder = new MomentFinder();
+
+class MomentList {
+    constructor() {
+        this.count = 10;
+        this.container = null;
+
+        eventBus.addEventListener("momentFinder.changed", () => {
+            this.update();
+        });
+    }
+
+    createElement(options = {}) {
+        const { div } = van.tags;
+
+        let merged = { ...options };
+        this.container = div(merged);
+
+        for (let i = 0; i < this.count; i++) {
+            let moment = div(
+                {
+                    id: `report-moment-${i + 1}`,
+                    class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
+                    onclick: () => {
+                        this.seekTo(i + 1);
+                    },
+                },
+                div({ class: "text-2xl mb-1" }, "▶"),
+                div({ class: "text-sm" }, "0")
+            );
+            van.add(this.container, moment);
+        }
+
+        return this.container;
+    }
+
+    update() {
+        let moments = momentFinder.get();
+
+        for (let i = 0; i < this.count; i++) {
+            const moment = moments[i];
+            const momentDiv = document.getElementById(`report-moment-${i + 1}`);
+
+            if (moment) {
+                momentDiv.querySelector(
+                    "div.text-sm"
+                ).textContent = `${moment.label}`;
+                momentDiv.style.display = "block";
+            } else {
+                momentDiv.style.display = "none";
+            }
+        }
+    }
+
+    seekTo(number) {
+        let moments = momentFinder.get();
+        const moment = moments[number - 1];
+        if (moment) {
+            eventBus.fire("ui.requestTimeSeek", {
+                seconds: moment.startTime - 15,
+            });
+        }
+    }
+}
+
+const momentlist = new MomentList();
+
+class LinkedPlayer {
+    constructor() {
+        this.container = null;
+
+        eventBus.addEventListener("viz.play", () => {
+            if (this.embedPlayer) {
+                console.log(this.embedPlayer);
+                this.embedPlayer.playVideo();
+            }
+        });
+
+        eventBus.addEventListener("viz.pause", () => {
+            if (this.embedPlayer) {
+                this.embedPlayer.pauseVideo();
+            }
+        });
+
+        eventBus.addEventListener("viz.paint", (e) => {
+            this.sync(e.detail.currentTime);
+        });
+    }
+
+    createElement(options = {}) {
+        const { div } = van.tags;
+
+        let merged = { ...options };
+
+        this.container = div(merged);
+
+        return this.container;
+    }
+
+    init() {
+        const event = events.get();
+        const embedVideo = event.embed;
+
+        if (!embedVideo) {
+            console.error("No embed available");
+            return;
+        }
+
+        this.embedVideoId = embedVideo.id;
+        this.embedOffset = embedVideo.offset;
+
+        const videoId = this.embedVideoId;
+        const origin = `https://${window.location.host}`;
+        this.container.innerHTML =
+            '<iframe id="report-embed-player" width="500" height="281" ' +
+            `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${origin}"` +
+            ' title="YouTube video player" frameborder="0" allow="accelerometer; ' +
+            "autoplay; clipboard-write; encrypted-media; gyroscope; " +
+            'picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" ' +
+            "allowfullscreen></iframe>";
+        this.embedPlayer = new YT.Player("report-embed-player");
+    }
+
+    sync(currentTime) {
+        if (this.embedPlayer) {
+            let embedTime = this.embedPlayer.getCurrentTime();
+            let embedState = this.embedPlayer.getPlayerState();
+            let duration = this.embedPlayer.getDuration();
+            let targetTime = currentTime + this.embedOffset;
+
+            if (targetTime < 0 || targetTime > duration) {
+                if (embedState == 1) {
+                    console.log(
+                        `Target time is ${targetTime}, pausing embed..`
+                    );
+                    this.embedPlayer.pauseVideo();
+                    this.embedPlayer.mute();
+                }
+            } else {
+                if (Math.abs(targetTime - embedTime) > 1) {
+                    console.log(`Seeking embed to ${targetTime}..`);
+                    this.embedPlayer.seekTo(targetTime, true);
+                }
+                if (embedState != 1) {
+                    console.log(`Playing embedded video..`);
+                    this.embedPlayer.playVideo();
+                }
+                if (this.embedPlayer.isMuted()) {
+                    this.embedPlayer.unMute();
+                }
+            }
+        }
+    }
+}
+
+const linkedPlayer = new LinkedPlayer();
+
 class Reports {
     constructor() {
         this.hierarchy = this.getHierarchyFromPath() || "raimondi-20250711-01";
@@ -4300,15 +4579,11 @@ class Reports {
         this.profileId = "BkBUQq4GiSfuwHN7YrK3";
         this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
 
-        this.score = new Score();
-        this.viz = new Viz();
+        this.score = scoring;
 
         this.transcript = [];
         this.tsIndex = 0;
 
-        this.embedPlayer = null;
-        this.embedVideoId = null;
-        this.embedOffset = null;
         this.event = null;
     }
 
@@ -4328,15 +4603,15 @@ class Reports {
                 let result = [];
                 if (/^[\+\-]/.test(lines[0])) {
                     let line = lines.shift();
-                    offset = this.timeToSeconds(line.substr(1), true);
+                    offset = timeUtil.toSeconds(line.substr(1), true);
                     if (line[0] == "-") offset = -offset;
                 }
 
                 while (lines.length) {
-                    let time = lines.shift();
+                    let t = lines.shift();
                     let msg = lines.shift();
-                    time = this.timeToSeconds(time, true) + offset;
-                    result.push({ time: time, msg: msg });
+                    t = timeUtil.toSeconds(t, true) + offset;
+                    result.push({ time: t, msg: msg });
                 }
 
                 return result;
@@ -4348,75 +4623,55 @@ class Reports {
         return [];
     }
 
-    timeToSeconds(time, isMMSS = false) {
-        let parts = time.split(":");
-        let seconds = 0;
-        let i = 0;
-
-        if (parts.length == 1) {
-            return parseFloat(parts);
-        } else if (parts.length == 2 && !isMMSS) {
-            i = 1;
-        } else if (parts.length > 3) {
-            throw new Error(`Invalid time ${time}`);
-        }
-
-        while (parts.length) {
-            let part = parts.pop();
-            seconds += parseInt(part) * 60 ** i;
-            i += 1;
-        }
-
-        //console.log(`${time} => ${seconds}`);
-        return seconds;
-    }
-
     async init() {
-        this.initEvents();
+        this.initListeners();
 
         await profiler.loadFromFirestore(this.profileId);
 
-        this.event = await events.getEventByHierarchy(
+        this.event = await events.loadFromFirestore(
             this.hierarchy.replaceAll("-", ":")
         );
 
         this.addElements();
 
-        //await this.score.ensureSummaries(this.hierarchy);
         await summarizer.ensure(this.hierarchy);
-        this.score.findMoments();
 
-        this.addMoments();
+        //momentlist.update();
 
         this.transcript = await this.loadTranscript();
     }
 
-    initEvents() {
-        eventBus.addEventListener("cameraChangeRequest", (e) => {
-            const camera = e.detail.camera;
-            console.log("Camera change requested:", camera);
+    changeCamera(camera) {
+        console.log("Camera change requested:", camera);
 
-            this.currentCamera = camera;
-            let newHierarchy = this.hierarchy.split("-").slice(0, 2).join("-");
-            newHierarchy += `-${camera.toString().padStart(2, "0")}`;
-            this.hierarchy = newHierarchy;
-            this.startTimeOffset = this.player.currentTime();
-            console.log("Time offset set to:", this.startTimeOffset);
-            this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
-            activeBoxManager.reset();
-            this.score.resetWindow();
-            this.hls.loadSource(this.playlistUrl);
-            this.player.play();
-        });
+        this.currentCamera = camera;
+        let newHierarchy = this.hierarchy.split("-").slice(0, 2).join("-");
+        newHierarchy += `-${camera.toString().padStart(2, "0")}`;
+        this.hierarchy = newHierarchy;
+        this.startTimeOffset = this.player.currentTime();
+        console.log("Time offset set to:", this.startTimeOffset);
+        this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
+        activeBoxManager.reset();
+        this.score.resetWindow();
+        this.hls.loadSource(this.playlistUrl);
+        this.player.play();
 
-        eventBus.addEventListener("playerSeekRequest", (e) => {
-            const time = e.detail.time;
+        eventBus.fire("viz.cameraChanged", { camera: camera });
+    }
 
-            const seconds = this.timeToSeconds(time);
+    initListeners() {
+        eventBus.addEventListener("ui.requestTimeSeek", (e) => {
+            let seconds = e.detail.seconds;
+
+            if (!seconds) {
+                const requestedTime = e.detail.time;
+                seconds = timeUtil.toSeconds(requestedTime);
+            }
+
             this.player.currentTime(seconds);
         });
 
-        eventBus.addEventListener("eventSelected", (e) => {
+        eventBus.addEventListener("ui.requestEvent", (e) => {
             const hierarchy = e.detail;
             console.log("Event selected:", hierarchy);
 
@@ -4482,125 +4737,7 @@ class Reports {
                             class: "w-full md:w-auto md:flex-grow min-w-[50px] max-w-[60px]",
                         },
 
-                        div(
-                            {
-                                id: "report-moment-1",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(1);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-2",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(2);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-3",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(3);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-4",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(4);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-5",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(5);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-6",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(6);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-7",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(7);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-8",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(8);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-9",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(9);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-10",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(10);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        )
+                        momentlist.createElement()
                     ),
 
                     // Video plus bottom metadata
@@ -4625,12 +4762,12 @@ class Reports {
                                 controls: true,
                                 muted: true,
                             }),
-                            canvas({
-                                id: "report-overlay",
+
+                            // HEATMAP
+                            heatmap.createElement({
                                 class: "absolute top-0 left-0 w-full h-auto aspect-video z-10",
-                                width: 1280,
-                                height: 720,
                             }),
+
                             div({
                                 id: "video-controls",
                                 class: "absolute bottom-0 left-0 w-full h-[30px]",
@@ -4652,25 +4789,8 @@ class Reports {
                                 id: "report-box-debug",
                                 class: "hidden text-sm text-gray-700 bg-white p-2 border",
                             }),
-                            // div(
-                            //     { class: "" },
-                            //     canvas({
-                            //         id: "report-pct",
-                            //         class: "w-full h-auto aspect-[calc(16/4.5)] mt-2",
-                            //         width: 1280,
-                            //         height: 360,
-                            //     })
-                            // )
 
-                            div(
-                                { class: "" },
-                                canvas({
-                                    id: "report-ppl",
-                                    class: "w-full h-auto aspect-[calc(16/4.5)] mt-2",
-                                    width: 1280,
-                                    height: 360,
-                                })
-                            ),
+                            div({ class: "" }, people.createElement()),
 
                             div(
                                 {
@@ -4680,10 +4800,9 @@ class Reports {
                                     {
                                         class: "w-[50%] h-auto aspect-[calc(8/2.5)] inline-block",
                                     },
-                                    canvas({
-                                        id: "report-demo-gender",
-                                        width: 448,
-                                        height: 126,
+
+                                    genderDemo.createElement({
+                                        id: "report-viz-demo-gender ",
                                     })
                                 ),
 
@@ -4692,10 +4811,8 @@ class Reports {
                                         class: "w-[50%] h-auto aspect-[calc(8/2.5)] inline-block",
                                     },
 
-                                    canvas({
-                                        id: "report-demo-age",
-                                        width: 448,
-                                        height: 126,
+                                    ageDemo.createElement({
+                                        id: "report-viz-demo-age",
                                     })
                                 )
                             )
@@ -4710,9 +4827,12 @@ class Reports {
                                     type: "button",
                                     class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600",
                                     onclick: () => {
-                                        eventBus.fire("summarizer.rebuild", {
-                                            hierarchy: this.hierarchy,
-                                        });
+                                        eventBus.fire(
+                                            "ui.requestSummaryRebuild",
+                                            {
+                                                hierarchy: this.hierarchy,
+                                            }
+                                        );
                                     },
                                 },
                                 "Rebuild Summary"
@@ -4732,31 +4852,17 @@ class Reports {
                             {
                                 class: "w-full h-auto aspect-[2] relative bg-white",
                             },
-                            canvas({
-                                id: "report-camera-map",
-                                class: "w-full h-full",
-                                width: 500,
-                                height: 250,
-                            })
+
+                            // CAMERA MAP
+                            cameramap.createElement()
                         ),
                         // EKG section
                         div(
                             {
                                 class: "w-full h-auto aspect-[2] mt-4 relative",
                             },
-                            canvas({
-                                id: "report-ekg",
-                                class: "w-full h-full",
-                                width: 500,
-                                height: 250,
-                            }),
-                            div(
-                                {
-                                    id: "report-ekg-score",
-                                    class: "absolute top-0 left-0 p-1 text-xl text-black",
-                                },
-                                "0"
-                            )
+
+                            ekg.createElement()
                         ),
 
                         // Spider chart section
@@ -4764,18 +4870,18 @@ class Reports {
                             {
                                 class: "w-full h-auto aspect-square mt-4 relative bg-white",
                             },
-                            canvas({
-                                id: "report-spider",
-                                class: "w-full h-full",
-                                width: 500,
-                                height: 500,
-                            })
+
+                            spider.createElement()
                         ),
 
-                        div({
-                            id: "report-embed",
-                            class: "w-full h-auto aspect-video mt-4 relative",
-                        })
+                        // Linked player
+                        div(
+                            {
+                                id: "report-embed",
+                                class: "w-full h-auto aspect-video mt-4 relative",
+                            },
+                            linkedPlayer.createElement()
+                        )
                     )
                 )
             )
@@ -4784,33 +4890,11 @@ class Reports {
         console.log(this.hierarchy);
         document.getElementById("report-event-select").value = this.hierarchy;
         this.addPlayer();
-        this.addOverlay();
-        this.addCameraMap();
-        this.addEkg();
-        this.addSpider();
-        this.addPpl();
-        //this.addPct();
-        //this.addMoments();
-        this.addDemos();
-        this.addEmbed();
-    }
+        this.addHeatmapListeners();
+        this.addCameraMapListeners();
 
-    addMoments() {
-        let i = 1;
-        for (const moment of this.score.moments) {
-            const momentDiv = document.getElementById(`report-moment-${i}`);
-            momentDiv.querySelector(
-                "div.text-sm"
-            ).textContent = `${moment.label}`;
-            i += 1;
-        }
-    }
-
-    seekMoment(number) {
-        const moment = this.score.moments[number - 1];
-        if (moment) {
-            this.player.currentTime(moment.startTime - 15);
-        }
+        // TODO Move to event (DOM needs to be added before initializing YT)
+        linkedPlayer.init();
     }
 
     addPlayer() {
@@ -4832,27 +4916,20 @@ class Reports {
             // Correct Video.js event for when video starts playing
             this.player.on("play", () => {
                 console.log("Video started playing");
-                this.viz.play();
+                eventBus.fire("viz.play");
+
                 if (this.startTimeOffset > 0) {
                     window.setTimeout(() => {
                         this.player.currentTime(this.startTimeOffset);
                         this.startTimeOffset = 0; // Reset after applying
                     }, 10);
                 }
-
-                if (this.embedPlayer) {
-                    this.embedPlayer.playVideo();
-                }
             });
 
             // Optional: Hide overlay when video is paused
             this.player.on("pause", () => {
                 console.log("Video paused");
-                this.viz.pause();
-
-                if (this.embedPlayer) {
-                    this.embedPlayer.pauseVideo();
-                }
+                eventBus.fire("viz.pause");
             });
 
             // Video.js time events
@@ -4861,28 +4938,9 @@ class Reports {
 
                 const currentTime = this.player.currentTime();
 
+                eventBus.fire("viz.paint", { currentTime: currentTime });
+
                 await this.score.handleTimeUpdate(currentTime);
-                this.viz.paintCameraMap(
-                    //this.score.summaries,
-                    summarizer.summaries,
-                    Math.floor(currentTime)
-                );
-                this.viz.paintActiveHeatmap(
-                    this.overlay,
-                    activeBoxManager.get()
-                );
-                // this.viz.paintHeatmap(
-                //     this.overlay,
-                //     this.score.window,
-                //     this.score.windowStartIndex,
-                //     this.score.windowEndIndex,
-                //     this.score.windowSize
-                // );
-                this.viz.paintEkg(this.score.currentScore);
-                this.viz.paintSpider(this.score.currentCores);
-                //this.viz.paintPpl(this.score.summaries[this.currentCamera - 1]);
-                this.viz.paintPpl(summarizer.summaries[this.currentCamera - 1]);
-                //this.viz.paintPct(this.score.percentiles);
 
                 this.updateTranscript();
                 this.player.userActive(true); // Ensure active state
@@ -4891,8 +4949,6 @@ class Reports {
                 // console.log(
                 //     `Current time: ${currentTime} score: ${this.score.currentScore} cores: ${this.score.currentCores}`
                 // );
-
-                this.syncEmbed(currentTime);
             });
 
             // Alternative: seeked event (when user seeks to a new position)
@@ -4901,7 +4957,7 @@ class Reports {
                 const currentTime = this.player.currentTime();
                 console.log("Seeked to time:", currentTime);
                 await this.score.handleTimeSeek(currentTime);
-                this.viz.reset();
+                eventBus.fire("viz.timeSeek", { currentTime: currentTime });
             });
 
             // Alternative: seeking event (while user is seeking)
@@ -4942,13 +4998,12 @@ class Reports {
         ) {
             const ts = this.transcript[this.tsIndex - 1];
             document.getElementById("report-current-play").innerText =
-                "⚾️ " + this.score.formatTime(ts.time, true) + " - " + ts.msg;
+                "⚾️ " + timeUtil.format(ts.time, true) + " - " + ts.msg;
         }
     }
-    addOverlay() {
-        this.overlay = document.getElementById("report-overlay");
 
-        this.overlay.addEventListener("click", (e) => {
+    addHeatmapListeners() {
+        eventBus.addEventListener("heatmap.click", (e) => {
             if (this.player.paused()) {
                 this.player.play();
             } else {
@@ -4956,18 +5011,8 @@ class Reports {
             }
         });
 
-        this.overlay.addEventListener("mousemove", (event) => {
-            const rect = this.overlay.getBoundingClientRect();
-            // Calculate the mouse position relative to the canvas
-            // and scale it to the original video resolution (3840x2160)
-            const x = Math.floor(
-                ((event.clientX - rect.left) / rect.width) * 3840
-            );
-            const y = Math.floor(
-                ((event.clientY - rect.top) / rect.height) * 2160
-            );
-
-            const box = this.score.boxAt(x, y);
+        eventBus.addEventListener("heatmap.mousemove", (e) => {
+            const box = this.score.boxAt(e.detail.x, e.detail.y);
 
             if (box) {
                 // Highlight the box or perform any action
@@ -4978,94 +5023,10 @@ class Reports {
         });
     }
 
-    addCameraMap() {
-        this.cameraMap = document.getElementById("report-camera-map");
-        this.viz.initCameraMap(this.cameraMap);
-    }
-
-    addEkg() {
-        var ekg = document.getElementById("report-ekg");
-        var label = document.getElementById("report-ekg-score");
-        this.viz.initEkg(ekg, label);
-    }
-
-    addSpider() {
-        var spider = document.getElementById("report-spider");
-        this.viz.initSpider(spider);
-    }
-
-    //addPct() {
-    //    var pct = document.getElementById("report-pct");
-    //    this.viz.initPct(pct);
-    //}
-
-    addPpl() {
-        var ppl = document.getElementById("report-ppl");
-        this.viz.initPpl(ppl);
-    }
-
-    addDemos() {
-        var gender = document.getElementById("report-demo-gender");
-        this.viz.initDemo(gender, "Gender", ["male", "female"], [60, 40]);
-
-        var age = document.getElementById("report-demo-age");
-        this.viz.initDemo(age, "Age", ["adult", "child"], [80, 20]);
-    }
-
-    addEmbed() {
-        const [token, date, camera] = this.hierarchy.split("-");
-        //const embedVideo = this.embedVideos[date];
-        const embedVideo = this.event.embed;
-
-        if (!embedVideo) {
-            console.error(`No embed found for ${date}`);
-            return;
-        }
-
-        this.embedVideoId = embedVideo.id;
-        this.embedOffset = embedVideo.offset;
-
-        const videoId = this.embedVideoId;
-        const origin = `https://${window.location.host}`;
-        document.getElementById("report-embed").innerHTML =
-            '<iframe id="report-embed-player" width="500" height="281" ' +
-            `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${origin}"` +
-            ' title="YouTube video player" frameborder="0" allow="accelerometer; ' +
-            "autoplay; clipboard-write; encrypted-media; gyroscope; " +
-            'picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" ' +
-            "allowfullscreen></iframe>";
-        this.embedPlayer = new YT.Player("report-embed-player");
-    }
-
-    syncEmbed(currentTime) {
-        if (this.embedPlayer) {
-            let embedTime = this.embedPlayer.getCurrentTime();
-            let embedState = this.embedPlayer.getPlayerState();
-            let duration = this.embedPlayer.getDuration();
-            let targetTime = currentTime + this.embedOffset;
-
-            if (targetTime < 0 || targetTime > duration) {
-                if (embedState == 1) {
-                    console.log(
-                        `Target time is ${targetTime}, pausing embed..`
-                    );
-                    this.embedPlayer.pauseVideo();
-                    this.embedPlayer.mute();
-                }
-            } else {
-                if (Math.abs(targetTime - embedTime) > 1) {
-                    console.log(`Seeking embed to ${targetTime}..`);
-                    this.embedPlayer.seekTo(targetTime, true);
-                }
-                if (embedState != 1) {
-                    console.log(`Playing embedded video..`);
-                    this.embedPlayer.playVideo();
-                }
-                if (this.embedPlayer.isMuted()) {
-                    this.embedPlayer.unMute();
-                }
-            }
-        }
+    addCameraMapListeners() {
+        eventBus.addEventListener("ui.requestCamera", (e) => {
+            this.changeCamera(e.detail.camera);
+        });
     }
 
     showBoxDebug(box) {

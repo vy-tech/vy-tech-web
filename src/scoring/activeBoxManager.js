@@ -1,10 +1,19 @@
-import { geom } from "./geom.js";
+import { eventBus } from "../eventbus.js";
+import { geomUtil } from "../util/geom.js";
 
 const EXPIRE_TIME = 5000;
 
 class ActiveBoxManager {
     constructor() {
         this.activeBoxes = [];
+
+        eventBus.addEventListener("scoring.timeUpdate", (e) => {
+            this.expire(e.detail.elapsedMillis);
+        });
+
+        eventBus.addEventListener("scoring.timeSeek", (e) => {
+            this.reset();
+        });
     }
 
     reset() {
@@ -36,7 +45,7 @@ class ActiveBoxManager {
         for (const box of boxes) {
             // Check if the box is already active
             var activeBox = this.activeBoxes.find((activeBox) => {
-                if (geom.boxesAreSame(activeBox, box)) {
+                if (geomUtil.boxesAreSame(activeBox, box)) {
                     return activeBox;
                 }
             });

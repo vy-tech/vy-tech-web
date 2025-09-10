@@ -1,10 +1,12 @@
 //import van from "vanjs-core";
-import { firestore, doc, getDoc } from "./rsdb.js";
+import { firestore, doc, getDoc } from "../rsdb.js";
 //import { Modal } from "vanjs-ui";
 
 import { activeBoxManager } from "./activeBoxManager.js";
 import { summarizer } from "./summarizer.js";
 import { profiler } from "./profiler.js";
+import { eventBus } from "../eventbus.js";
+import { timeUtil } from "../util/time.js";
 
 const Box = Object.freeze({
     X: 0,
@@ -367,29 +369,38 @@ class Score {
         this.lastSecond = this.currentSecond;
         this.currentSecond = Math.floor(this.currentTime);
 
+        eventBus.fire("scoring.timeUpdate", {
+            lastTime: this.lastTime,
+            currentTime: this.currentTime,
+            elapsed: this.currentTime - this.lastTime,
+            elapsedMillis: (this.currentTime - this.lastTime) * 1000,
+        });
+
         await this.ensureWindowLoaded();
         this.moveWindow();
         this.updateCurrentFromWindow();
-        //this.expireActiveBoxes();
 
         // TODO Move to event
-        activeBoxManager.expire((this.currentTime - this.lastTime) * 1000);
+        //this.expireActiveBoxes();
+        //activeBoxManager.expire((this.currentTime - this.lastTime) * 1000);
     }
 
     async handleTimeSeek(currentTime) {
         this.resetWindow();
-
-        // TODO Move to event
-        activeBoxManager.reset();
-        //this.resetActiveBoxes();
 
         this.currentTime = null;
         this.currentSecond = null;
         this.currentScore = 0;
         this.currentCores = [0, 0, 0, 0, 0, 0, 0];
 
+        eventBus.fire("scoring.timeSeek", { currentTime: currentTime });
+
         await this.resetLoadSchedule(currentTime + 5);
         await this.handleTimeUpdate(currentTime);
+
+        // TODO Move to event
+        //activeBoxManager.reset();
+        //this.resetActiveBoxes();
     }
 
     boxesAreSame(box1, box2, threshold = 0.4) {
@@ -642,66 +653,6 @@ class Score {
         return this.clamp(Math.round(ui), 0, 1000);
     }
 
-    // resetActiveBoxes() {
-    //     /**
-    //      * Resets the active boxes to an empty array.
-    //      */
-    //     this.activeBoxes = [];
-    // }
-
-    // expireActiveBoxes() {
-    //     /**
-    //      * Expires boxes from activeBoxes that have not been updated in 10 seconds.
-    //      */
-    //     for (let i = this.activeBoxes.length - 1; i >= 0; i--) {
-    //         const activeBox = this.activeBoxes[i];
-    //         const dt = Math.floor((this.currentTime - this.lastTime) * 1000);
-    //         activeBox[ActiveBox.EXPIRES] -= dt;
-    //         if (activeBox[ActiveBox.EXPIRES] <= 0) {
-    //             this.activeBoxes.splice(i, 1); // Remove expired box
-    //         }
-    //     }
-    // }
-
-    // updateActiveBoxes(boxes) {
-    //     /**
-    //      * Updates the active boxes based on the current second,
-    //      * adds any non-overlapping boxes to activeBoxes.
-    //      */
-
-    //     for (const box of boxes) {
-    //         // Check if the box is already active
-    //         var activeBox = this.activeBoxes.find((activeBox) => {
-    //             if (this.boxesAreSame(activeBox, box)) {
-    //                 return activeBox;
-    //             }
-    //         });
-
-    //         if (activeBox) {
-    //             activeBox[ActiveBox.X] = box[Box.X];
-    //             activeBox[ActiveBox.Y] = box[Box.Y];
-    //             activeBox[ActiveBox.W] = box[Box.W];
-    //             activeBox[ActiveBox.H] = box[Box.H];
-    //             activeBox[ActiveBox.SCORE] = box[Box.SCORE] / box[Box.COUNT];
-    //             activeBox[ActiveBox.EXPIRES] = Math.floor(
-    //                 this.windowSize * 1000
-    //             ); // Update the expiration time
-    //             activeBox[ActiveBox.INDEX] = box[Box.INDEX];
-    //         } else {
-    //             // If not active, create it and add it to activeBoxes
-    //             // Ensure score is averaged because we're reusing the count
-    //             activeBox = new Int32Array(box);
-    //             activeBox[ActiveBox.SCORE] = box[Box.SCORE] / box[Box.COUNT];
-    //             activeBox[ActiveBox.EXPIRES] = Math.floor(
-    //                 this.windowSize * 1000
-    //             );
-    //             activeBox[ActiveBox.INDEX] = box[Box.INDEX];
-
-    //             this.activeBoxes.push(activeBox);
-    //         }
-    //     }
-    // }
-
     boxAt(x, y) {
         /**
          * Finds the first active box which contains the point (x, y).
@@ -741,69 +692,8 @@ class Score {
             hls.loadSource(playlistUrl);
         });
     }
-
-    isSameMoment(s1, s2) {
-        const buffer = 180;
-        return (
-            (s2.startTime >= s1.startTime - buffer &&
-                s2.startTime <= s1.endTime + buffer) ||
-            (s2.endTime >= s1.startTime - buffer &&
-                s2.endTime <= s1.endTime + buffer)
-        );
-    }
-
-    // TODO REFACTOR move to Util
-    formatTime(seconds, includeSeconds = false) {
-        let hours = Math.floor(seconds / 3600);
-        seconds -= hours * 3600;
-        let minutes = Math.floor(seconds / 60);
-        seconds = Math.floor(seconds - minutes * 60);
-
-        let result =
-            hours.toString().padStart(2, "0") +
-            ":" +
-            minutes.toString().padStart(2, "0");
-
-        if (!includeSeconds) return result;
-
-        return result + ":" + seconds.toString().padStart(2, "0");
-    }
-
-    findMoments(summary) {
-        summary = summary || summarizer.summaries[0];
-        let sorted = [...summary];
-        let moments = [];
-
-        // Sort by score and limit to top 100
-        sorted.sort((a, b) => b.score - a.score);
-        sorted.splice(100, sorted.length - 100);
-
-        // Top score is our first moment
-        moments.push(sorted.shift());
-
-        while (moments.length < 10 && sorted.length > 0) {
-            let moment = sorted.shift();
-
-            // Find any same moment and merge them, or add a new one
-            let merge = moments.find((a) => this.isSameMoment(a, moment));
-            if (merge) {
-                merge.startTime = Math.min(moment.startTime, merge.startTime);
-                merge.endTime = Math.max(moment.endTime, merge.endTime);
-            } else {
-                console.log("Adding..", moment);
-                moments.push(moment);
-            }
-        }
-
-        // Sort moments by time and add time label
-        moments.sort((a, b) => a.startTime - b.startTime);
-        moments.forEach((a) => (a.label = this.formatTime(a.startTime)));
-
-        this.moments = moments;
-
-        return moments;
-    }
 }
 
-export default Score;
-export { Box, Core, CoreNames, EmotionCoreMap, Score };
+const scoring = new Score();
+export default scoring;
+export { scoring, Box, Core, CoreNames, EmotionCoreMap, Score };

@@ -1,12 +1,21 @@
 import van from "vanjs-core";
 
 import { eventBus } from "./eventbus.js";
-import { CoreNames, EmotionCoreMap, Score } from "./vyscore.js";
-import Viz from "./vyviz.js";
-import { events } from "./events.js";
-import { summarizer } from "./summarizer.js";
-import { profiler } from "./profiler.js";
-import { activeBoxManager } from "./activeBoxManager.js";
+import { scoring } from "./scoring/scoring.js";
+import { events } from "./data/events.js";
+import { summarizer } from "./scoring/summarizer.js";
+import { profiler } from "./scoring/profiler.js";
+import { activeBoxManager } from "./scoring/activeBoxManager.js";
+import { timeUtil } from "./util/time.js";
+
+import { heatmap } from "./viz/heatmap.js";
+import { cameramap } from "./viz/cameramap.js";
+import { ekg } from "./viz/ekg.js";
+import { spider } from "./viz/spider.js";
+import { people } from "./viz/people.js";
+import { genderDemo, ageDemo } from "./viz/demographics.js";
+import { momentlist } from "./viz/momentlist.js";
+import { linkedPlayer } from "./viz/linkedPlayer.js";
 
 class Reports {
     constructor() {
@@ -16,15 +25,11 @@ class Reports {
         this.profileId = "BkBUQq4GiSfuwHN7YrK3";
         this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
 
-        this.score = new Score();
-        this.viz = new Viz();
+        this.score = scoring;
 
         this.transcript = [];
         this.tsIndex = 0;
 
-        this.embedPlayer = null;
-        this.embedVideoId = null;
-        this.embedOffset = null;
         this.event = null;
     }
 
@@ -44,15 +49,15 @@ class Reports {
                 let result = [];
                 if (/^[\+\-]/.test(lines[0])) {
                     let line = lines.shift();
-                    offset = this.timeToSeconds(line.substr(1), true);
+                    offset = timeUtil.toSeconds(line.substr(1), true);
                     if (line[0] == "-") offset = -offset;
                 }
 
                 while (lines.length) {
-                    let time = lines.shift();
+                    let t = lines.shift();
                     let msg = lines.shift();
-                    time = this.timeToSeconds(time, true) + offset;
-                    result.push({ time: time, msg: msg });
+                    t = timeUtil.toSeconds(t, true) + offset;
+                    result.push({ time: t, msg: msg });
                 }
 
                 return result;
@@ -64,75 +69,55 @@ class Reports {
         return [];
     }
 
-    timeToSeconds(time, isMMSS = false) {
-        let parts = time.split(":");
-        let seconds = 0;
-        let i = 0;
-
-        if (parts.length == 1) {
-            return parseFloat(parts);
-        } else if (parts.length == 2 && !isMMSS) {
-            i = 1;
-        } else if (parts.length > 3) {
-            throw new Error(`Invalid time ${time}`);
-        }
-
-        while (parts.length) {
-            let part = parts.pop();
-            seconds += parseInt(part) * 60 ** i;
-            i += 1;
-        }
-
-        //console.log(`${time} => ${seconds}`);
-        return seconds;
-    }
-
     async init() {
-        this.initEvents();
+        this.initListeners();
 
         await profiler.loadFromFirestore(this.profileId);
 
-        this.event = await events.getEventByHierarchy(
+        this.event = await events.loadFromFirestore(
             this.hierarchy.replaceAll("-", ":")
         );
 
         this.addElements();
 
-        //await this.score.ensureSummaries(this.hierarchy);
         await summarizer.ensure(this.hierarchy);
-        this.score.findMoments();
 
-        this.addMoments();
+        //momentlist.update();
 
         this.transcript = await this.loadTranscript();
     }
 
-    initEvents() {
-        eventBus.addEventListener("cameraChangeRequest", (e) => {
-            const camera = e.detail.camera;
-            console.log("Camera change requested:", camera);
+    changeCamera(camera) {
+        console.log("Camera change requested:", camera);
 
-            this.currentCamera = camera;
-            let newHierarchy = this.hierarchy.split("-").slice(0, 2).join("-");
-            newHierarchy += `-${camera.toString().padStart(2, "0")}`;
-            this.hierarchy = newHierarchy;
-            this.startTimeOffset = this.player.currentTime();
-            console.log("Time offset set to:", this.startTimeOffset);
-            this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
-            activeBoxManager.reset();
-            this.score.resetWindow();
-            this.hls.loadSource(this.playlistUrl);
-            this.player.play();
-        });
+        this.currentCamera = camera;
+        let newHierarchy = this.hierarchy.split("-").slice(0, 2).join("-");
+        newHierarchy += `-${camera.toString().padStart(2, "0")}`;
+        this.hierarchy = newHierarchy;
+        this.startTimeOffset = this.player.currentTime();
+        console.log("Time offset set to:", this.startTimeOffset);
+        this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
+        activeBoxManager.reset();
+        this.score.resetWindow();
+        this.hls.loadSource(this.playlistUrl);
+        this.player.play();
 
-        eventBus.addEventListener("playerSeekRequest", (e) => {
-            const time = e.detail.time;
+        eventBus.fire("viz.cameraChanged", { camera: camera });
+    }
 
-            const seconds = this.timeToSeconds(time);
+    initListeners() {
+        eventBus.addEventListener("ui.requestTimeSeek", (e) => {
+            let seconds = e.detail.seconds;
+
+            if (!seconds) {
+                const requestedTime = e.detail.time;
+                seconds = timeUtil.toSeconds(requestedTime);
+            }
+
             this.player.currentTime(seconds);
         });
 
-        eventBus.addEventListener("eventSelected", (e) => {
+        eventBus.addEventListener("ui.requestEvent", (e) => {
             const hierarchy = e.detail;
             console.log("Event selected:", hierarchy);
 
@@ -198,125 +183,7 @@ class Reports {
                             class: "w-full md:w-auto md:flex-grow min-w-[50px] max-w-[60px]",
                         },
 
-                        div(
-                            {
-                                id: "report-moment-1",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(1);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-2",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(2);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-3",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(3);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-4",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(4);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-5",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(5);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-6",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(6);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-7",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(7);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-8",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(8);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-9",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(9);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        ),
-
-                        div(
-                            {
-                                id: "report-moment-10",
-                                class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                                onclick: () => {
-                                    this.seekMoment(10);
-                                },
-                            },
-                            div({ class: "text-2xl mb-1" }, "▶"),
-                            div({ class: "text-sm" }, "0")
-                        )
+                        momentlist.createElement()
                     ),
 
                     // Video plus bottom metadata
@@ -341,12 +208,12 @@ class Reports {
                                 controls: true,
                                 muted: true,
                             }),
-                            canvas({
-                                id: "report-overlay",
+
+                            // HEATMAP
+                            heatmap.createElement({
                                 class: "absolute top-0 left-0 w-full h-auto aspect-video z-10",
-                                width: 1280,
-                                height: 720,
                             }),
+
                             div({
                                 id: "video-controls",
                                 class: "absolute bottom-0 left-0 w-full h-[30px]",
@@ -368,25 +235,8 @@ class Reports {
                                 id: "report-box-debug",
                                 class: "hidden text-sm text-gray-700 bg-white p-2 border",
                             }),
-                            // div(
-                            //     { class: "" },
-                            //     canvas({
-                            //         id: "report-pct",
-                            //         class: "w-full h-auto aspect-[calc(16/4.5)] mt-2",
-                            //         width: 1280,
-                            //         height: 360,
-                            //     })
-                            // )
 
-                            div(
-                                { class: "" },
-                                canvas({
-                                    id: "report-ppl",
-                                    class: "w-full h-auto aspect-[calc(16/4.5)] mt-2",
-                                    width: 1280,
-                                    height: 360,
-                                })
-                            ),
+                            div({ class: "" }, people.createElement()),
 
                             div(
                                 {
@@ -396,10 +246,9 @@ class Reports {
                                     {
                                         class: "w-[50%] h-auto aspect-[calc(8/2.5)] inline-block",
                                     },
-                                    canvas({
-                                        id: "report-demo-gender",
-                                        width: 448,
-                                        height: 126,
+
+                                    genderDemo.createElement({
+                                        id: "report-viz-demo-gender ",
                                     })
                                 ),
 
@@ -408,10 +257,8 @@ class Reports {
                                         class: "w-[50%] h-auto aspect-[calc(8/2.5)] inline-block",
                                     },
 
-                                    canvas({
-                                        id: "report-demo-age",
-                                        width: 448,
-                                        height: 126,
+                                    ageDemo.createElement({
+                                        id: "report-viz-demo-age",
                                     })
                                 )
                             )
@@ -426,9 +273,12 @@ class Reports {
                                     type: "button",
                                     class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600",
                                     onclick: () => {
-                                        eventBus.fire("summarizer.rebuild", {
-                                            hierarchy: this.hierarchy,
-                                        });
+                                        eventBus.fire(
+                                            "ui.requestSummaryRebuild",
+                                            {
+                                                hierarchy: this.hierarchy,
+                                            }
+                                        );
                                     },
                                 },
                                 "Rebuild Summary"
@@ -448,31 +298,17 @@ class Reports {
                             {
                                 class: "w-full h-auto aspect-[2] relative bg-white",
                             },
-                            canvas({
-                                id: "report-camera-map",
-                                class: "w-full h-full",
-                                width: 500,
-                                height: 250,
-                            })
+
+                            // CAMERA MAP
+                            cameramap.createElement()
                         ),
                         // EKG section
                         div(
                             {
                                 class: "w-full h-auto aspect-[2] mt-4 relative",
                             },
-                            canvas({
-                                id: "report-ekg",
-                                class: "w-full h-full",
-                                width: 500,
-                                height: 250,
-                            }),
-                            div(
-                                {
-                                    id: "report-ekg-score",
-                                    class: "absolute top-0 left-0 p-1 text-xl text-black",
-                                },
-                                "0"
-                            )
+
+                            ekg.createElement()
                         ),
 
                         // Spider chart section
@@ -480,18 +316,18 @@ class Reports {
                             {
                                 class: "w-full h-auto aspect-square mt-4 relative bg-white",
                             },
-                            canvas({
-                                id: "report-spider",
-                                class: "w-full h-full",
-                                width: 500,
-                                height: 500,
-                            })
+
+                            spider.createElement()
                         ),
 
-                        div({
-                            id: "report-embed",
-                            class: "w-full h-auto aspect-video mt-4 relative",
-                        })
+                        // Linked player
+                        div(
+                            {
+                                id: "report-embed",
+                                class: "w-full h-auto aspect-video mt-4 relative",
+                            },
+                            linkedPlayer.createElement()
+                        )
                     )
                 )
             )
@@ -500,33 +336,11 @@ class Reports {
         console.log(this.hierarchy);
         document.getElementById("report-event-select").value = this.hierarchy;
         this.addPlayer();
-        this.addOverlay();
-        this.addCameraMap();
-        this.addEkg();
-        this.addSpider();
-        this.addPpl();
-        //this.addPct();
-        //this.addMoments();
-        this.addDemos();
-        this.addEmbed();
-    }
+        this.addHeatmapListeners();
+        this.addCameraMapListeners();
 
-    addMoments() {
-        let i = 1;
-        for (const moment of this.score.moments) {
-            const momentDiv = document.getElementById(`report-moment-${i}`);
-            momentDiv.querySelector(
-                "div.text-sm"
-            ).textContent = `${moment.label}`;
-            i += 1;
-        }
-    }
-
-    seekMoment(number) {
-        const moment = this.score.moments[number - 1];
-        if (moment) {
-            this.player.currentTime(moment.startTime - 15);
-        }
+        // TODO Move to event (DOM needs to be added before initializing YT)
+        linkedPlayer.init();
     }
 
     addPlayer() {
@@ -548,27 +362,20 @@ class Reports {
             // Correct Video.js event for when video starts playing
             this.player.on("play", () => {
                 console.log("Video started playing");
-                this.viz.play();
+                eventBus.fire("viz.play");
+
                 if (this.startTimeOffset > 0) {
                     window.setTimeout(() => {
                         this.player.currentTime(this.startTimeOffset);
                         this.startTimeOffset = 0; // Reset after applying
                     }, 10);
                 }
-
-                if (this.embedPlayer) {
-                    this.embedPlayer.playVideo();
-                }
             });
 
             // Optional: Hide overlay when video is paused
             this.player.on("pause", () => {
                 console.log("Video paused");
-                this.viz.pause();
-
-                if (this.embedPlayer) {
-                    this.embedPlayer.pauseVideo();
-                }
+                eventBus.fire("viz.pause");
             });
 
             // Video.js time events
@@ -577,28 +384,9 @@ class Reports {
 
                 const currentTime = this.player.currentTime();
 
+                eventBus.fire("viz.paint", { currentTime: currentTime });
+
                 await this.score.handleTimeUpdate(currentTime);
-                this.viz.paintCameraMap(
-                    //this.score.summaries,
-                    summarizer.summaries,
-                    Math.floor(currentTime)
-                );
-                this.viz.paintActiveHeatmap(
-                    this.overlay,
-                    activeBoxManager.get()
-                );
-                // this.viz.paintHeatmap(
-                //     this.overlay,
-                //     this.score.window,
-                //     this.score.windowStartIndex,
-                //     this.score.windowEndIndex,
-                //     this.score.windowSize
-                // );
-                this.viz.paintEkg(this.score.currentScore);
-                this.viz.paintSpider(this.score.currentCores);
-                //this.viz.paintPpl(this.score.summaries[this.currentCamera - 1]);
-                this.viz.paintPpl(summarizer.summaries[this.currentCamera - 1]);
-                //this.viz.paintPct(this.score.percentiles);
 
                 this.updateTranscript();
                 this.player.userActive(true); // Ensure active state
@@ -607,8 +395,6 @@ class Reports {
                 // console.log(
                 //     `Current time: ${currentTime} score: ${this.score.currentScore} cores: ${this.score.currentCores}`
                 // );
-
-                this.syncEmbed(currentTime);
             });
 
             // Alternative: seeked event (when user seeks to a new position)
@@ -617,7 +403,7 @@ class Reports {
                 const currentTime = this.player.currentTime();
                 console.log("Seeked to time:", currentTime);
                 await this.score.handleTimeSeek(currentTime);
-                this.viz.reset();
+                eventBus.fire("viz.timeSeek", { currentTime: currentTime });
             });
 
             // Alternative: seeking event (while user is seeking)
@@ -658,13 +444,12 @@ class Reports {
         ) {
             const ts = this.transcript[this.tsIndex - 1];
             document.getElementById("report-current-play").innerText =
-                "⚾️ " + this.score.formatTime(ts.time, true) + " - " + ts.msg;
+                "⚾️ " + timeUtil.format(ts.time, true) + " - " + ts.msg;
         }
     }
-    addOverlay() {
-        this.overlay = document.getElementById("report-overlay");
 
-        this.overlay.addEventListener("click", (e) => {
+    addHeatmapListeners() {
+        eventBus.addEventListener("heatmap.click", (e) => {
             if (this.player.paused()) {
                 this.player.play();
             } else {
@@ -672,18 +457,8 @@ class Reports {
             }
         });
 
-        this.overlay.addEventListener("mousemove", (event) => {
-            const rect = this.overlay.getBoundingClientRect();
-            // Calculate the mouse position relative to the canvas
-            // and scale it to the original video resolution (3840x2160)
-            const x = Math.floor(
-                ((event.clientX - rect.left) / rect.width) * 3840
-            );
-            const y = Math.floor(
-                ((event.clientY - rect.top) / rect.height) * 2160
-            );
-
-            const box = this.score.boxAt(x, y);
+        eventBus.addEventListener("heatmap.mousemove", (e) => {
+            const box = this.score.boxAt(e.detail.x, e.detail.y);
 
             if (box) {
                 // Highlight the box or perform any action
@@ -694,94 +469,10 @@ class Reports {
         });
     }
 
-    addCameraMap() {
-        this.cameraMap = document.getElementById("report-camera-map");
-        this.viz.initCameraMap(this.cameraMap);
-    }
-
-    addEkg() {
-        var ekg = document.getElementById("report-ekg");
-        var label = document.getElementById("report-ekg-score");
-        this.viz.initEkg(ekg, label);
-    }
-
-    addSpider() {
-        var spider = document.getElementById("report-spider");
-        this.viz.initSpider(spider);
-    }
-
-    //addPct() {
-    //    var pct = document.getElementById("report-pct");
-    //    this.viz.initPct(pct);
-    //}
-
-    addPpl() {
-        var ppl = document.getElementById("report-ppl");
-        this.viz.initPpl(ppl);
-    }
-
-    addDemos() {
-        var gender = document.getElementById("report-demo-gender");
-        this.viz.initDemo(gender, "Gender", ["male", "female"], [60, 40]);
-
-        var age = document.getElementById("report-demo-age");
-        this.viz.initDemo(age, "Age", ["adult", "child"], [80, 20]);
-    }
-
-    addEmbed() {
-        const [token, date, camera] = this.hierarchy.split("-");
-        //const embedVideo = this.embedVideos[date];
-        const embedVideo = this.event.embed;
-
-        if (!embedVideo) {
-            console.error(`No embed found for ${date}`);
-            return;
-        }
-
-        this.embedVideoId = embedVideo.id;
-        this.embedOffset = embedVideo.offset;
-
-        const videoId = this.embedVideoId;
-        const origin = `https://${window.location.host}`;
-        document.getElementById("report-embed").innerHTML =
-            '<iframe id="report-embed-player" width="500" height="281" ' +
-            `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${origin}"` +
-            ' title="YouTube video player" frameborder="0" allow="accelerometer; ' +
-            "autoplay; clipboard-write; encrypted-media; gyroscope; " +
-            'picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" ' +
-            "allowfullscreen></iframe>";
-        this.embedPlayer = new YT.Player("report-embed-player");
-    }
-
-    syncEmbed(currentTime) {
-        if (this.embedPlayer) {
-            let embedTime = this.embedPlayer.getCurrentTime();
-            let embedState = this.embedPlayer.getPlayerState();
-            let duration = this.embedPlayer.getDuration();
-            let targetTime = currentTime + this.embedOffset;
-
-            if (targetTime < 0 || targetTime > duration) {
-                if (embedState == 1) {
-                    console.log(
-                        `Target time is ${targetTime}, pausing embed..`
-                    );
-                    this.embedPlayer.pauseVideo();
-                    this.embedPlayer.mute();
-                }
-            } else {
-                if (Math.abs(targetTime - embedTime) > 1) {
-                    console.log(`Seeking embed to ${targetTime}..`);
-                    this.embedPlayer.seekTo(targetTime, true);
-                }
-                if (embedState != 1) {
-                    console.log(`Playing embedded video..`);
-                    this.embedPlayer.playVideo();
-                }
-                if (this.embedPlayer.isMuted()) {
-                    this.embedPlayer.unMute();
-                }
-            }
-        }
+    addCameraMapListeners() {
+        eventBus.addEventListener("ui.requestCamera", (e) => {
+            this.changeCamera(e.detail.camera);
+        });
     }
 
     showBoxDebug(box) {

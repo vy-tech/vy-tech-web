@@ -29,8 +29,31 @@ class Geometry {
         const overlapRatio = intersectionArea / smallerArea;
         return overlapRatio >= threshold;
     }
+
+    isPointInTriangle(px, py, x1, y1, x2, y2, x3, y3) {
+        const area = (x1, y1, x2, y2, x3, y3) =>
+            0.5 * Math.abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));
+
+        const A = area(x1, y1, x2, y2, x3, y3);
+        const A1 = area(px, py, x2, y2, x3, y3);
+        const A2 = area(x1, y1, px, py, x3, y3);
+        const A3 = area(x1, y1, x2, y2, px, py);
+
+        return A === A1 + A2 + A3;
+    }
+
+    findTriangleContainingPoint(x, y, triangles) {
+        for (let i = 0; i < triangles.length; i++) {
+            const triangle = triangles[i];
+            const [x1, y1, x2, y2, x3, y3] = triangle;
+            if (this.isPointInTriangle(x, y, x1, y1, x2, y2, x3, y3)) {
+                return i + 1; // Return 1-based index
+            }
+        }
+        return null; // No triangle found
+    }
 }
 
-const geom = new Geometry();
-export default geom;
-export { geom, Geometry };
+const geomUtil = new Geometry();
+export default geomUtil;
+export { geomUtil, Geometry };

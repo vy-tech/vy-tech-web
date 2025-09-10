@@ -1,4 +1,4 @@
-import { firestore, doc, getDoc } from "./rsdb.js";
+import { firestore, doc, getDoc } from "../rsdb.js";
 
 class Profiler {
     constructor() {

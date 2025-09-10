@@ -6,8 +6,8 @@ import {
     query,
     collection,
     where,
-} from "./rsdb.js";
-import { app } from "./rsfirebase.js";
+} from "../rsdb.js";
+import { app } from "../rsfirebase.js";
 import {
     getStorage,
     ref,
@@ -15,18 +15,31 @@ import {
     getDownloadURL,
 } from "firebase/storage";
 
-import { progress } from "./progress.js";
-import { eventBus } from "./eventbus.js";
-import { Score } from "./vyscore.js";
+import { progress } from "../viz/progress.js";
+import { eventBus } from "../eventbus.js";
+import { Score } from "./scoring.js";
 
 class Summarizer {
     constructor() {
+        this.currentCamera = 1;
         this.summaries = [];
 
-        eventBus.addEventListener("summarizer.rebuild", async (e) => {
+        eventBus.addEventListener("ui.requestSummaryRebuild", async (e) => {
             const { hierarchy } = e.detail;
             await this.rebuild(hierarchy);
         });
+
+        eventBus.addEventListener("viz.cameraChanged", (e) => {
+            this.currentCamera = e.detail.camera;
+        });
+    }
+
+    getCurrent() {
+        return this.summaries[this.currentCamera - 1];
+    }
+
+    getAll() {
+        return this.summaries;
     }
 
     async rebuild(hierarchy) {
@@ -90,6 +103,7 @@ class Summarizer {
         }
 
         closed.val = true;
+
         return Object.values(scores);
     }
 
@@ -254,6 +268,9 @@ class Summarizer {
         }
 
         closed.val = true;
+
+        eventBus.fire("summarizer.ready");
+
         return this.summaries;
     }
 }
