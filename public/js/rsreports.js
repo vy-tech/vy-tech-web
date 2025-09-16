@@ -2609,7 +2609,7 @@ class Summarizer {
                 score.startTime = Math.min(score.startTime, newTime);
                 score.endTime = Math.max(score.endTime, newTime);
                 score.score += scoring.currentScore;
-                score.people += scoring.activeBoxes.length;
+                score.people += activeBoxManager.activeBoxes.length;
                 score.count += 1;
             }
         }
@@ -3792,6 +3792,28 @@ class CameraMap {
         return hue;
     }
 
+    findTrangleFromMouse(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        // Calculate the mouse position relative to the canvas
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+
+        // Scale coordinates to match canvas internal dimensions
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const scaledX = Math.floor(x * scaleX);
+        const scaledY = Math.floor(y * scaleY);
+
+        // Find the triangle that contains the mouse position
+        const point = geomUtil.findTriangleContainingPoint(
+            scaledX,
+            scaledY,
+            this.triangles
+        );
+
+        return point;
+    }
+
     init() {
         this.active = 1;
         this.hover = null;
@@ -3831,16 +3853,9 @@ class CameraMap {
         };
 
         this.canvas.addEventListener("mousemove", (event) => {
-            const rect = this.canvas.getBoundingClientRect();
-            // Calculate the mouse position relative to the canvas
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-
-            // Find the triangle that contains the mouse position
-            const point = geomUtil.findTriangleContainingPoint(
-                x,
-                y,
-                this.triangles
+            const point = this.findTrangleFromMouse(
+                event.clientX,
+                event.clientY
             );
             this.hover = point;
             this.paint();
@@ -3855,17 +3870,11 @@ class CameraMap {
         });
 
         this.canvas.addEventListener("click", (event) => {
-            const rect = this.canvas.getBoundingClientRect();
-            // Calculate the mouse position relative to the canvas
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-
-            // Find the triangle that contains the mouse position
-            const point = geomUtil.findTriangleContainingPoint(
-                x,
-                y,
-                this.triangles
+            const point = this.findTrangleFromMouse(
+                event.clientX,
+                event.clientY
             );
+
             if (point) {
                 this.active = point;
                 this.paint();
@@ -3893,17 +3902,17 @@ class CameraMap {
                 summaries[i][second].score;
 
             if (this.hover === i + 1) {
-                ctx.strokeStyle = "#6d0098ff";
-                ctx.fillStyle = "#6d00987F";
+                ctx.strokeStyle = "#00eeffff";
             } else if (this.active === i + 1) {
                 ctx.strokeStyle = "#3fa7d7ff";
-                ctx.fillStyle = "#3fa7d77f";
-            } else if (score) {
+            } else {
+                ctx.strokeStyle = "#999";
+            }
+
+            if (score) {
                 const hue = this.scoreToHue(score);
-                ctx.strokeStyle = `hsl(${hue}, 100%, 50%, 1)`;
                 ctx.fillStyle = `hsl(${hue}, 100%, 50%, 0.5)`;
             } else {
-                ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
                 ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
             }
             const triangle = this.triangles[i];

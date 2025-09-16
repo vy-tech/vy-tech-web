@@ -30,25 +30,6 @@
       ],
       "density": "SPARSE_ALL"
     },
-    {
-      "collectionGroup": "videos",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "event",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "minuteOfDay",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "camera",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    }
   ],
   "fieldOverrides": []
 }

@@ -18,6 +18,7 @@ import {
 import { progress } from "../viz/progress.js";
 import { eventBus } from "../eventbus.js";
 import { Score } from "./scoring.js";
+import { activeBoxManager } from "./activeBoxManager.js";
 
 class Summarizer {
     constructor() {
@@ -88,7 +89,7 @@ class Summarizer {
                 score.startTime = Math.min(score.startTime, newTime);
                 score.endTime = Math.max(score.endTime, newTime);
                 score.score += scoring.currentScore;
-                score.people += scoring.activeBoxes.length;
+                score.people += activeBoxManager.activeBoxes.length;
                 score.count += 1;
             }
         }
