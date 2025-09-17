@@ -10,7 +10,7 @@ functions/lib/serviceAccountKey.json
 *.mov
 
 # Data
-data/
+./data/
 
 # Python
 *.pyc
