@@ -1,9 +1,9 @@
 
 services:
-    roarscore-web:
-        image: roarscore-web:latest
-        container_name: roarscore-web
-        hostname: roarscore-web
+    vy-tech-web:
+        image: vy-tech-web:latest
+        container_name: vy-tech-web
+        hostname: vy-tech-web
         build:
           context: .
           dockerfile: Dockerfile
@@ -15,14 +15,14 @@ services:
           - ./functions/lib:/app/functions/lib
           - ./functions/index.js:/app/functions/index.js
           - ./server.js:/app/server.js
-    roarscore-tunnel:
+    vy-tech-web-tunnel:
         image: cloudflare/cloudflared:latest
-        container_name: roarscore-web-tunnel
-        hostname: roarscore-web-tunnel
+        container_name: vy-tech-web-tunnel
+        hostname: vy-tech-web-tunnel
         command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
         environment:
           - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
           - TUNNEL_HOSTNAME=dev.roarscore.ai
           - TUNNEL_PORT=5007
         depends_on:
-          - roarscore-web
+          - vy-tech-web
