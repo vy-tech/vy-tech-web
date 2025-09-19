@@ -1,11 +1,15 @@
 import van from "vanjs-core";
 
 import { eventBus } from "./eventbus.js";
+
 import { scoring } from "./scoring/scoring.js";
-import { events } from "./data/events.js";
 import { summarizer } from "./scoring/summarizer.js";
 import { profiler } from "./scoring/profiler.js";
 import { activeBoxManager } from "./scoring/activeBoxManager.js";
+
+import { events } from "./data/events.js";
+import { annotations } from "./data/annotations.js";
+
 import { timeUtil } from "./util/time.js";
 
 import { heatmap } from "./viz/heatmap.js";
@@ -180,10 +184,11 @@ class Reports {
                     div(
                         {
                             id: "report-left",
-                            class: "w-full md:w-auto md:flex-grow min-w-[50px] max-w-[60px]",
+                            class: "w-full md:w-auto md:flex-grow min-w-[150px] max-w-[250px]",
                         },
 
-                        momentlist.createElement()
+                        annotations.createElement()
+                        //momentlist.createElement()
                     ),
 
                     // Video plus bottom metadata
@@ -282,6 +287,37 @@ class Reports {
                                     },
                                 },
                                 "Rebuild Summary"
+                            ),
+
+                            button(
+                                {
+                                    type: "button",
+                                    class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
+                                    onclick: () => {
+                                        console.log("Add annotation");
+                                        eventBus.fire("ui.addAnnotation", {
+                                            currentTime:
+                                                this.player.currentTime(),
+                                            hierarchy: this.hierarchy,
+                                        });
+                                    },
+                                },
+                                "Add Annotation"
+                            ),
+
+                            button(
+                                {
+                                    type: "button",
+                                    class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
+                                    onclick: () => {
+                                        console.log("Import Transcript");
+                                        eventBus.fire("ui.importTranscript", {
+                                            hierarchy: this.hierarchy,
+                                            event: this.event,
+                                        });
+                                    },
+                                },
+                                "Import Transcript"
                             )
                         )
                     ),
@@ -290,7 +326,7 @@ class Reports {
                     div(
                         {
                             id: "report-right",
-                            class: "w-full md:w-auto md:flex-grow min-w-[300px] max-w-[500px]",
+                            class: "w-full md:w-auto md:flex-grow min-w-[250px] max-w-[350px]",
                         },
 
                         // Camera map section
@@ -518,5 +554,9 @@ class Reports {
 }
 
 const reports = new Reports();
-window.reports = reports;
+
+if (typeof window !== "undefined") {
+    window._vy_reports = reports;
+}
+
 export { Reports, reports };

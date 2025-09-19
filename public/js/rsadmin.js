@@ -1,7 +1,7 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { c as collection, f as firestore, g as getDocs } from './chunks/rsdb-CUSZDmYY.js';
-import './chunks/eventbus-B2NG0GvW.js';
-import './chunks/rsfirebase-IdUc1I6T.js';
+import { d as database } from './chunks/db-Byk5c9nh.js';
+import './chunks/eventbus-DzIYHcTJ.js';
+import './chunks/firebase-DTGT__LK.js';
 
 class Admin {
     constructor() {
@@ -45,8 +45,8 @@ class Admin {
     }
 
     async getJobsByStatus() {
-        const colRef = collection(firestore, "jobs");
-        const snapshot = await getDocs(colRef);
+        //const colRef = collection(firestore, "jobs");
+        //const snapshot = await getDocs(colRef);
 
         let result = {
             requested: { status: "requested", count: 0, jobs: [] },
@@ -56,8 +56,9 @@ class Admin {
             completed: { status: "completed", count: 0, jobs: [] },
         };
 
-        snapshot.forEach((doc) => {
-            let data = doc.data();
+        const rows = await database.query("jobs");
+
+        rows.forEach((data) => {
             let status = result[data.status];
             status.count += 1;
             status.jobs.push(data);
@@ -110,7 +111,10 @@ class Admin {
 }
 
 const admin = new Admin();
-window.admin = admin;
+
+if (typeof window !== "undefined") {
+    window._vy_admin = admin;
+}
 
 export { Admin, admin };
 //# sourceMappingURL=rsadmin.js.map

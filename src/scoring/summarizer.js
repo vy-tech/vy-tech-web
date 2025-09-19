@@ -1,24 +1,18 @@
-import {
-    firestore,
-    doc,
-    getDocs,
-    setDoc,
-    query,
-    collection,
-    where,
-} from "../rsdb.js";
-import { app } from "../rsfirebase.js";
-import {
-    getStorage,
-    ref,
-    uploadString,
-    getDownloadURL,
-} from "firebase/storage";
+import { database } from "../data/db.js";
+import { storage } from "../data/storage.js";
+// import { app } from "../data/firebase.js";
+// import {
+//     getStorage,
+//     ref,
+//     uploadString,
+//     getDownloadURL,
+// } from "firebase/storage";
 
 import { progress } from "../viz/progress.js";
 import { eventBus } from "../eventbus.js";
 import { Score } from "./scoring.js";
 import { activeBoxManager } from "./activeBoxManager.js";
+import { events } from "../data/events.js";
 
 class Summarizer {
     constructor() {
@@ -28,6 +22,10 @@ class Summarizer {
         eventBus.addEventListener("ui.requestSummaryRebuild", async (e) => {
             const { hierarchy } = e.detail;
             await this.rebuild(hierarchy);
+        });
+
+        eventBus.addEventListener("ui.requestSummaryRebuildAll", async (e) => {
+            await this.rebuildAll();
         });
 
         eventBus.addEventListener("viz.cameraChanged", (e) => {
@@ -41,6 +39,20 @@ class Summarizer {
 
     getAll() {
         return this.summaries;
+    }
+
+    async rebuildAll() {
+        const allEvents = await events.getAvailableEvents();
+        for (const event of allEvents) {
+            const { hierarchy } = event;
+            const parts = hierarchy.split(":");
+
+            for (let i = 1; i <= 5; i++) {
+                const camera = i.toString().padStart(2, "0");
+                const h = `${parts[0]}-${parts[1]}-${camera}`;
+                await this.rebuild(h);
+            }
+        }
     }
 
     async rebuild(hierarchy) {
@@ -163,9 +175,11 @@ class Summarizer {
         let path = `summaries/${token}/${date}/summary-${token}-${date}-${camera}.json`;
 
         try {
-            let storage = getStorage(app);
-            let storageRef = ref(storage, path);
-            let url = await getDownloadURL(storageRef);
+            // let storage = getStorage(app);
+            // let storageRef = ref(storage, path);
+            // let url = await getDownloadURL(storageRef);
+            console.log(`Loading summary from storage: ${hierarchy}...`);
+            let url = await storage.getDownloadUrl(path);
 
             return await this.loadFromUrl(url);
         } catch (error) {
@@ -175,17 +189,23 @@ class Summarizer {
     }
 
     async saveToStorage(hierarchy, summary) {
-        let storage = getStorage(app);
         let [token, date, camera] = hierarchy.split("-");
         let path = `summaries/${token}/${date}/summary-${token}-${date}-${camera}.json`;
-        let storageRef = ref(storage, path);
 
-        console.log(`Saving summary to storage ${path}...`);
-        await uploadString(storageRef, JSON.stringify(summary));
+        console.log(`Saving summary to storage: ${path}...`);
+
+        //let storage = getStorage(app);
+        // let storageRef = ref(storage, path);
+        // await uploadString(storageRef, JSON.stringify(summary));
+
+        await storage.uploadString(path, JSON.stringify(summary));
+
+        console.log(`Saved summary to storage.`);
     }
 
     async saveToFirestore(hierarchy, summary) {
         var { closed, pct } = progress.show("Saving summary...");
+        console.log(`Saving summary to firestore: ${hierarchy}...`);
 
         const batchSize = 1000;
         for (let i = 0; i < summary.length; i += batchSize) {
@@ -194,16 +214,20 @@ class Summarizer {
             const key = `${hierarchy}-${i.toString().padStart(5, "0")}`;
             const rows = summary.slice(i, i + batchSize);
             const data = {
+                id: key,
                 hierarchy: hierarchy,
                 offset: i,
                 rows: rows,
             };
 
-            const docRef = doc(firestore, "summaries", key);
-            await setDoc(docRef, data);
+            console.log("Saving summary batch:", key, rows.length, "rows");
+            await database.set("summaries", data);
+            //const docRef = doc(firestore, "summaries", key);
+            //await setDoc(docRef, data);
         }
 
         closed.val = true;
+        console.log(`Saved summary to firestore.`);
     }
 
     async loadFromFirestore(hierarchy) {
@@ -211,13 +235,17 @@ class Summarizer {
         let batches = [];
 
         // Get summaries by hierarchy
-        const summariesRef = collection(firestore, "summaries");
-        const q = query(summariesRef, where("hierarchy", "==", hierarchy));
-        const snap = await getDocs(q);
+        //const summariesRef = collection(firestore, "summaries");
+        //const q = query(summariesRef, where("hierarchy", "==", hierarchy));
+        //const snap = await getDocs(q);
+        console.log(`Loading summary from firestore: ${hierarchy}...`);
+        const rows = await database.query("summaries", {
+            hierarchy: hierarchy,
+        });
 
         // Ensure they're sorted by offset
-        snap.forEach((doc) => {
-            batches.push(doc.data());
+        rows.forEach((data) => {
+            batches.push(data);
         });
         batches.sort((a, b) => a.offset - b.offset);
 

@@ -14,6 +14,17 @@ export default {
         rsprofile: "src/rsprofile.js",
         rsadmin: "src/rsadmin.js",
     },
+    external: (id) => {
+        // Ignore Firebase Admin SDK imports
+        if (id.startsWith("firebase-admin/")) {
+            return true;
+        }
+        // Ignore the service credential JSON file
+        if (id.includes("firebase-svc-cred.json")) {
+            return true;
+        }
+        return false;
+    },
     output: {
         dir: "public/js",
         format: "esm", // output as ESM

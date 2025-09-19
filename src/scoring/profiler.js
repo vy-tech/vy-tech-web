@@ -1,4 +1,4 @@
-import { firestore, doc, getDoc } from "../rsdb.js";
+import { database } from "../data/db.js";
 
 class Profiler {
     constructor() {
@@ -11,11 +11,10 @@ class Profiler {
          * @param {string} profileId - The ID of the profile to load.
          */
 
-        var docRef = doc(firestore, "profiles", id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            console.log("Profile loaded:", docSnap.data());
-            this.profile = docSnap.data();
+        let profileData = await database.get("profiles", id);
+        if (profileData) {
+            console.log("Profile loaded:", profileData);
+            this.profile = profileData;
             return this.profile;
         } else {
             console.error("No profile found with ID:", id);

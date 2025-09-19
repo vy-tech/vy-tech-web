@@ -48,13 +48,13 @@ class LinkedPlayer {
         this.embedOffset = embedVideo.offset;
 
         const videoId = this.embedVideoId;
-        const origin = `https://${window.location.host}`;
+        const origin = window.location.origin;
         this.container.innerHTML =
             '<iframe id="report-embed-player" width="500" height="281" ' +
+            'class="w-full h-auto aspect-video" ' +
             `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${origin}"` +
-            ' title="YouTube video player" frameborder="0" allow="accelerometer; ' +
-            "autoplay; clipboard-write; encrypted-media; gyroscope; " +
-            'picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" ' +
+            ' title="YouTube video player" frameborder="0" allow="web-share"' +
+            ' referrerpolicy="strict-origin-when-cross-origin" ' +
             "allowfullscreen></iframe>";
         this.embedPlayer = new YT.Player("report-embed-player");
     }

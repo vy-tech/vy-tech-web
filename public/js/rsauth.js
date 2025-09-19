@@ -1,5 +1,6 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { L as Logger, h as getExperimentalSetting, j as isMobileCordova, k as isReactNative, _ as _registerComponent, C as Component, r as registerVersion, l as isBrowserExtension, S as SDK_VERSION, E as ErrorFactory, a as _isFirebaseServerApp, b as getModularInstance, m as getUA, n as createSubscribe, o as LogLevel, F as FirebaseError, q as base64Decode, s as querystring, i as isCloudWorkstation, g as getApp, c as _getProvider, t as getDefaultEmulatorHost, v as deepEqual, p as pingServer, u as updateEmulatorBanner, w as querystringDecode, x as extractQuerystring, y as isIE, z as isEmpty, A as isCloudflareWorker, f as app } from './chunks/rsfirebase-IdUc1I6T.js';
+import { a as app } from './chunks/firebase-DTGT__LK.js';
+import { L as Logger, g as getExperimentalSetting, i as isMobileCordova, a as isReactNative, _ as _registerComponent, C as Component, r as registerVersion, b as isBrowserExtension, S as SDK_VERSION, E as ErrorFactory, c as _isFirebaseServerApp, d as getModularInstance, e as getUA, f as createSubscribe, h as LogLevel, F as FirebaseError, j as base64Decode, q as querystring, k as isCloudWorkstation, l as getApp, m as _getProvider, n as getDefaultEmulatorHost, o as deepEqual, p as pingServer, u as updateEmulatorBanner, s as querystringDecode, t as extractQuerystring, v as isIE, w as isEmpty, x as isCloudflareWorker } from './chunks/index.esm2017-D8q59gHf.js';
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.

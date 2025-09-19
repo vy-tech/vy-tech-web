@@ -1,12 +1,6 @@
-//import van from "vanjs-core";
-import { firestore, doc, getDoc } from "../rsdb.js";
-//import { Modal } from "vanjs-ui";
-
 import { activeBoxManager } from "./activeBoxManager.js";
-import { summarizer } from "./summarizer.js";
 import { profiler } from "./profiler.js";
 import { eventBus } from "../eventbus.js";
-import { timeUtil } from "../util/time.js";
 
 const Box = Object.freeze({
     X: 0,

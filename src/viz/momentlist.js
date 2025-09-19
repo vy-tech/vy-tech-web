@@ -44,6 +44,8 @@ class MomentList {
             const moment = moments[i];
             const momentDiv = document.getElementById(`report-moment-${i + 1}`);
 
+            if (!momentDiv) continue;
+
             if (moment) {
                 momentDiv.querySelector(
                     "div.text-sm"
