@@ -41,11 +41,13 @@ class People {
         const ctx = this.canvas.getContext("2d");
 
         const labels = [];
-        const borderColors = [];
+        const peopleColors = [];
+        const scoreColors = [];
 
         for (let i = 0; i < 100; i++) {
             labels.push(`${i + 1}%`);
-            borderColors.push("#3fa7d7");
+            peopleColors.push("#3fa7d7");
+            scoreColors.push("#fdb080");
         }
 
         if (this.chart) this.chart.destroy();
@@ -59,7 +61,14 @@ class People {
                         label: "People",
                         data: labels.map(() => 0),
                         fill: false,
-                        borderColor: borderColors,
+                        borderColor: peopleColors,
+                        borderWidth: 1,
+                    },
+                    {
+                        label: "Score",
+                        data: labels.map(() => 0),
+                        fill: false,
+                        borderColor: scoreColors,
                         borderWidth: 1,
                     },
                 ],
@@ -68,7 +77,7 @@ class People {
                 responsive: true,
                 plugins: {
                     legend: {
-                        display: false,
+                        display: true,
                     },
                 },
             },
@@ -103,7 +112,8 @@ class People {
         // if (this.lastSummary === summary) return;
         // this.lastSummary = summary;
 
-        let data = [];
+        let peopleData = [];
+        let scoreData = [];
         let labels = [];
 
         // for (let i = 0; i < 100; i++) {
@@ -117,20 +127,24 @@ class People {
         for (let i = 0; i < 100; i++) {
             let idx = i * step;
             let people = 0;
+            let score = 0;
             let elapsedTime = 0;
 
             for (let j = 0; j < step; j++) {
                 people += summary[idx + j].people;
+                score += summary[idx + j].score;
                 elapsedTime += parseInt(summary[idx + j].startTime);
             }
 
-            data.push(people / step);
+            peopleData.push(people / step);
+            scoreData.push(score / step);
             labels.push(timeUtil.format(elapsedTime / step));
         }
 
         // Update the spider chart data
         this.chart.data.labels = labels;
-        this.chart.data.datasets[0].data = data;
+        this.chart.data.datasets[0].data = peopleData;
+        this.chart.data.datasets[1].data = scoreData;
         this.chart.update();
     }
 }

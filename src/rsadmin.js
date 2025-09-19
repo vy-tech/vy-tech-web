@@ -1,5 +1,5 @@
 import van from "vanjs-core";
-import { firestore, collection, getDocs } from "./rsdb.js";
+import { database } from "./data/db.js";
 
 class Admin {
     constructor() {
@@ -43,8 +43,8 @@ class Admin {
     }
 
     async getJobsByStatus() {
-        const colRef = collection(firestore, "jobs");
-        const snapshot = await getDocs(colRef);
+        //const colRef = collection(firestore, "jobs");
+        //const snapshot = await getDocs(colRef);
 
         let result = {
             requested: { status: "requested", count: 0, jobs: [] },
@@ -54,8 +54,9 @@ class Admin {
             completed: { status: "completed", count: 0, jobs: [] },
         };
 
-        snapshot.forEach((doc) => {
-            let data = doc.data();
+        const rows = await database.query("jobs");
+
+        rows.forEach((data) => {
             let status = result[data.status];
             status.count += 1;
             status.jobs.push(data);
@@ -109,4 +110,7 @@ class Admin {
 
 const admin = new Admin();
 export { Admin, admin };
-window.admin = admin;
+
+if (typeof window !== "undefined") {
+    window._vy_admin = admin;
+}

@@ -40,8 +40,8 @@ class Nav {
                     class: "w-[10%] max-w-[100px] bg-gray-200 dark:bg-gray-800 p-4 flex flex-col items-center",
                 },
                 img({
-                    src: "/img/RoarScoreLogoSquare.png",
-                    alt: "RoarScore Logo",
+                    src: "/img/vy-logo.png",
+                    alt: "Vy Logo",
                     class: "w-3/4 min-w-[35px] h-auto my-8",
                 }),
 

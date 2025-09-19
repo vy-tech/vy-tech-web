@@ -1,14 +1,5 @@
 import van from "vanjs-core";
-import { app } from "../rsfirebase.js";
-import {
-    getFirestore,
-    collection,
-    getDocs,
-    where,
-    orderBy,
-    query,
-    limit,
-} from "firebase/firestore";
+import { database } from "./db.js";
 import { eventBus } from "../eventbus.js";
 
 class Events {
@@ -21,50 +12,76 @@ class Events {
     }
 
     async loadFromFirestore(hierarchy) {
-        const firestore = getFirestore(app);
-        const eventsRef = collection(firestore, "events");
-        const q = query(
-            eventsRef,
-            where("hierarchy", "==", hierarchy),
-            limit(1)
-        );
-        const docs = await getDocs(q);
+        const events = await database.query("events", { hierarchy: hierarchy });
 
-        if (docs.empty) {
-            this.current = null;
-            return null;
-        } else {
-            let eventData = null;
-            docs.forEach((doc) => {
-                eventData = { id: doc.id, ...doc.data() };
-            });
-            this.current = eventData;
-            return eventData;
+        if (events && events.length > 0) {
+            this.current = events[0];
+            return this.current;
         }
+
+        this.current = null;
+        return null;
+        // const firestore = getFirestore(app);
+        // const eventsRef = collection(firestore, "events");
+        // const q = query(
+        //     eventsRef,
+        //     where("hierarchy", "==", hierarchy),
+        //     limit(1)
+        // );
+        // const docs = await getDocs(q);
+
+        // if (docs.empty) {
+        //     this.current = null;
+        //     return null;
+        // } else {
+        //     let eventData = null;
+        //     docs.forEach((doc) => {
+        //         eventData = { id: doc.id, ...doc.data() };
+        //     });
+        //     this.current = eventData;
+        //     return eventData;
+        // }
     }
 
-    async queryAvailableEvents() {
-        const firestore = getFirestore(app);
-        const eventsRef = collection(firestore, "events");
-        const q = query(
-            eventsRef,
-            where("status", "==", "available"),
-            orderBy("begin")
-        );
-        const docs = await getDocs(q);
+    // async queryAvailableEvents() {
+    //     const firestore = getFirestore(app);
+    //     const eventsRef = collection(firestore, "events");
+    //     const q = query(
+    //         eventsRef,
+    //         where("status", "==", "available"),
+    //         orderBy("begin")
+    //     );
+    //     const docs = await getDocs(q);
 
-        return docs;
-    }
+    //     return docs;
+    // }
+
+    // async getAvailableEvents() {
+    //     const docs = await this.queryAvailableEvents();
+    //     const result = [];
+    //     docs.forEach((doc) => {
+    //         result.push({ id: doc.id, ...doc.data() });
+    //     });
+
+    //     return result;
+    // }
 
     loadAvailableEvents(state) {
-        this.queryAvailableEvents().then((docs) => {
-            const result = [];
-            docs.forEach((doc) => {
-                result.push({ id: doc.id, ...doc.data() });
+        database.query("events", { status: "available" }).then((events) => {
+            events.sort((a, b) => {
+                return a.begin - b.begin;
             });
-
-            state.val = result;
+            state.val = events;
         });
+
+        // this.queryAvailableEvents().then((docs) => {
+        //     const result = [];
+        //     docs.forEach((doc) => {
+        //         result.push({ id: doc.id, ...doc.data() });
+        //     });
+
+        //     state.val = result;
+        // });
     }
 
     createOptionElement(eventData, selected) {

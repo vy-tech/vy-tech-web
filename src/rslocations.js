@@ -1,16 +1,6 @@
 import { van, rsv } from "./rsvan.js";
 import { eventBus } from "./eventbus.js";
-import {
-    firestore,
-    doc,
-    collection,
-    setDoc,
-    addDoc,
-    getDocs,
-    deleteDoc,
-    Form,
-    List,
-} from "./rsdb.js";
+import { Form, List } from "./data/db.js";
 
 class Locations {
     constructor() {

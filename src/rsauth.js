@@ -1,5 +1,5 @@
 import van from "vanjs-core";
-import { app } from "./rsfirebase.js";
+import { app } from "./data/firebase.js";
 
 import {
     getAuth,
