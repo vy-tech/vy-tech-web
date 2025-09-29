@@ -9,12 +9,12 @@ class People {
         this.canvas = null;
         this.isStale = true;
 
-        eventBus.addEventListener("viz.paint", (e) => {
+        eventBus.addEventListener("playback.timeupdate", (e) => {
             if (this.isStale) this.paint();
             this.isStale = false;
         });
 
-        eventBus.addEventListener("viz.cameraChanged", (e) => {
+        eventBus.addEventListener("playback.cameraChanged", (e) => {
             this.isStale = true;
         });
     }

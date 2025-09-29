@@ -8,19 +8,19 @@ class Ekg {
         this.container = null;
         this.score = null;
 
-        eventBus.addEventListener("viz.paint", (e) => {
+        eventBus.addEventListener("playback.timeupdate", (e) => {
             this.paint();
         });
 
-        eventBus.addEventListener("viz.pause", () => {
+        eventBus.addEventListener("playback.pause", () => {
             this.smoothie.stop();
         });
 
-        eventBus.addEventListener("viz.play", () => {
+        eventBus.addEventListener("playback.play", () => {
             this.smoothie.start();
         });
 
-        eventBus.addEventListener("viz.timeSeek", () => {
+        eventBus.addEventListener("playback.timeseek", () => {
             this.timeSeries.clear();
         });
     }

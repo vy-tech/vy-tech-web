@@ -1,17 +1,10 @@
 import { database } from "../data/db.js";
 import { storage } from "../data/storage.js";
-// import { app } from "../data/firebase.js";
-// import {
-//     getStorage,
-//     ref,
-//     uploadString,
-//     getDownloadURL,
-// } from "firebase/storage";
-
 import { progress } from "../viz/progress.js";
 import { eventBus } from "../eventbus.js";
 import { Score } from "./scoring.js";
 import { activeBoxManager } from "./activeBoxManager.js";
+import { Hierarchy } from "../util/hierarchy.js";
 import { events } from "../data/events.js";
 
 class Summarizer {
@@ -28,7 +21,7 @@ class Summarizer {
             await this.rebuildAll();
         });
 
-        eventBus.addEventListener("viz.cameraChanged", (e) => {
+        eventBus.addEventListener("playback.cameraChanged", (e) => {
             this.currentCamera = e.detail.camera;
         });
     }
@@ -41,23 +34,12 @@ class Summarizer {
         return this.summaries;
     }
 
-    async rebuildAll() {
-        const allEvents = await events.getAvailableEvents();
-        for (const event of allEvents) {
-            const { hierarchy } = event;
-            const parts = hierarchy.split(":");
-
-            for (let i = 1; i <= 5; i++) {
-                const camera = i.toString().padStart(2, "0");
-                const h = `${parts[0]}-${parts[1]}-${camera}`;
-                await this.rebuild(h);
-            }
-        }
-    }
-
     async rebuild(hierarchy) {
+        let hier = new Hierarchy(hierarchy);
+        hierarchy = hier.toString("-");
+
         let summary = await this.create(hierarchy);
-        await this.saveToFirestore(hierarchy, summary);
+        //await this.saveToFirestore(hierarchy, summary);
         await this.saveToStorage(hierarchy, summary);
         return summary;
     }
@@ -67,8 +49,15 @@ class Summarizer {
         var scoring = new Score();
 
         // Load fragments and initalize the schedule
-        let fragments = await scoring.getFragments(hierarchy);
-        await scoring.initLoadSchedule(fragments);
+        let fragments;
+
+        try {
+            fragments = await scoring.getFragments(hierarchy);
+            await scoring.initLoadSchedule(fragments);
+        } catch (error) {
+            console.error(`Error loading fragments for ${hierarchy}: ${error}`);
+            return [];
+        }
 
         scoring.resetWindow();
         let scores = {};
@@ -262,33 +251,33 @@ class Summarizer {
     }
 
     async ensure(hierarchy, cameras = 5) {
-        const [token, date] = hierarchy.split("-");
+        const hier = new Hierarchy(hierarchy);
 
-        console.log(`Ensuring summaries for ${token}-${date}...`);
+        console.log(`Ensuring summaries for ${hier.location}-${hier.date}...`);
 
         var { closed, pct } = progress.show("Loading summaries..");
 
         this.summaries = [];
         for (let camera = 1; camera <= cameras; camera++) {
-            camera = parseInt(camera).toString().padStart(2, "0");
-            const h = `${token}-${date}-${camera}`;
+            hier.camera = camera;
+            const h = hier.toString("-");
 
             console.log(`Loading ${h} from storage...`);
             let summary = await this.loadFromStorage(h);
 
-            if (!summary || !summary.length) {
-                console.log(`Loading ${h} from firestore..`);
-                summary = await this.loadFromFirestore(h);
-                await this.saveToStorage(h, summary);
-            }
+            // if (!summary || !summary.length) {
+            //     console.log(`Loading ${h} from firestore..`);
+            //     summary = await this.loadFromFirestore(h);
+            //     await this.saveToStorage(h, summary);
+            // }
 
             if (!summary || !summary.length) {
                 console.warn(
                     `SUMMARY ${h} MISSING.  CREATING.  THIS WILL TAKE AWHILE...`
                 );
 
-                summary = await this.create(hierarchy);
-                await this.saveToFirestore(h, summary);
+                summary = await this.create(h);
+                //await this.saveToFirestore(h, summary);
                 await this.saveToStorage(h, summary);
             }
 
@@ -296,11 +285,119 @@ class Summarizer {
             this.summaries.push(summary);
         }
 
+        hier.camera = 1;
+        await this.ensureEventSummary(hier.toString(":"));
+
         closed.val = true;
 
         eventBus.fire("summarizer.ready");
 
         return this.summaries;
+    }
+
+    createCameraSummary(camera = 1) {
+        const summary = this.summaries[camera - 1] || [];
+
+        if (!summary.length) {
+            return null;
+        }
+
+        const result = {
+            totalScore: 0,
+            totalPeople: 0,
+            seconds: summary.length,
+            averageScore: 0,
+            averagePeople: 0,
+            minScore: 99999,
+            maxScore: -99999,
+            minPeople: 99999,
+            maxPeople: -99999,
+        };
+
+        for (const row of summary) {
+            result.totalScore += row.score;
+            result.totalPeople += row.people;
+            result.minScore = Math.min(result.minScore, row.score);
+            result.maxScore = Math.max(result.maxScore, row.score);
+            result.minPeople = Math.min(result.minPeople, row.people);
+            result.maxPeople = Math.max(result.maxPeople, row.people);
+        }
+
+        result.averageScore = Math.round(result.totalScore / result.seconds);
+        result.averagePeople = Math.round(result.totalPeople / result.seconds);
+
+        return result;
+    }
+
+    combineCameraSummaries(a, b) {
+        const totalSeconds = a.seconds + b.seconds;
+
+        a.totalPeople += b.totalPeople;
+        a.totalScore += b.totalScore;
+        a.seconds = Math.max(a.seconds, b.seconds);
+        a.minScore = Math.min(a.minScore, b.minScore);
+        a.maxScore = Math.max(a.maxScore, b.maxScore);
+        a.minPeople = Math.min(a.minPeople, b.minPeople);
+        a.maxPeople = Math.max(a.maxPeople, b.maxPeople);
+        a.averageScore = Math.round(a.totalScore / totalSeconds);
+        a.averagePeople = Math.round(a.totalPeople / totalSeconds);
+
+        return a;
+    }
+
+    createEventSummary(relevantCameras = 4) {
+        const summary = this.createCameraSummary(1);
+        if (!summary) {
+            return null;
+        }
+
+        for (let camera = 2; camera <= relevantCameras; camera++) {
+            const camSummary = this.createCameraSummary(camera);
+            if (camSummary) {
+                this.combineCameraSummaries(summary, camSummary);
+            }
+        }
+
+        summary.cameras = this.getCameraCount();
+
+        return summary;
+    }
+
+    getCameraCount() {
+        let count = 0;
+        for (const summary of this.summaries) {
+            if (summary && summary.length) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    async saveEventSummary(hierarchy, summary) {
+        await events.updateEventSummary(hierarchy, summary);
+    }
+
+    async rebuildEventSummary(hierarchy, relevantCameras = 4) {
+        if (!this.summaries.length) {
+            await this.ensure(hierarchy);
+        }
+
+        const summary = this.createEventSummary(hierarchy, relevantCameras);
+        await this.saveEventSummary(hierarchy, summary);
+        return summary;
+    }
+
+    async ensureEventSummary(hierarchy, relevantCameras = 4) {
+        const event = await events.getByHierarchy(hierarchy);
+        if (event) {
+            if (!event.summary) {
+                console.log(`Event summary missing.  Rebuilding...`);
+                return await this.rebuildEventSummary(
+                    hierarchy,
+                    relevantCameras
+                );
+            }
+        }
     }
 }
 

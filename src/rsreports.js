@@ -4,7 +4,7 @@ import { eventBus } from "./eventbus.js";
 
 import { scoring } from "./scoring/scoring.js";
 import { summarizer } from "./scoring/summarizer.js";
-import { profiler } from "./scoring/profiler.js";
+import { profiles } from "./data/profiles.js";
 import { activeBoxManager } from "./scoring/activeBoxManager.js";
 
 import { events } from "./data/events.js";
@@ -20,6 +20,7 @@ import { people } from "./viz/people.js";
 import { genderDemo, ageDemo } from "./viz/demographics.js";
 import { momentlist } from "./viz/momentlist.js";
 import { linkedPlayer } from "./viz/linkedPlayer.js";
+import { annotationLog } from "./viz/annotationlog.js";
 
 class Reports {
     constructor() {
@@ -35,50 +36,51 @@ class Reports {
         this.tsIndex = 0;
 
         this.event = null;
+        this.wallclockStartTimeUTC = null;
     }
 
-    async loadTranscript() {
-        const [token, date] = this.hierarchy.split("-");
+    // async loadTranscript() {
+    //     const [token, date] = this.hierarchy.split("-");
 
-        const url = `https://storage.roarscore.ai/production/play/${token}/${date}/transcript-${token}-${date}.txt`;
+    //     const url = `https://storage.roarscore.ai/production/play/${token}/${date}/transcript-${token}-${date}.txt`;
 
-        try {
-            let response = await fetch(url);
+    //     try {
+    //         let response = await fetch(url);
 
-            if (response.ok) {
-                let lines = await response.text();
-                lines = lines.split(/\s*[\r\n]+\s*/);
+    //         if (response.ok) {
+    //             let lines = await response.text();
+    //             lines = lines.split(/\s*[\r\n]+\s*/);
 
-                let offset = 0;
-                let result = [];
-                if (/^[\+\-]/.test(lines[0])) {
-                    let line = lines.shift();
-                    offset = timeUtil.toSeconds(line.substr(1), true);
-                    if (line[0] == "-") offset = -offset;
-                }
+    //             let offset = 0;
+    //             let result = [];
+    //             if (/^[\+\-]/.test(lines[0])) {
+    //                 let line = lines.shift();
+    //                 offset = timeUtil.toSeconds(line.substr(1), true);
+    //                 if (line[0] == "-") offset = -offset;
+    //             }
 
-                while (lines.length) {
-                    let t = lines.shift();
-                    let msg = lines.shift();
-                    t = timeUtil.toSeconds(t, true) + offset;
-                    result.push({ time: t, msg: msg });
-                }
+    //             while (lines.length) {
+    //                 let t = lines.shift();
+    //                 let msg = lines.shift();
+    //                 t = timeUtil.toSeconds(t, true) + offset;
+    //                 result.push({ time: t, msg: msg });
+    //             }
 
-                return result;
-            }
-        } catch (e) {
-            console.log(`While fetching transcript: ${e}`);
-        }
+    //             return result;
+    //         }
+    //     } catch (e) {
+    //         console.log(`While fetching transcript: ${e}`);
+    //     }
 
-        return [];
-    }
+    //     return [];
+    // }
 
     async init() {
         this.initListeners();
 
-        await profiler.loadFromFirestore(this.profileId);
+        await profiles.getById(this.profileId);
 
-        this.event = await events.loadFromFirestore(
+        this.event = await events.getByHierarchy(
             this.hierarchy.replaceAll("-", ":")
         );
 
@@ -88,7 +90,11 @@ class Reports {
 
         //momentlist.update();
 
-        this.transcript = await this.loadTranscript();
+        //this.transcript = await this.loadTranscript();
+
+        eventBus.fire("playback.ready", {
+            hierarchy: this.hierarchy,
+        });
     }
 
     changeCamera(camera) {
@@ -106,7 +112,7 @@ class Reports {
         this.hls.loadSource(this.playlistUrl);
         this.player.play();
 
-        eventBus.fire("viz.cameraChanged", { camera: camera });
+        eventBus.fire("playback.cameraChanged", { camera: camera });
     }
 
     initListeners() {
@@ -187,7 +193,7 @@ class Reports {
                             class: "w-full md:w-auto md:flex-grow min-w-[150px] max-w-[250px]",
                         },
 
-                        annotations.createElement()
+                        annotationLog.createElement()
                         //momentlist.createElement()
                     ),
 
@@ -228,13 +234,13 @@ class Reports {
                             {
                                 class: "text-sm text-gray-700",
                             },
-                            div(
-                                {
-                                    id: "report-current-play",
-                                    class: "text-sm text-gray-700 bg-white border mt-[-15px] p-2",
-                                },
-                                "⚾️ [No Transcript Available]"
-                            ),
+                            // div(
+                            //     {
+                            //         id: "report-current-play",
+                            //         class: "text-sm text-gray-700 bg-white border mt-[-15px] p-2",
+                            //     },
+                            //     "⚾️ [No Transcript Available]"
+                            // ),
 
                             div({
                                 id: "report-box-debug",
@@ -296,8 +302,6 @@ class Reports {
                                     onclick: () => {
                                         console.log("Add annotation");
                                         eventBus.fire("ui.addAnnotation", {
-                                            currentTime:
-                                                this.player.currentTime(),
                                             hierarchy: this.hierarchy,
                                         });
                                     },
@@ -392,13 +396,21 @@ class Reports {
                 const fragments = data.details.fragments;
                 this.fragments = fragments;
 
+                this.wallclockStartTimeUTC = fragments[0].programDateTime;
+
                 await this.score.initLoadSchedule(fragments);
+
+                eventBus.fire("playback.loaded", {
+                    duration: data.details.totalduration,
+                    fragments: fragments,
+                    wallclockStartTimeUTC: this.wallclockStartTimeUTC,
+                });
             });
 
             // Correct Video.js event for when video starts playing
             this.player.on("play", () => {
                 console.log("Video started playing");
-                eventBus.fire("viz.play");
+                eventBus.fire("playback.play");
 
                 if (this.startTimeOffset > 0) {
                     window.setTimeout(() => {
@@ -411,26 +423,20 @@ class Reports {
             // Optional: Hide overlay when video is paused
             this.player.on("pause", () => {
                 console.log("Video paused");
-                eventBus.fire("viz.pause");
+                eventBus.fire("playback.pause");
             });
 
             // Video.js time events
             this.player.on("timeupdate", async () => {
                 if (this.isSeeking) return;
 
-                const currentTime = this.player.currentTime();
+                const detail = { currentTime: this.player.currentTime() };
+                eventBus.fire("playback.timeupdate", detail);
 
-                eventBus.fire("viz.paint", { currentTime: currentTime });
+                await this.score.handleTimeUpdate(detail.currentTime);
 
-                await this.score.handleTimeUpdate(currentTime);
-
-                this.updateTranscript();
                 this.player.userActive(true); // Ensure active state
                 this.player.controlBar.show(); // Force control bar to show
-
-                // console.log(
-                //     `Current time: ${currentTime} score: ${this.score.currentScore} cores: ${this.score.currentCores}`
-                // );
             });
 
             // Alternative: seeked event (when user seeks to a new position)
@@ -439,7 +445,9 @@ class Reports {
                 const currentTime = this.player.currentTime();
                 console.log("Seeked to time:", currentTime);
                 await this.score.handleTimeSeek(currentTime);
-                eventBus.fire("viz.timeSeek", { currentTime: currentTime });
+                eventBus.fire("playback.timeseek", {
+                    currentTime: currentTime,
+                });
             });
 
             // Alternative: seeking event (while user is seeking)
@@ -454,35 +462,35 @@ class Reports {
         });
     }
 
-    updateTranscript() {
-        const currentTime = this.player.currentTime();
-        if (!this.transcript || !this.transcript.length) return;
+    // updateTranscript() {
+    //     const currentTime = this.player.currentTime();
+    //     if (!this.transcript || !this.transcript.length) return;
 
-        if (
-            this.transcript &&
-            this.transcript[this.tsIndex].time > currentTime
-        ) {
-            this.tsIndex = 0;
-        }
+    //     if (
+    //         this.transcript &&
+    //         this.transcript[this.tsIndex].time > currentTime
+    //     ) {
+    //         this.tsIndex = 0;
+    //     }
 
-        while (
-            this.transcript &&
-            this.tsIndex < this.transcript.length - 1 &&
-            this.transcript[this.tsIndex].time <= currentTime
-        ) {
-            this.tsIndex += 1;
-        }
+    //     while (
+    //         this.transcript &&
+    //         this.tsIndex < this.transcript.length - 1 &&
+    //         this.transcript[this.tsIndex].time <= currentTime
+    //     ) {
+    //         this.tsIndex += 1;
+    //     }
 
-        if (
-            this.transcript &&
-            this.transcript[this.tsIndex] &&
-            this.tsIndex > 0
-        ) {
-            const ts = this.transcript[this.tsIndex - 1];
-            document.getElementById("report-current-play").innerText =
-                "⚾️ " + timeUtil.format(ts.time, true) + " - " + ts.msg;
-        }
-    }
+    //     if (
+    //         this.transcript &&
+    //         this.transcript[this.tsIndex] &&
+    //         this.tsIndex > 0
+    //     ) {
+    //         const ts = this.transcript[this.tsIndex - 1];
+    //         document.getElementById("report-current-play").innerText =
+    //             "⚾️ " + timeUtil.format(ts.time, true) + " - " + ts.msg;
+    //     }
+    // }
 
     addHeatmapListeners() {
         eventBus.addEventListener("heatmap.click", (e) => {
@@ -515,7 +523,7 @@ class Reports {
         const debugDiv = document.getElementById("report-box-debug");
         debugDiv.classList.remove("hidden");
 
-        const profile = profiler.profile.emotions;
+        const profile = profiles.profile.emotions;
 
         let html =
             '<table class="w-full"><tr><th>Emotion</th><th>Core</th><th>Confidence</th><th>Profile</th><th>Score</th></tr>';

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html class="dark">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,8 +9,16 @@
         <script src="https://cdn.tailwindcss.com"></script>
 
         <script>
-            tailwind.config = { theme: { extend: { fontFamily: { sans:
-            ['Mako','Roboto','Arial','sans-serif'] } } } };
+            tailwind.config = { 
+                darkMode: 'class',
+                theme: { 
+                    extend: { 
+                        fontFamily: { 
+                            sans: ['Mako','Roboto','Arial','sans-serif'] 
+                        } 
+                    } 
+                } 
+            };
         </script>
    
         <style>
@@ -28,6 +36,11 @@
             href="https://vjs.zencdn.net/8.23.3/video-js.css"
             rel="stylesheet"
         />
+
+        <link rel="stylesheet" href="/css/ag-grid.css">
+        <link rel="stylesheet" href="/css/ag-theme-alpine-dark.css">
+        <link rel="stylesheet" href="/css/ag-overrides.css">
+
         <script src="https://vjs.zencdn.net/8.23.3/video.min.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
         <script type="text/javascript" src="/npm/smoothie.js"></script>

@@ -1,5 +1,89 @@
+import { eventBus } from "../eventbus.js";
+import { DateTime } from "luxon";
+
 class Time {
-    constructor() {}
+    constructor() {
+        this.wallclockStartTime = null;
+        this.playbackTime = 0;
+        this.localTimezone = "America/Los_Angeles";
+
+        eventBus.on("playback.loaded", (e) => {
+            this.wallclockStartTime = e.detail.wallclockStartTimeUTC;
+        });
+
+        eventBus.on("playback.timeupdate", (e) => {
+            this.playbackTime = e.detail.currentTime;
+        });
+
+        eventBus.on("playback.timeseek", (e) => {
+            this.playbackTime = e.detail.currentTime;
+        });
+    }
+
+    get playbackLocalTime() {
+        /** Returns the current playback time in local wallclock time */
+        if (!this.wallclockStartTime || this.playbackTime === null) {
+            return null;
+        }
+
+        // Parse the UTC start time from JavaScript Date object
+        const startDate = new Date(this.wallclockStartTime);
+        const startDateTime = DateTime.fromJSDate(startDate, {
+            zone: "utc",
+        });
+        const currentDateTime = startDateTime.plus({
+            seconds: this.playbackTime,
+        });
+
+        // Convert to local timezone
+        return currentDateTime.setZone(this.localTimezone);
+    }
+
+    get playbackLocalString() {
+        const localTime = this.playbackLocalTime;
+        if (!localTime) return null;
+
+        // Use Luxon's toFormat method instead of toLocaleString
+        return localTime.toFormat("MM/dd/yyyy HH:mm:ss");
+    }
+
+    toSecondsFromLocalString(timeString) {
+        /** Converts a local time string (MM/DD/YYYY HH:MM:SS) to seconds since playback start */
+        if (!this.wallclockStartTime) {
+            throw new Error("Wallclock start time is not set");
+        }
+
+        try {
+            // Parse the input string as a local time in the specified timezone
+            const inputDateTime = DateTime.fromFormat(
+                timeString,
+                "MM/dd/yyyy HH:mm:ss",
+                { zone: this.localTimezone }
+            );
+
+            if (!inputDateTime.isValid) {
+                throw new Error(
+                    "Invalid date format. Please use MM/DD/YYYY HH:MM:SS"
+                );
+            }
+
+            // Convert wallclock start time to Luxon DateTime
+            const startDateTime = DateTime.fromJSDate(
+                new Date(this.wallclockStartTime),
+                { zone: "utc" }
+            );
+
+            // Calculate the difference in milliseconds, then convert to seconds
+            const diffInMs =
+                inputDateTime.toMillis() - startDateTime.toMillis();
+            const diffInSeconds = diffInMs / 1000;
+
+            // Return the difference (can be negative if input time is before start time)
+            return diffInSeconds;
+        } catch (error) {
+            throw new Error(`Error parsing time string: ${error.message}`);
+        }
+    }
 
     format(seconds, includeSeconds = false) {
         let hours = Math.floor(seconds / 3600);
@@ -41,5 +125,10 @@ class Time {
 }
 
 const timeUtil = new Time();
+
+if (typeof window !== "undefined") {
+    window._vy_timeUtil = timeUtil;
+}
+
 export default timeUtil;
 export { timeUtil, Time };

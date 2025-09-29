@@ -9,7 +9,7 @@ class CameraMap {
         this.canvas = null;
         this.second = null;
 
-        eventBus.addEventListener("viz.paint", (e) => {
+        eventBus.addEventListener("playback.timeupdate", (e) => {
             this.second = Math.floor(e.detail.currentTime);
             this.paint();
         });

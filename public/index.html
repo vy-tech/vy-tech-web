@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,6 +9,7 @@
 
         <script>
             tailwind.config = {
+                darkMode: 'class',
                 theme: {
                     extend: {
                         fontFamily: {
@@ -20,7 +21,7 @@
         </script>
     </head>
     <body
-        class="flex flex-col items-center h-screen bg-gray-800 m-0 pt-[12.5vh]"
+        class="flex flex-col items-center h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 m-0 pt-[12.5vh]"
     >
         <img src="/img/vy-logo.png" alt="Vy Logo" class="w-1/4 h-auto" />
         <a

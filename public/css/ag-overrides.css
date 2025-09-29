@@ -1,0 +1,127 @@
+/* AG Grid Dark Theme Overrides */
+.ag-theme-alpine-dark {
+    /* Primary brand colors */
+    
+    --ag-alpine-active-color: #4053b4;
+    --ag-selected-row-background-color: rgba(64, 83, 180, 0.2);
+    --ag-row-hover-color: rgba(63, 167, 215, 0.2);
+    --ag-column-hover-color: rgba(63, 167, 215, 0.2);
+    
+    /* Main grid colors */
+    --ag-background-color: #1f2937;
+    --ag-foreground-color: #cccdcd;
+    
+    /* Header colors */
+    --ag-header-background-color: #374151;
+    --ag-header-foreground-color: #f9fafb;
+    --ag-header-cell-hover-background-color: #4b5563;
+    
+    /* Panel and control colors */
+    --ag-panel-background-color: #374151;
+    --ag-control-panel-background-color: #374151;
+    --ag-subheader-background-color: #374151;
+    
+    /* Pagination/footer colors */
+    --ag-status-bar-background-color: #374151;
+    --ag-status-bar-foreground-color: #f9fafb;
+    
+    /* Border colors */
+    --ag-border-color: #4b5563;
+    --ag-secondary-border-color: #6b7280;
+    
+    /* Row colors */
+    --ag-odd-row-background-color: #2d3748;
+    
+    /* Input and filter colors */
+    --ag-input-background-color: #374151;
+    --ag-input-foreground-color: #f9fafb;
+    --ag-input-border-color: #4b5563;
+    
+    /* Force background color */
+    background-color: #1f2937 !important;
+}
+
+/* Row styling */
+.ag-theme-alpine-dark .ag-row {
+    background-color: #1f2937;
+    color: #cccdcd;
+
+}
+
+.ag-theme-alpine-dark .ag-row.ag-row-odd {
+    background-color: #2d3748;
+    color: #cccdcd;
+}
+
+.ag-theme-alpine-dark .ag-row:hover {
+    background-color: rgba(63, 167, 215, 0.2) !important;
+}
+
+/* Additional specific element overrides */
+.ag-theme-alpine-dark .ag-header {
+    background-color: #374151 !important;
+    color: #f9fafb !important;
+}
+
+.ag-theme-alpine-dark .ag-status-bar,
+.ag-theme-alpine-dark .ag-paging-panel {
+    background-color: #374151 !important;
+    color: #f9fafb !important;
+}
+
+.ag-theme-alpine-dark .ag-header-cell {
+    background-color: #374151 !important;
+    color: #f9fafb !important;
+    border-color: #4b5563 !important;
+}
+
+.ag-theme-alpine-dark .ag-header-cell:hover {
+    background-color: #4b5563 !important;
+}
+
+/* Pagination controls */
+.ag-theme-alpine-dark .ag-paging-button {
+    background-color: #374151 !important;
+    color: #f9fafb !important;
+    border-color: #4b5563 !important;
+}
+
+.ag-theme-alpine-dark .ag-paging-button:hover {
+    background-color: #4b5563 !important;
+}
+
+.ag-theme-alpine-dark .ag-paging-button[disabled] {
+    background-color: #2d3748 !important;
+    color: #6b7280 !important;
+}
+
+/* Filter menu styling */
+.ag-theme-alpine-dark .ag-menu {
+    background-color: #374151 !important;
+    color: #f9fafb !important;
+    border-color: #4b5563 !important;
+}
+
+.ag-theme-alpine-dark .ag-menu-option {
+    color: #f9fafb !important;
+}
+
+.ag-theme-alpine-dark .ag-menu-option:hover {
+    background-color: #4b5563 !important;
+}
+
+/* Input fields in filters */
+.ag-theme-alpine-dark .ag-input-field-input {
+    background-color: #374151 !important;
+    color: #f9fafb !important;
+    border-color: #4b5563 !important;
+}
+
+.ag-theme-alpine-dark .ag-input-field-input:focus {
+    border-color: #4053b4 !important;
+    box-shadow: 0 0 0 2px rgba(64, 83, 180, 0.2) !important;
+}
+
+[class*="ag-theme-"] {
+    --ag-background-color: #1f2937;
+}

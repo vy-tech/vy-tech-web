@@ -10,7 +10,7 @@ class MomentFinder {
             this.find();
         });
 
-        eventBus.addEventListener("viz.cameraChanged", () => {
+        eventBus.addEventListener("playback.cameraChanged", () => {
             this.find();
         });
     }

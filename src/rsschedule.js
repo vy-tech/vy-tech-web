@@ -1,14 +1,17 @@
 import van from "vanjs-core";
 
+import { eventgrid } from "./viz/eventgrid.js";
+
 class Schedule {
     constructor() {}
 
     init() {
         this.addElements();
+        eventgrid.refresh();
     }
 
     addElements(parentElement) {
-        const { a, div, main, h1 } = van.tags;
+        const { div, main } = van.tags;
         parentElement =
             parentElement ||
             document.getElementById("container") ||
@@ -17,10 +20,10 @@ class Schedule {
         van.add(
             parentElement,
             main(
-                { class: "w-[90%] p-4 overflow-auto" },
+                { class: "w-[90%] h-screen p-4 overflow-auto" },
                 div(
-                    { class: "flex justify-center items-center" },
-                    h1("Schedule")
+                    { class: "flex justify-center items-center h-full" },
+                    eventgrid.createElement({ class: "w-full h-full" })
                 )
             )
         );
