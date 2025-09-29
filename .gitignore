@@ -75,6 +75,7 @@ node_modules/
 
 # Optional REPL history
 .node_repl_history
+.vy_repl_history
 
 # Output of 'npm pack'
 *.tgz

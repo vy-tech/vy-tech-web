@@ -151,6 +151,14 @@ app.get("/playlist/:location-:date-:camera-:quality.m3u8", async (req, res) => {
         var initUrl = getVideoUrl(chunk.storage, `${prefix}-init.mp4`);
         var exprUrl = getVideoUrl(chunk.storage, chunk.expressionsPath);
         playlistLines.push(`#EXT-X-MAP:URI="${initUrl}#${exprUrl}"`);
+
+        // Add the program date-time using the chunk's creationTime
+        if (chunk.creationTime) {
+            playlistLines.push(
+                `#EXT-X-PROGRAM-DATE-TIME:${chunk.creationTime}`
+            );
+        }
+
         for (var i = 0; i < chunk.playbackSegments; i++) {
             var segmentNum = i.toString().padStart(3, "0");
             var segmentUrl = getVideoUrl(

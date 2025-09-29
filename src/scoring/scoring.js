@@ -1,5 +1,5 @@
 import { activeBoxManager } from "./activeBoxManager.js";
-import { profiler } from "./profiler.js";
+import { profiles } from "../data/profiles.js";
 import { eventBus } from "../eventbus.js";
 
 const Box = Object.freeze({
@@ -138,7 +138,7 @@ class Score {
          * @param {string} url - The URL to fetch expressions from.
          */
 
-        var profile = (profiler.profile && profiler.profile.emotions) || {};
+        var profile = (profiles.profile && profiles.profile.emotions) || {};
 
         //console.log(`Loading ${url} with time offset ${timeOffset}`);
         const response = await fetch(url);

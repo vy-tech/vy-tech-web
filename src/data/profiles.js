@@ -1,11 +1,14 @@
-import { database } from "../data/db.js";
+import { database } from "./db.js";
 
-class Profiler {
+const defaultProfileId = "BkBUQq4GiSfuwHN7YrK3";
+
+class Profiles {
     constructor() {
         this.profile = null;
+        this.getById(defaultProfileId);
     }
 
-    async loadFromFirestore(id) {
+    async getById(id) {
         /**
          * Load a profile by its ID.
          * @param {string} profileId - The ID of the profile to load.
@@ -13,7 +16,6 @@ class Profiler {
 
         let profileData = await database.get("profiles", id);
         if (profileData) {
-            console.log("Profile loaded:", profileData);
             this.profile = profileData;
             return this.profile;
         } else {
@@ -23,6 +25,6 @@ class Profiler {
     }
 }
 
-const profiler = new Profiler();
-export default profiler;
-export { profiler, Profiler };
+const profiles = new Profiles();
+export default profiles;
+export { profiles, Profiles };

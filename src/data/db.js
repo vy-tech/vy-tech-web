@@ -80,7 +80,11 @@ class Database {
         const docRef = doc(this.db, collectionName, docId);
         const docSnap = await getDoc(docRef);
 
-        if (!docSnap.exists()) {
+        if (
+            !docSnap ||
+            (typeof docSnap.exists === "boolean" && !docSnap.exists) ||
+            (typeof docSnap.exists === "function" && !docSnap.exists())
+        ) {
             return null;
         }
 

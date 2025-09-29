@@ -6,7 +6,7 @@ class Heatmap {
     constructor() {
         this.canvas = null;
 
-        eventBus.addEventListener("viz.paint", (e) => {
+        eventBus.addEventListener("playback.timeupdate", (e) => {
             this.paint();
         });
     }

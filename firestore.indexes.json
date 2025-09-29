@@ -1,6 +1,21 @@
 {
   "indexes": [
     {
+      "collectionGroup": "annotations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hierarchy",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "time",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [

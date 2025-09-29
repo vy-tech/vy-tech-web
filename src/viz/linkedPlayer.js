@@ -7,20 +7,20 @@ class LinkedPlayer {
     constructor() {
         this.container = null;
 
-        eventBus.addEventListener("viz.play", () => {
+        eventBus.addEventListener("playback.play", () => {
             if (this.embedPlayer) {
                 console.log(this.embedPlayer);
                 this.embedPlayer.playVideo();
             }
         });
 
-        eventBus.addEventListener("viz.pause", () => {
+        eventBus.addEventListener("playback.pause", () => {
             if (this.embedPlayer) {
                 this.embedPlayer.pauseVideo();
             }
         });
 
-        eventBus.addEventListener("viz.paint", (e) => {
+        eventBus.addEventListener("playback.timeupdate", (e) => {
             this.sync(e.detail.currentTime);
         });
     }
