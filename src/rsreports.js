@@ -16,11 +16,12 @@ import { heatmap } from "./viz/heatmap.js";
 import { cameramap } from "./viz/cameramap.js";
 import { ekg } from "./viz/ekg.js";
 import { spider } from "./viz/spider.js";
-import { people } from "./viz/people.js";
+import { summaryGraph } from "./viz/summarygraph.js";
 import { genderDemo, ageDemo } from "./viz/demographics.js";
 import { momentlist } from "./viz/momentlist.js";
 import { linkedPlayer } from "./viz/linkedPlayer.js";
 import { annotationLog } from "./viz/annotationlog.js";
+import { summaryEditor } from "./viz/summaryeditor.js";
 
 class Reports {
     constructor() {
@@ -112,7 +113,10 @@ class Reports {
         this.hls.loadSource(this.playlistUrl);
         this.player.play();
 
-        eventBus.fire("playback.cameraChanged", { camera: camera });
+        eventBus.fire("playback.cameraChanged", {
+            camera: camera,
+            hierarchy: this.hierarchy,
+        });
     }
 
     initListeners() {
@@ -133,6 +137,20 @@ class Reports {
 
             const pathname = `/reports/${hierarchy.replaceAll(":", "/")}`;
             window.location.pathname = pathname;
+        });
+
+        eventBus.on("ui.requestEditMode", (e) => {
+            const editContainer = document.getElementById("report-mode-edit");
+            const viewContainer = document.getElementById("report-mode-view");
+            editContainer.classList.remove("hidden");
+            viewContainer.classList.add("hidden");
+        });
+        eventBus.on("ui.requestViewMode", (e) => {
+            const editContainer = document.getElementById("report-mode-edit");
+            const viewContainer = document.getElementById("report-mode-view");
+
+            editContainer.classList.add("hidden");
+            viewContainer.classList.remove("hidden");
         });
     }
 
@@ -232,22 +250,24 @@ class Reports {
                         ),
                         div(
                             {
+                                id: "report-mode-edit",
+                                class: "hidden",
+                            },
+
+                            summaryEditor.createElement()
+                        ),
+                        div(
+                            {
+                                id: "report-mode-view",
                                 class: "text-sm text-gray-700",
                             },
-                            // div(
-                            //     {
-                            //         id: "report-current-play",
-                            //         class: "text-sm text-gray-700 bg-white border mt-[-15px] p-2",
-                            //     },
-                            //     "⚾️ [No Transcript Available]"
-                            // ),
 
                             div({
                                 id: "report-box-debug",
                                 class: "hidden text-sm text-gray-700 bg-white p-2 border",
                             }),
 
-                            div({ class: "" }, people.createElement()),
+                            div({ class: "" }, summaryGraph.createElement()),
 
                             div(
                                 {
@@ -322,6 +342,17 @@ class Reports {
                                     },
                                 },
                                 "Import Transcript"
+                            ),
+
+                            button(
+                                {
+                                    type: "button",
+                                    class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
+                                    onclick: () => {
+                                        eventBus.fire("ui.requestEditMode");
+                                    },
+                                },
+                                "Edit Summary"
                             )
                         )
                     ),
@@ -430,7 +461,11 @@ class Reports {
             this.player.on("timeupdate", async () => {
                 if (this.isSeeking) return;
 
-                const detail = { currentTime: this.player.currentTime() };
+                const detail = {
+                    currentTime: this.player.currentTime(),
+                    duration: this.player.duration(),
+                };
+
                 eventBus.fire("playback.timeupdate", detail);
 
                 await this.score.handleTimeUpdate(detail.currentTime);

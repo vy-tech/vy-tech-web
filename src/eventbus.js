@@ -10,4 +10,4 @@ class EventBus extends EventTarget {
 
 const eventBus = new EventBus();
 window.eventBus = eventBus;
-export { EventBus, eventBus, ebPlayback };
+export { EventBus, eventBus };
