@@ -39,6 +39,13 @@ class Annotations {
         return rows;
     }
 
+    async getByImportance(importance) {
+        let rows = await database.query("annotations", {
+            importance: importance,
+        });
+        return rows;
+    }
+
     createElement(options = {}) {
         const { div } = van.tags;
 
@@ -667,6 +674,72 @@ class Annotations {
         }
 
         closed.val = true;
+    }
+
+    async getAvailable() {
+        const events = await database.query(
+            "events",
+            { status: "available" },
+            "begin"
+        );
+        return events;
+    }
+
+    setSelectorToHierarchy(state, hierarchy) {
+        this.getByHierarchy(hierarchy).then((annotations) => {
+            state.val = annotations.filter((a) => a.importance === "critical");
+        });
+    }
+
+    createOptionElement(annotationData, selected) {
+        const { option } = van.tags;
+
+        const displayTime = timeUtil.format(annotationData.time, true);
+        const displayDescription = annotationData.content;
+        const displayText = `${displayTime} - ${displayDescription}`;
+
+        return option(
+            {
+                value: annotationData.time,
+                selected: annotationData.time == selected,
+            },
+            displayText
+        );
+    }
+
+    createSelectorElement(hierarchy, selected) {
+        const { div, select } = van.tags;
+        const annListState = van.state([]);
+        this.setSelectorToHierarchy(annListState, hierarchy);
+
+        const container = div({ class: "annotations-selector" }, () => {
+            const sel = select({
+                id: "annotation-select",
+                class: "w-full text-black p-1",
+            });
+
+            annListState.val.forEach((annotationData) =>
+                van.add(sel, this.createOptionElement(annotationData, selected))
+            );
+
+            sel.addEventListener("change", (e) => {
+                eventBus.dispatchEvent(
+                    new CustomEvent("ui.requestAnnotation", {
+                        detail: e.target.value,
+                    })
+                );
+            });
+
+            eventBus.addEventListener("ui.requestEvent", (e) => {
+                const hierarchy = e.detail;
+                console.log("Loading annotations for hierarchy:", hierarchy);
+                this.setSelectorToHierarchy(annListState, hierarchy);
+            });
+
+            return sel;
+        });
+
+        return container;
     }
 }
 
