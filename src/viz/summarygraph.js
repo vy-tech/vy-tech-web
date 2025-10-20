@@ -4,14 +4,24 @@ import { summarizer } from "../scoring/summarizer.js";
 import { eventBus } from "../eventbus.js";
 import { timeUtil } from "../util/time.js";
 
-class People {
+class SummaryGraph {
     constructor() {
         this.canvas = null;
+        this.ctx = null;
         this.isStale = true;
+        this.timeComplete = 0;
+
+        eventBus.addEventListener("playback.ready", (e) => {
+            this.paint();
+            this.isStale = false;
+        });
 
         eventBus.addEventListener("playback.timeupdate", (e) => {
-            if (this.isStale) this.paint();
-            this.isStale = false;
+            //if (this.isStale) this.paint();
+            //this.isStale = false;
+            if (!e.detail.currentTime || !e.detail.duration) return;
+            this.timeComplete = e.detail.currentTime / e.detail.duration;
+            this.paint();
         });
 
         eventBus.addEventListener("playback.cameraChanged", (e) => {
@@ -38,7 +48,7 @@ class People {
     }
 
     init() {
-        const ctx = this.canvas.getContext("2d");
+        this.ctx = this.canvas.getContext("2d");
 
         const labels = [];
         const peopleColors = [];
@@ -52,7 +62,30 @@ class People {
 
         if (this.chart) this.chart.destroy();
 
-        this.chart = new Chart(ctx, {
+        // Plugin to draw the time indicator line
+        const timeLinePlugin = {
+            id: "timeLine",
+            afterDraw: (chart) => {
+                if (this.timeComplete) {
+                    const ctx = chart.ctx;
+                    const chartArea = chart.chartArea;
+                    const currentX =
+                        chartArea.left +
+                        this.timeComplete * (chartArea.right - chartArea.left);
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(currentX, chartArea.top);
+                    ctx.lineTo(currentX, chartArea.bottom);
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = "red";
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            },
+        };
+
+        this.chart = new Chart(this.ctx, {
             type: "line",
             data: {
                 labels: labels,
@@ -81,6 +114,7 @@ class People {
                     },
                 },
             },
+            plugins: [timeLinePlugin],
         });
         this.chart.update();
 
@@ -141,7 +175,7 @@ class People {
             labels.push(timeUtil.format(elapsedTime / step));
         }
 
-        // Update the spider chart data
+        // Update the chart data
         this.chart.data.labels = labels;
         this.chart.data.datasets[0].data = peopleData;
         this.chart.data.datasets[1].data = scoreData;
@@ -149,6 +183,6 @@ class People {
     }
 }
 
-const people = new People();
-export default people;
-export { people, People };
+const summaryGraph = new SummaryGraph();
+export default summaryGraph;
+export { summaryGraph, SummaryGraph };

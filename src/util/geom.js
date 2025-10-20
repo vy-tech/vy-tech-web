@@ -30,6 +30,37 @@ class Geometry {
         return overlapRatio >= threshold;
     }
 
+    boxHash(box) {
+        /** Returns a hash based on the center of the box,
+         * the size of the box, and a grid appropriate for
+         * that size.
+         */
+        const sizeBins = [45, 80, 115];
+        const centerGridSizes = [40, 50, 60];
+        const [x, y, w, h] = Array.isArray(box)
+            ? box
+            : [box.x, box.y, box.w, box.h];
+
+        let avgDim = (w + h) / 2;
+        let sizeBin = 0;
+
+        for (let i = 0; i < sizeBins.length; i++) {
+            if (avgDim > sizeBins[i]) {
+                sizeBin = i + 1;
+            }
+        }
+
+        const gridSize = centerGridSizes[sizeBin];
+        let centerX = Math.floor((x + w / 2) / gridSize);
+        let centerY = Math.floor((y + h / 2) / gridSize);
+
+        return `${gridSize}*${centerX},${centerY}`;
+    }
+
+    boxesAreSameHash(box1, box2) {
+        return this.boxHash(box1) === this.boxHash(box2);
+    }
+
     isPointInTriangle(px, py, x1, y1, x2, y2, x3, y3) {
         const area = (x1, y1, x2, y2, x3, y3) =>
             0.5 * Math.abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2));

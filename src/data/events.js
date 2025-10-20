@@ -32,7 +32,7 @@ class Events {
         return events;
     }
 
-    setStateToAvailable(state) {
+    setSelectorToAvailable(state) {
         this.getAvailable().then((events) => {
             state.val = events;
         });
@@ -59,7 +59,7 @@ class Events {
     createSelectorElement(selected) {
         const { div, select } = van.tags;
         const eventListState = van.state([]);
-        this.setStateToAvailable(eventListState);
+        this.setSelectorToAvailable(eventListState);
 
         const container = div({ class: "vyevents-selector" }, () => {
             const sel = select({

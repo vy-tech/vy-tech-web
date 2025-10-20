@@ -6,6 +6,7 @@ import { Score } from "./scoring.js";
 import { activeBoxManager } from "./activeBoxManager.js";
 import { Hierarchy } from "../util/hierarchy.js";
 import { events } from "../data/events.js";
+import { max } from "d3";
 
 class Summarizer {
     constructor() {
@@ -84,6 +85,7 @@ class Summarizer {
                     score: 0,
                     count: 0,
                     people: 0,
+                    maxScore: 0,
                 });
 
                 // Accumulate the score
@@ -92,13 +94,16 @@ class Summarizer {
                 score.score += scoring.currentScore;
                 score.people += activeBoxManager.activeBoxes.length;
                 score.count += 1;
+                if (Math.abs(scoring.currentScore) > Math.abs(score.maxScore)) {
+                    score.maxScore = scoring.currentScore;
+                }
             }
         }
 
         // Compute averages and format times
         for (const second in scores) {
             const score = scores[second];
-            score.score = Math.round(score.score / score.count);
+            score.score = score.maxScore; //Math.round(score.score / score.count);
             score.people = Math.round(score.people / score.count);
             score.startTime = score.startTime.toFixed(2);
             score.endTime = score.endTime.toFixed(2);

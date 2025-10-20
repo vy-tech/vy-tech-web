@@ -1,5 +1,5 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { d as database } from './chunks/db-DBkYKoGS.js';
+import { d as database } from './chunks/db-B1sKsMd1.js';
 import './chunks/eventbus-BbLtLH1t.js';
 import './chunks/firebase-DTGT__LK.js';
 

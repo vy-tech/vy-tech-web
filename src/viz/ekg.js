@@ -1,14 +1,25 @@
 import van from "vanjs-core";
 import { scoring } from "../scoring/scoring.js";
 import { eventBus } from "../eventbus.js";
+import { summarizer } from "../scoring/summarizer.js";
 
 class Ekg {
     constructor() {
+        this.showSummary = false;
         this.canvas = null;
         this.container = null;
         this.score = null;
+        this.sumScore = null;
 
         eventBus.addEventListener("playback.timeupdate", (e) => {
+            this.score = scoring.currentScore;
+
+            const second = Math.floor(e.detail.currentTime);
+            const summary = summarizer.getCurrent();
+            if (summary) {
+                this.sumScore = summary[second].score || 0;
+            }
+
             this.paint();
         });
 
@@ -85,9 +96,12 @@ class Ekg {
     }
 
     paint() {
-        let score = scoring.currentScore;
-        this.timeSeries.append(Date.now(), score);
-        this.label.innerText = score.toFixed(0);
+        this.timeSeries.append(Date.now(), this.score);
+        this.label.innerText = this.score.toFixed(0);
+
+        if (this.sumScore && this.showSummary) {
+            this.label.innerText += ` (${this.sumScore.toFixed(0)})`;
+        }
     }
 }
 

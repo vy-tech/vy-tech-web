@@ -2,23 +2,13 @@ import { activeBoxManager } from "./activeBoxManager.js";
 import { profiles } from "../data/profiles.js";
 import { eventBus } from "../eventbus.js";
 
-const Box = Object.freeze({
-    X: 0,
-    Y: 1,
-    W: 2,
-    H: 3,
-    SCORE: 4,
-    COUNT: 5,
-    INDEX: 6, // Index in the original window array
-});
-
-// const ActiveBox = Object.freeze({
+// const Box = Object.freeze({
 //     X: 0,
 //     Y: 1,
 //     W: 2,
 //     H: 3,
 //     SCORE: 4,
-//     EXPIRES: 5,
+//     COUNT: 5,
 //     INDEX: 6, // Index in the original window array
 // });
 
@@ -118,29 +108,104 @@ class Score {
         //this.activeBoxes = [];
         this.currentScore = 0;
         this.currentCores = [0, 0, 0, 0, 0, 0, 0];
-        this.softmaxAlpha = 0.01; // controls how spiky per-row scoring is
-        this.useRobustNormalization = false; // set true to normalize each fragment’s scores
 
-        // UI squashing to keep scores in 0..1000
-        this.applyUiSquash = false;
-        this.uiMid = 500; // midpoint of the displayed scale
-        this.uiSpread = 600; // controls steepness (larger => wider)
-        this.uiClip = 2500; // clip raw score before squash
+        /** Original Recipe **/
+        // this.softmaxAlpha = 0.01;
+        // this.gainFactor = 0.05;  // was dampenAlpha
+        // this.useRobustNormalization = false;
+        // this.robustTargetStd = 350;
+        // this.applyUISquash = false;
+        // this.uiMid = 500;
+        // this.uiSpread = 600;
+        // this.uiClip = 2500;
 
-        this.dampenAlpha = 0.05;
+        /** New Recipe */
+        this.softmaxAlpha = 0.01; // Per-emotion weighting within single detections
+        this.combineSoftmaxAlpha = 0.005; // Per-row weighting across multiple detections
+        this.gainFactor = 0.05;
+        this.useRobustNormalization = false;
+        this.robustTargetStd = 350;
+        this.applyUISquash = false;
+        this.uiMid = 500;
+        this.uiSpread = 600;
+        this.uiClip = 2500;
+
+        // Adaptive normalization parameters
+        this.adaptiveNormalization = true;
+        this.adaptiveBaselineSampleSize = 5000; // Baseline sample size for scaling
+        this.adaptiveScalingFunction = "sqrt"; // 'sqrt', 'linear', or 'log'
+        this.adaptiveMinMultiplier = 0.5; // Minimum scaling multiplier
+        this.adaptiveMaxMultiplier = 1.5; // Maximum scaling multiplier
+
+        // Duration-aware scoring parameters
+        this.useDecayWeighting = false; // Enable/disable temporal decay weighting
+        this.decayTimeConstant = 0.1; // How quickly reactions fade (relative to window size)
+
+        // Active box volatility parameters
+        this.boxVolatilityFactor = 0.0;
+        this.newBoxVolatilityFactor = 0.0;
+        this.lostBoxVolatilityFactor = 0.0;
+
+        /** Last working recipe */
+        // this.softmaxAlpha = 0.003;
+        // //this.softmaxAlpha = 0.001875; // controls how spiky per-row scoring is
+
+        // this.useRobustNormalization = false;
+        // this.robustTargetStd = 500;
+        // //this.useRobustNormalization = true; // set true to normalize each fragment’s scores
+        // //this.robustTargetStd = 387.5; // target stddev of scores after robust normalization
+
+        // // UI squashing to keep scores in -1000..1000
+        // this.applyUiSquash = false;
+        // this.uiMid = 0; // midpoint of the displayed scale
+        // this.uiSpread = 1500; // controls steepness (larger => wider)
+        // this.uiClip = 2500; // clip raw score before squash
+
+        // this.gainFactor = 0.15;  // was dampenAlpha
+        // //this.gainFactor = 0.1875;
 
         this.currentCamera = 0;
+        this.enableWindowSplicing = true;
     }
 
-    async loadExpressions(url, timeOffset = 0.0) {
-        /**
-         * Load expressions from a given URL.
-         * @param {string} url - The URL to fetch expressions from.
-         */
+    applyProfileToParams(profile) {
+        if (!profile || !profile.params) return;
 
-        var profile = (profiles.profile && profiles.profile.emotions) || {};
+        for (const key in profile.params) {
+            if (key in this) {
+                this[key] = profile.params[key];
+            } else {
+                console.error("Unknown scoring parameter in profile:", key);
+            }
+        }
+    }
 
-        //console.log(`Loading ${url} with time offset ${timeOffset}`);
+    applyProfileToRows(rows, profile = null, timeOffset = 0.0) {
+        profile = profile || profiles.profile;
+        let emotions = profile.emotions;
+
+        if (!emotions) {
+            console.log(profile);
+            console.log(profiles.profile);
+            console.error(
+                "Missing emotions from profiles.  All scores will be zero."
+            );
+        }
+
+        for (const row of rows) {
+            row.time = row.frame / 20 + timeOffset;
+
+            this.computeRowScore(row, emotions, this.softmaxAlpha);
+        }
+
+        if (this.useRobustNormalization) {
+            this.normalizeRowScores(rows);
+        }
+
+        return rows;
+    }
+
+    async loadDetections(url) {
         const response = await fetch(url);
         if (!response.ok) {
             console.error(`Error loading ${url}: ${response.statusText}`);
@@ -152,23 +217,20 @@ class Score {
             console.error(`Error ${url} is empty`);
             return [];
         }
+        return rows;
+    }
 
-        for (const row of rows) {
-            // row.cores = this.convertEmotionsToCores(row.emotions);
-            //row.time += timeOffset;
-            // TODO FIXME The times coming back from Hume are not correct
-            // we're assuming 20 FPS video here, but that may not be the case.
-            row.time = row.frame / 20 + timeOffset;
+    async loadExpressions(url, timeOffset = 0.0) {
+        /**
+         * Load expressions from a given URL.
+         * @param {string} url - The URL to fetch expressions from.
+         */
 
-            this.computeRowScore(row, profile, this.softmaxAlpha);
-        }
+        var rows = await this.loadDetections(url);
 
-        if (this.useRobustNormalization) {
-            this.normalizeRowScores(rows);
-        }
+        this.applyProfileToRows(rows, profiles.profile, timeOffset);
 
         return rows;
-        //return this.expressions;
     }
 
     computeRowScore(row, profile, alpha = 0.003) {
@@ -220,17 +282,27 @@ class Score {
         row.count = count;
     }
 
-    normalizeRowScores(rows, opts = {}) {
+    normalizeRowScores(rows) {
         /**
          * Optional two-pass robust normalization per fragment.
          * Centers by the median and scales by MAD so fragments are comparable.
          * Enabled by setting this.useRobustNormalization = true.
+         * Uses adaptive target std based on sample size if this.adaptiveNormalization = true.
          */
-        const targetStd = opts.targetStd ?? 350; // choose how wide typical rows should be after scaling
+        const baseTargetStd = this.robustTargetStd;
         const values = rows
             .map((r) => r.score)
             .filter((v) => Number.isFinite(v));
         if (values.length === 0) return;
+
+        // Calculate adaptive target std based on sample size
+        let targetStd = baseTargetStd;
+        if (this.adaptiveNormalization) {
+            targetStd = this.calculateAdaptiveTargetStd(
+                values.length,
+                baseTargetStd
+            );
+        }
 
         // median
         const sorted = values.slice().sort((a, b) => a - b);
@@ -249,10 +321,64 @@ class Score {
 
         const k = targetStd / sigma;
 
-        for (const r of rows) {
-            // recenters to 0 and scales, then clamps to a sane range to avoid UI blowups
-            r.score = this.clamp((r.score - median) * k, -2500, 2500);
+        // Debug logging
+        console.log(
+            `Camera normalization: ${
+                values.length
+            } scores, median=${median.toFixed(1)}, MAD=${mad.toFixed(
+                1
+            )}, baseStd=${baseTargetStd}, adaptiveStd=${targetStd.toFixed(
+                1
+            )}, k=${k.toFixed(2)}`
+        );
+
+        if (k > 10) {
+            // Very high multiplier indicates problems
+            console.warn(`High normalization multiplier detected: k=${k}`);
         }
+
+        for (const r of rows) {
+            // scales, then clamps to a sane range to avoid UI blowups
+            r.score = this.clamp(median + (r.score - median) * k, -2500, 2500);
+        }
+    }
+
+    calculateAdaptiveTargetStd(sampleSize, baseTargetStd) {
+        /**
+         * Calculate adaptive target standard deviation based on sample size.
+         * Larger samples get higher target std (more aggressive normalization).
+         * Smaller samples get lower target std (gentler normalization).
+         */
+        let sampleSizeMultiplier;
+
+        switch (this.adaptiveScalingFunction) {
+            case "sqrt":
+                sampleSizeMultiplier = Math.sqrt(
+                    sampleSize / this.adaptiveBaselineSampleSize
+                );
+                break;
+            case "linear":
+                sampleSizeMultiplier =
+                    sampleSize / this.adaptiveBaselineSampleSize;
+                break;
+            case "log":
+                sampleSizeMultiplier =
+                    Math.log10(Math.max(100, sampleSize)) /
+                    Math.log10(this.adaptiveBaselineSampleSize);
+                break;
+            default:
+                sampleSizeMultiplier = Math.sqrt(
+                    sampleSize / this.adaptiveBaselineSampleSize
+                );
+        }
+
+        // Clamp the multiplier to reasonable bounds
+        sampleSizeMultiplier = Math.max(
+            this.adaptiveMinMultiplier,
+            Math.min(this.adaptiveMaxMultiplier, sampleSizeMultiplier)
+        );
+
+        return baseTargetStd * sampleSizeMultiplier;
     }
 
     clamp(x, lo, hi) {
@@ -318,17 +444,39 @@ class Score {
         this.window.push(...rows);
     }
 
+    appendToWindow(rows) {
+        this.window.push(...rows);
+    }
+
+    getWindowEndTime() {
+        if (this.window.length == 0) return 0;
+        return this.window[this.window.length - 1].time;
+    }
+
+    async loadWindowAsNext(url) {
+        return await this.loadWindow(url, this.getWindowEndTime());
+    }
+
     async loadWindowFromSchedule(scheduleIndex) {
         if (scheduleIndex < this.loadSchedule.length) {
             this.loadScheduleIndex = scheduleIndex;
             const sched = this.loadSchedule[scheduleIndex];
 
-            console.log(
-                `Loading from schedule ${scheduleIndex} ${sched.url} ${sched.start}`
-            );
+            // console.log(
+            //     `Loading from schedule ${scheduleIndex} ${sched.url} ${sched.start}`
+            // );
 
             await this.loadWindow(sched.url, sched.start);
         }
+    }
+
+    rewindWindow() {
+        this.currentScore = 0;
+        this.currentTime = 0;
+        this.windowStartIndex = 0;
+        this.windowEndIndex = 0;
+        this.windowScore = 0;
+        this.windowBoxes = [];
     }
 
     resetWindow() {
@@ -340,6 +488,8 @@ class Score {
     }
 
     async resetLoadSchedule(newTime) {
+        if (!this.loadSchedule) return;
+
         for (let i = 0; i < this.loadSchedule.length; i++) {
             const sched = this.loadSchedule[i];
 
@@ -357,7 +507,7 @@ class Score {
         console.warning(`Schedule reset failed.`);
     }
 
-    async handleTimeUpdate(newTime) {
+    updateTime(newTime) {
         this.lastTime = this.currentTime;
         this.currentTime = newTime;
         this.lastSecond = this.currentSecond;
@@ -369,14 +519,26 @@ class Score {
             elapsed: this.currentTime - this.lastTime,
             elapsedMillis: (this.currentTime - this.lastTime) * 1000,
         });
+    }
 
-        await this.ensureWindowLoaded();
-        this.moveWindow();
+    async handleTimeUpdate(newTime) {
+        // Update the time and fire the time update event
+        this.updateTime(newTime);
+
+        // Ensure we're loaded (if using load schedule)
+        if (this.loadSchedule) await this.ensureWindowLoaded();
+
+        // Move the window to the current time
+        let moved = this.moveWindow();
+
+        // Update current score from the window
         this.updateCurrentFromWindow();
 
-        // TODO Move to event
+        // activeBoxManager does this from the event now
         //this.expireActiveBoxes();
         //activeBoxManager.expire((this.currentTime - this.lastTime) * 1000);
+
+        return moved;
     }
 
     async handleTimeSeek(currentTime) {
@@ -458,13 +620,24 @@ class Score {
         const loadLeadTime = this.currentTime + 5;
         const sched = this.loadSchedule[this.loadScheduleIndex];
 
-        return (
+        let result =
             loadLeadTime > sched.start &&
-            loadLeadTime <= sched.start + sched.duration
-        );
+            loadLeadTime <= sched.start + sched.duration;
+
+        // if (!result) {
+        //     console.log(
+        //         `${sched.start} > ${loadLeadTime} <= ${
+        //             sched.start + sched.duration
+        //         } on schedule.`
+        //     );
+        // }
+
+        return result;
     }
 
     async ensureWindowLoaded() {
+        if (!this.loadSchedule) return;
+
         if (!this.checkWindowOnSchedule()) {
             this.loadScheduleIndex += 1;
             console.log(
@@ -526,7 +699,7 @@ class Score {
             this.windowStartIndex++;
         }
 
-        if (this.windowStartIndex > 25000) {
+        if (this.enableWindowSplicing && this.windowStartIndex > 25000) {
             this.window.splice(0, 24000);
             this.windowStartIndex -= 24000;
             this.windowEndIndex -= 24000;
@@ -538,13 +711,19 @@ class Score {
             );
         }
 
+        const moved =
+            origStart != this.windowStartIndex ||
+            origEnd != this.windowEndIndex;
+
         // console.log(
         //     `${origStart}->${this.windowStartIndex}, ${origEnd}->${
         //         this.windowEndIndex
         //     } ${origEnd - origStart}=>${
         //         this.windowEndIndex - this.windowStartIndex
-        //     }`
+        //     } ${moved}`
         // );
+
+        return moved;
     }
 
     combineScores(scores) {
@@ -553,18 +732,15 @@ class Score {
         }
 
         // Softmax-weighted mean so spikes matter more than small reactions
-        // Use a slightly lower alpha than per-row to avoid over-spikiness across many rows
-        const level = this.softmaxMeanSigned(
-            scores,
-            Math.max(0.0005, this.softmaxAlpha * 0.5)
-        );
+        // Use separate alpha for combining rows vs emotions within a row
+        const level = this.softmaxMeanSigned(scores, this.combineSoftmaxAlpha);
 
         // Sublinear crowd scaling: lets bigger crowds move the needle more
         const scaled =
-            level * this.sqrtCrowdScale(scores.length, 0.5) * this.dampenAlpha;
+            level * this.sqrtCrowdScale(scores.length, 0.5) * this.gainFactor;
 
         let result = scaled;
-        if (this.applyUiSquash) {
+        if (this.applyUISquash) {
             result = this.squashToUi(result);
         }
 
@@ -588,14 +764,49 @@ class Score {
 
             for (let i = this.windowStartIndex; i < this.windowEndIndex; i++) {
                 const row = this.window[i];
-                scores.push(row.score);
+                let scoreToUse = row.score;
+
+                // Apply decay weighting if enabled
+                if (this.useDecayWeighting) {
+                    const age = this.currentTime - row.time; // How long ago this detection was
+
+                    // Scale time constant by window size so it's relative to window duration
+                    const effectiveTimeConstant =
+                        this.windowSize /
+                        Math.max(0.001, this.decayTimeConstant);
+                    const decayWeight = Math.exp(-age / effectiveTimeConstant);
+
+                    scoreToUse = row.score * decayWeight;
+                }
+
+                scores.push(scoreToUse);
 
                 for (let coreName in row.cores) {
-                    cores[coreName].push(row.cores[coreName].score);
+                    let coreScoreToUse = row.cores[coreName].score;
+
+                    // Apply same decay weighting to core scores
+                    if (this.useDecayWeighting) {
+                        const age = this.currentTime - row.time;
+
+                        // Use same window-scaled time constant for consistency
+                        const effectiveTimeConstant =
+                            this.windowSize /
+                            Math.max(0.001, this.decayTimeConstant);
+                        const decayWeight = Math.exp(
+                            -age / effectiveTimeConstant
+                        );
+
+                        coreScoreToUse =
+                            row.cores[coreName].score * decayWeight;
+                    }
+
+                    cores[coreName].push(coreScoreToUse);
                 }
             }
 
             this.currentScore = this.combineScores(scores);
+
+            this.applyVolatilities();
 
             this.currentCoresBeforeCombined = cores;
             for (let i = 0; i < 7; i++) {
@@ -611,6 +822,33 @@ class Score {
         activeBoxManager.update(this.windowBoxes);
         //this.updateActiveBoxes(this.windowBoxes);
         this.updatePercentiles();
+    }
+
+    applyVolatilities() {
+        this.currentScore = this.applyBoxVolatility(
+            this.currentScore,
+            activeBoxManager.totalVolatility,
+            this.boxVolatilityFactor
+        );
+        this.currentScore = this.applyBoxVolatility(
+            this.currentScore,
+            activeBoxManager.newVolatility,
+            this.newBoxVolatilityFactor
+        );
+        this.currentScore = this.applyBoxVolatility(
+            this.currentScore,
+            activeBoxManager.lostVolatility,
+            this.lostBoxVolatilityFactor
+        );
+    }
+
+    applyBoxVolatility(baseScore, volatility, factor) {
+        if (volatility == 0 || factor == 0) return baseScore;
+
+        const bonus = volatility * factor * 1000;
+
+        //console.log(`Volatility bonus: ${volatility.toFixed(3)} * ${factor} * 1000 = ${bonus.toFixed(1)}`);
+        return baseScore + bonus;
     }
 
     softmaxMeanSigned(arr, alpha = 0.0015) {
@@ -644,7 +882,7 @@ class Score {
          */
         const clipped = this.clamp(score, -this.uiClip, this.uiClip);
         const ui = this.uiMid + this.uiSpread * Math.tanh(clipped / 1200);
-        return this.clamp(Math.round(ui), 0, 1000);
+        return this.clamp(Math.round(ui), -1000, 1000);
     }
 
     boxAt(x, y) {
@@ -690,4 +928,4 @@ class Score {
 
 const scoring = new Score();
 export default scoring;
-export { scoring, Box, Core, CoreNames, EmotionCoreMap, Score };
+export { scoring, Core, CoreNames, EmotionCoreMap, Score };

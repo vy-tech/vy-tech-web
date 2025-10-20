@@ -136,6 +136,16 @@ class Database {
         return true;
     }
 
+    async deleteAll(collectionName, filters = null) {
+        let rows = await this.query(collectionName, filters);
+        if (!rows || rows.length === 0) return true;
+
+        for (let row of rows) {
+            await this.delete(collectionName, row.id);
+        }
+        return true;
+    }
+
     async update(collectionName, docId, updates) {
         const docRef = doc(this.db, collectionName, docId);
         updates.updated = serverTimestamp();
