@@ -141,6 +141,11 @@ class Score {
         this.useDecayWeighting = false; // Enable/disable temporal decay weighting
         this.decayTimeConstant = 0.1; // How quickly reactions fade (relative to window size)
 
+        // Active box volatility parameters
+        this.boxVolatilityFactor = 0.0;
+        this.newBoxVolatilityFactor = 0.0;
+        this.lostBoxVolatilityFactor = 0.0;
+
         /** Last working recipe */
         // this.softmaxAlpha = 0.003;
         // //this.softmaxAlpha = 0.001875; // controls how spiky per-row scoring is
@@ -160,17 +165,47 @@ class Score {
         // //this.gainFactor = 0.1875;
 
         this.currentCamera = 0;
+        this.enableWindowSplicing = true;
     }
 
-    async loadExpressions(url, timeOffset = 0.0) {
-        /**
-         * Load expressions from a given URL.
-         * @param {string} url - The URL to fetch expressions from.
-         */
+    applyProfileToParams(profile) {
+        if (!profile || !profile.params) return;
 
-        var profile = (profiles.profile && profiles.profile.emotions) || {};
+        for (const key in profile.params) {
+            if (key in this) {
+                this[key] = profile.params[key];
+            } else {
+                console.error("Unknown scoring parameter in profile:", key);
+            }
+        }
+    }
 
-        //console.log(`Loading ${url} with time offset ${timeOffset}`);
+    applyProfileToRows(rows, profile = null, timeOffset = 0.0) {
+        profile = profile || profiles.profile;
+        let emotions = profile.emotions;
+
+        if (!emotions) {
+            console.log(profile);
+            console.log(profiles.profile);
+            console.error(
+                "Missing emotions from profiles.  All scores will be zero."
+            );
+        }
+
+        for (const row of rows) {
+            row.time = row.frame / 20 + timeOffset;
+
+            this.computeRowScore(row, emotions, this.softmaxAlpha);
+        }
+
+        if (this.useRobustNormalization) {
+            this.normalizeRowScores(rows);
+        }
+
+        return rows;
+    }
+
+    async loadDetections(url) {
         const response = await fetch(url);
         if (!response.ok) {
             console.error(`Error loading ${url}: ${response.statusText}`);
@@ -182,23 +217,20 @@ class Score {
             console.error(`Error ${url} is empty`);
             return [];
         }
+        return rows;
+    }
 
-        for (const row of rows) {
-            // row.cores = this.convertEmotionsToCores(row.emotions);
-            //row.time += timeOffset;
-            // TODO FIXME The times coming back from Hume are not correct
-            // we're assuming 20 FPS video here, but that may not be the case.
-            row.time = row.frame / 20 + timeOffset;
+    async loadExpressions(url, timeOffset = 0.0) {
+        /**
+         * Load expressions from a given URL.
+         * @param {string} url - The URL to fetch expressions from.
+         */
 
-            this.computeRowScore(row, profile, this.softmaxAlpha);
-        }
+        var rows = await this.loadDetections(url);
 
-        if (this.useRobustNormalization) {
-            this.normalizeRowScores(rows);
-        }
+        this.applyProfileToRows(rows, profiles.profile, timeOffset);
 
         return rows;
-        //return this.expressions;
     }
 
     computeRowScore(row, profile, alpha = 0.003) {
@@ -412,20 +444,34 @@ class Score {
         this.window.push(...rows);
     }
 
+    appendToWindow(rows) {
+        this.window.push(...rows);
+    }
+
+    getWindowEndTime() {
+        if (this.window.length == 0) return 0;
+        return this.window[this.window.length - 1].time;
+    }
+
+    async loadWindowAsNext(url) {
+        return await this.loadWindow(url, this.getWindowEndTime());
+    }
+
     async loadWindowFromSchedule(scheduleIndex) {
         if (scheduleIndex < this.loadSchedule.length) {
             this.loadScheduleIndex = scheduleIndex;
             const sched = this.loadSchedule[scheduleIndex];
 
-            console.log(
-                `Loading from schedule ${scheduleIndex} ${sched.url} ${sched.start}`
-            );
+            // console.log(
+            //     `Loading from schedule ${scheduleIndex} ${sched.url} ${sched.start}`
+            // );
 
             await this.loadWindow(sched.url, sched.start);
         }
     }
 
     rewindWindow() {
+        this.currentScore = 0;
         this.currentTime = 0;
         this.windowStartIndex = 0;
         this.windowEndIndex = 0;
@@ -480,7 +526,7 @@ class Score {
         this.updateTime(newTime);
 
         // Ensure we're loaded (if using load schedule)
-        await this.ensureWindowLoaded();
+        if (this.loadSchedule) await this.ensureWindowLoaded();
 
         // Move the window to the current time
         let moved = this.moveWindow();
@@ -574,10 +620,19 @@ class Score {
         const loadLeadTime = this.currentTime + 5;
         const sched = this.loadSchedule[this.loadScheduleIndex];
 
-        return (
+        let result =
             loadLeadTime > sched.start &&
-            loadLeadTime <= sched.start + sched.duration
-        );
+            loadLeadTime <= sched.start + sched.duration;
+
+        // if (!result) {
+        //     console.log(
+        //         `${sched.start} > ${loadLeadTime} <= ${
+        //             sched.start + sched.duration
+        //         } on schedule.`
+        //     );
+        // }
+
+        return result;
     }
 
     async ensureWindowLoaded() {
@@ -644,7 +699,7 @@ class Score {
             this.windowStartIndex++;
         }
 
-        if (this.windowStartIndex > 25000) {
+        if (this.enableWindowSplicing && this.windowStartIndex > 25000) {
             this.window.splice(0, 24000);
             this.windowStartIndex -= 24000;
             this.windowEndIndex -= 24000;
@@ -685,7 +740,7 @@ class Score {
             level * this.sqrtCrowdScale(scores.length, 0.5) * this.gainFactor;
 
         let result = scaled;
-        if (this.applyUiSquash) {
+        if (this.applyUISquash) {
             result = this.squashToUi(result);
         }
 
@@ -751,6 +806,8 @@ class Score {
 
             this.currentScore = this.combineScores(scores);
 
+            this.applyVolatilities();
+
             this.currentCoresBeforeCombined = cores;
             for (let i = 0; i < 7; i++) {
                 this.currentCores[i] = this.combineScores(cores[CoreNames[i]]);
@@ -765,6 +822,33 @@ class Score {
         activeBoxManager.update(this.windowBoxes);
         //this.updateActiveBoxes(this.windowBoxes);
         this.updatePercentiles();
+    }
+
+    applyVolatilities() {
+        this.currentScore = this.applyBoxVolatility(
+            this.currentScore,
+            activeBoxManager.totalVolatility,
+            this.boxVolatilityFactor
+        );
+        this.currentScore = this.applyBoxVolatility(
+            this.currentScore,
+            activeBoxManager.newVolatility,
+            this.newBoxVolatilityFactor
+        );
+        this.currentScore = this.applyBoxVolatility(
+            this.currentScore,
+            activeBoxManager.lostVolatility,
+            this.lostBoxVolatilityFactor
+        );
+    }
+
+    applyBoxVolatility(baseScore, volatility, factor) {
+        if (volatility == 0 || factor == 0) return baseScore;
+
+        const bonus = volatility * factor * 1000;
+
+        //console.log(`Volatility bonus: ${volatility.toFixed(3)} * ${factor} * 1000 = ${bonus.toFixed(1)}`);
+        return baseScore + bonus;
     }
 
     softmaxMeanSigned(arr, alpha = 0.0015) {
@@ -844,4 +928,4 @@ class Score {
 
 const scoring = new Score();
 export default scoring;
-export { scoring, Box, Core, CoreNames, EmotionCoreMap, Score };
+export { scoring, Core, CoreNames, EmotionCoreMap, Score };

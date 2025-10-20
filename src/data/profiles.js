@@ -22,6 +22,65 @@ const defaultScoringParams = {
     adaptiveMaxMultiplier: 1.5,
     useDecayWeighting: false, // Enable temporal decay weighting
     decayTimeConstant: 1.0, // Time constant for decay weighting (seconds)
+    boxVolatilityFactor: 0.0,
+    newBoxVolatilityFactor: 0.0,
+    lostBoxVolatilityFactor: 0.0,
+};
+
+const defaultEmotionWeights = {
+    Admiration: 1,
+    Adoration: 1,
+    "Aesthetic Appreciation": 1.25,
+    Amusement: 1.5,
+    Anger: 0,
+    Annoyance: 1,
+    Anxiety: 0,
+    Awe: 1.5,
+    Awkwardness: 0,
+    Boredom: -2,
+    Calmness: 0,
+    Concentration: 0,
+    Confusion: 0,
+    Contemplation: 0,
+    Contempt: 0,
+    Contentment: 0,
+    Craving: 0,
+    Desire: 0,
+    Determination: 0,
+    Disappointment: 0,
+    Disapproval: 0,
+    Disgust: 0,
+    Distress: 0,
+    Doubt: 0,
+    Ecstasy: 1.5,
+    Embarrassment: 0,
+    "Empathic Pain": 0,
+    Enthusiasm: 2,
+    Entrancement: 2,
+    Envy: 0,
+    Excitement: 2,
+    Fear: 0,
+    Gratitude: 1,
+    Guilt: 0,
+    Horror: 0,
+    Interest: 1,
+    Joy: 1.5,
+    Love: 1.5,
+    Nostalgia: 0,
+    Pain: 0,
+    Pride: 1,
+    Realization: 1,
+    Relief: 1,
+    Romance: 1,
+    Sadness: 0,
+    Sarcasm: 0,
+    Satisfaction: 1.5,
+    Shame: 0,
+    "Surprise (negative)": 0,
+    "Surprise (positive)": 2,
+    Sympathy: 0,
+    Tiredness: -0.5,
+    Triumph: 2,
 };
 
 class Profiles {
@@ -38,17 +97,29 @@ class Profiles {
         let profileData = await database.get("profiles", id);
         if (profileData) {
             // Ensure scoring parameters exist with defaults
-            if (!profileData.scoring) {
-                profileData.scoring = { ...defaultScoringParams };
+            if (!profileData.params) {
+                profileData.params = { ...defaultScoringParams };
             } else {
                 // Merge with defaults to ensure all parameters exist
-                profileData.scoring = {
+                profileData.params = {
                     ...defaultScoringParams,
-                    ...profileData.scoring,
+                    ...profileData.params,
+                };
+            }
+
+            // Ensure emotion weights exist with defaults
+            if (!profileData.emotions) {
+                profileData.emotions = { ...defaultEmotionWeights };
+            } else {
+                // Merge with defaults to ensure all emotions exist
+                profileData.emotions = {
+                    ...defaultEmotionWeights,
+                    ...profileData.emotions,
                 };
             }
 
             this.profile = profileData;
+
             return this.profile;
         } else {
             console.error("No profile found with ID:", id);
@@ -64,6 +135,43 @@ class Profiles {
         return await database.query("profiles");
     }
 
+    async clone(sourceId, updates = {}) {
+        const sourceProfile = await this.getById(sourceId);
+        if (!sourceProfile) {
+            console.error(
+                "Cannot duplicate non-existent profile ID:",
+                sourceId
+            );
+            return null;
+        }
+
+        // Apply any updates, merging nested objects properly
+        const duplicateData = {
+            ...sourceProfile,
+            ...updates,
+        };
+
+        // Remove the ID so we don't overwrite the original
+        delete duplicateData.id;
+        delete duplicateData.created;
+
+        // Handle nested merging for emotions and params if they exist in updates
+        if (updates.emotions) {
+            duplicateData.emotions = {
+                ...duplicateData.emotions,
+                ...updates.emotions,
+            };
+        }
+        if (updates.params) {
+            duplicateData.params = {
+                ...duplicateData.params,
+                ...updates.params,
+            };
+        }
+
+        return duplicateData;
+    }
+
     async duplicate(sourceId, updates = {}) {
         /**
          * Duplicate an existing profile with optional updates.
@@ -71,43 +179,10 @@ class Profiles {
          * @param {Object} [updates={}] - Optional data to override in the duplicated profile
          * @returns {string|null} The new profile ID or null if failed
          */
-        const sourceProfile = await database.get("profiles", sourceId);
-        if (!sourceProfile) {
-            console.error("Source profile not found:", sourceId);
+
+        const duplicateData = await this.clone(sourceId, updates);
+        if (!duplicateData) {
             return null;
-        }
-
-        // Start with source profile data (excluding id, created, updated)
-        const { id, created, updated, ...profileData } = sourceProfile;
-
-        // Ensure scoring parameters exist with defaults
-        if (!profileData.scoring) {
-            profileData.scoring = { ...defaultScoringParams };
-        } else {
-            profileData.scoring = {
-                ...defaultScoringParams,
-                ...profileData.scoring,
-            };
-        }
-
-        // Apply any updates, merging nested objects properly
-        const duplicateData = {
-            ...profileData,
-            ...updates,
-        };
-
-        // Handle nested merging for emotions and scoring if they exist in updates
-        if (updates.emotions) {
-            duplicateData.emotions = {
-                ...profileData.emotions,
-                ...updates.emotions,
-            };
-        }
-        if (updates.scoring) {
-            duplicateData.scoring = {
-                ...profileData.scoring,
-                ...updates.scoring,
-            };
         }
 
         return await database.set("profiles", duplicateData);
@@ -120,7 +195,7 @@ class Profiles {
          * @param {string} profileData.name - Profile name
          * @param {string} [profileData.description] - Profile description
          * @param {Object} [profileData.emotions] - Emotion weights map (will override defaults)
-         * @param {Object} [profileData.scoring] - Scoring parameters (will override defaults)
+         * @param {Object} [profileData.params] - Scoring parameters (will override defaults)
          * @returns {string|null} The created profile ID or null if failed
          */
         return await this.duplicate(defaultProfileId, profileData);
@@ -133,9 +208,28 @@ class Profiles {
          * @param {Object} updates - Fields to update
          * @returns {boolean} Success status
          */
+
         // If updating scoring parameters, merge with existing
-        if (updates.scoring && this.profile && this.profile.id === id) {
-            updates.scoring = { ...this.profile.scoring, ...updates.scoring };
+        if (
+            updates &&
+            updates.params &&
+            this.profile &&
+            this.profile.id === id
+        ) {
+            updates.params = { ...this.profile.params, ...updates.params };
+        }
+
+        // If updating emotions, merge with existing
+        if (
+            updates &&
+            updates.emotions &&
+            this.profile &&
+            this.profile.id === id
+        ) {
+            updates.emotions = {
+                ...this.profile.emotions,
+                ...updates.emotions,
+            };
         }
 
         const success = await database.update("profiles", id, updates);
@@ -186,7 +280,7 @@ class Profiles {
          * Get scoring parameters from the current profile.
          * @returns {Object} Scoring parameters
          */
-        return this.profile?.scoring || { ...defaultScoringParams };
+        return this.profile?.params || { ...defaultScoringParams };
     }
 
     async updateScoringParams(params) {
@@ -200,7 +294,7 @@ class Profiles {
             return false;
         }
 
-        return await this.update(this.profile.id, { scoring: params });
+        return await this.update(this.profile.id, { params });
     }
 
     getEmotionWeight(emotionName) {
@@ -245,9 +339,9 @@ class Profiles {
         return await this.update(this.profile.id, { emotions });
     }
 
-    async setSelectorToAll(state) {
+    async setSelectorToAll() {
         const profiles = await this.getAll();
-        state.val = profiles;
+        this.profileListState.val = profiles;
     }
 
     createOptionElement(profileData, selected) {
@@ -270,8 +364,8 @@ class Profiles {
 
     createSelectorElement(selected) {
         const { div, select } = van.tags;
-        const profileListState = van.state([]);
-        this.setSelectorToAll(profileListState);
+        this.profileListState = van.state([]);
+        this.setSelectorToAll();
 
         const container = div({ class: "vyprofiles-selector" }, () => {
             const sel = select({
@@ -279,7 +373,7 @@ class Profiles {
                 class: "w-full text-black p-1",
             });
 
-            profileListState.val.forEach((profileData) =>
+            this.profileListState.val.forEach((profileData) =>
                 van.add(sel, this.createOptionElement(profileData, selected))
             );
 
@@ -300,4 +394,4 @@ class Profiles {
 
 const profiles = new Profiles();
 export default profiles;
-export { profiles, Profiles, defaultScoringParams };
+export { profiles, Profiles, defaultScoringParams, defaultEmotionWeights };

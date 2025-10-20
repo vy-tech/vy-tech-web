@@ -12,6 +12,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const historyFile = path.join(__dirname, "..", ".vy_repl_history");
 
+console.log("Starting Vy REPL.  Use dynamic import() to load modules.");
+console.log('eg: const { database } = await import("../src/data/db.js");');
+
 const replServer = repl.start({
     prompt: "vy> ",
     historySize: 1000, // Keep last 1000 commands

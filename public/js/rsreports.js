@@ -1,9 +1,9 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
 import { e as eventBus } from './chunks/eventbus-BbLtLH1t.js';
-import { H as Hierarchy, S as Score, p as progress, a as activeBoxManager, g as geomUtil, s as scoring, t as timeUtil, b as annotations, c as profiles } from './chunks/annotations-BCAmp1Fk.js';
-import { d as database } from './chunks/db-DBkYKoGS.js';
+import { H as Hierarchy, S as Score, p as progress, a as activeBoxManager, g as geomUtil, s as scoring, t as timeUtil, b as annotations, c as profiles } from './chunks/annotations-C7MTp0Ek.js';
+import { d as database } from './chunks/db-B1sKsMd1.js';
 import { a as app } from './chunks/firebase-DTGT__LK.js';
-import { e as events } from './chunks/events-Cbk6bmP1.js';
+import { e as events } from './chunks/events-DYoMJ74J.js';
 
 // Initialize Firebase storage functions based on environment
 let storageFunctions;

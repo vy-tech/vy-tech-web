@@ -1,8 +1,8 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { S as Score, c as profiles, b as annotations, H as Hierarchy } from './chunks/annotations-BCAmp1Fk.js';
-import { e as events } from './chunks/events-Cbk6bmP1.js';
-import { d as database } from './chunks/db-DBkYKoGS.js';
-import './chunks/eventbus-BbLtLH1t.js';
+import { S as Score, c as profiles, b as annotations, H as Hierarchy } from './chunks/annotations-C7MTp0Ek.js';
+import { e as events } from './chunks/events-DYoMJ74J.js';
+import { d as database } from './chunks/db-B1sKsMd1.js';
+import { e as eventBus } from './chunks/eventbus-BbLtLH1t.js';
 import './chunks/firebase-DTGT__LK.js';
 
 /*!
@@ -18292,24 +18292,49 @@ function drawElement(ctx, chartArea, state, item) {
 
 class Fitness {
     constructor(scoring) {
-        this.scores = [];
+        this.scores = null;
         this.scoring = scoring;
         this.positiveParams = {
+            // Timing
             responseWindow: 5.0, // seconds to look for initial response
             sustainDuration: 3.0, // minimum sustained elevation
-            highThresholdMultiplier: 2.0, // median + 2x MAD
-            baselineRangeMultiplier: 1.25, // median +/- 1x MAD for baseline range
+
+            // Non-adaptive thresholds
+            highMax: 1200,
+            highThreshold: 600,
+            baselineUpper: 400,
+            baselineLower: 0,
+
+            // Adaptive thresholds
+            useAdaptiveThresholds: false,
+            highThresholdMultiplier: 2, // median + this x MAD
+            highThresholdMin: 450,
+            highThresholdMax: 800,
+            baselineRangeMultiplier: 1.5, // median +/- this x MAD for baseline range
+            baselineLowerMin: -200,
+            baselineLowerMax: 200,
+            baselineUpperMin: 200,
+            baselineUpperMax: 400,
+
+            // Flatness
             maxHighStddev: 300, // max std dev during high period
             maxBaselineStddev: 200, // max std dev during baseline
         };
     }
 
-    async buildScores() {
+    async buildScores(totalTime = 60.0) {
         this.scoring.rewindWindow();
         this.scores = [];
 
-        for (let i = 0; i < 60; i += 0.1) {
+        for (let i = 0; i < totalTime; i += 0.1) {
             await this.scoring.handleTimeUpdate(i);
+
+            if (isNaN(this.scoring.currentScore)) {
+                throw new Error(
+                    `Invalid score at time ${i}: ${this.scoring.currentScore}`
+                );
+            }
+
             this.scores.push({
                 time: i,
                 score: this.scoring.currentScore,
@@ -18335,30 +18360,40 @@ class Fitness {
         const median = this.calculateMedian(allScores);
         const mad = this.calculateMAD(allScores, median);
 
+        const params = this.positiveParams;
+        const bound = (min, value, max) => Math.min(max, Math.max(min, value));
+
         const thresholds = {
             median: median,
             mad: mad,
-            highThreshold: Math.max(
-                500,
-                median + this.positiveParams.highThresholdMultiplier * mad
+            highThreshold: bound(
+                params.highThresholdMin,
+                median + params.highThresholdMultiplier * mad,
+                params.highThresholdMax
             ),
-            baselineUpperBound:
-                median + this.positiveParams.baselineRangeMultiplier * mad,
-            baselineLowerBound:
-                median - this.positiveParams.baselineRangeMultiplier * mad,
+            baselineUpperBound: bound(
+                params.baselineUpperMin,
+                median + params.baselineRangeMultiplier * mad,
+                params.baselineUpperMax
+            ),
+            baselineLowerBound: bound(
+                params.baselineLowerMin,
+                median - params.baselineRangeMultiplier * mad,
+                params.baselineLowerMax
+            ),
         };
 
-        console.log(
-            `Adaptive thresholds: median=${median.toFixed(
-                1
-            )}, MAD=${mad.toFixed(1)}`
-        );
-        console.log(`High threshold: ${thresholds.highThreshold.toFixed(1)}`);
-        console.log(
-            `Baseline range: ${thresholds.baselineLowerBound.toFixed(
-                1
-            )} to ${thresholds.baselineUpperBound.toFixed(1)}`
-        );
+        // console.log(
+        //     `Adaptive thresholds: median=${median.toFixed(
+        //         1
+        //     )}, MAD=${mad.toFixed(1)}`
+        // );
+        // console.log(`High threshold: ${thresholds.highThreshold.toFixed(1)}`);
+        // console.log(
+        //     `Baseline range: ${thresholds.baselineLowerBound.toFixed(
+        //         1
+        //     )} to ${thresholds.baselineUpperBound.toFixed(1)}`
+        // );
 
         return thresholds;
     }
@@ -18378,8 +18413,8 @@ class Fitness {
             data.reduce((sum, row) => sum + (row.score - mean) ** 2, 0) /
             data.length;
 
-        console.log(`mean: ${mean}`);
-        console.log(`stddev: ${Math.sqrt(variance)}`);
+        // console.log(`mean: ${mean}`);
+        // console.log(`stddev: ${Math.sqrt(variance)}`);
 
         return Math.sqrt(variance);
     }
@@ -18403,78 +18438,108 @@ class Fitness {
         return Math.max(0, 1 - (stddev - maxStddev) / maxStddev);
     }
 
-    calculateThresholdReasonablenessScore(adaptiveThresholds) {
-        // Target ranges for reasonable thresholds
-        const targetBaselineMin = 0;
-        const targetBaselineMax = 250;
-        const targetHighThreshold = 500;
+    // calculateThresholdReasonablenessScore(adaptiveThresholds) {
+    //     // Target ranges for reasonable thresholds
+    //     const targetBaselineMin = 0;
+    //     const targetBaselineMax = 250;
+    //     const targetHighThreshold = 500;
 
-        // Calculate baseline center point
-        const baselineCenter =
-            (adaptiveThresholds.baselineLowerBound +
-                adaptiveThresholds.baselineUpperBound) /
-            2;
+    //     // Calculate baseline center point
+    //     const baselineCenter =
+    //         (adaptiveThresholds.baselineLowerBound +
+    //             adaptiveThresholds.baselineUpperBound) /
+    //         2;
 
-        // Score baseline reasonableness (how close to 0-250 range)
-        let baselineScore = 0;
-        if (
-            baselineCenter >= targetBaselineMin &&
-            baselineCenter <= targetBaselineMax
-        ) {
-            // Perfect score if within target range
-            baselineScore = 1;
-        } else if (baselineCenter < targetBaselineMin) {
-            // Penalty for being too low (negative values are problematic)
-            const distance = Math.abs(baselineCenter - targetBaselineMin);
-            baselineScore = Math.max(0, 1 - distance / 100); // Penalize 1% per point below 0
-        } else {
-            // Penalty for being too high
-            const distance = baselineCenter - targetBaselineMax;
-            baselineScore = Math.max(0, 1 - distance / 200); // Penalize 0.5% per point above 250
-        }
+    //     // Score baseline reasonableness (how close to 0-250 range)
+    //     let baselineScore = 0;
+    //     if (
+    //         baselineCenter >= targetBaselineMin &&
+    //         baselineCenter <= targetBaselineMax
+    //     ) {
+    //         // Perfect score if within target range
+    //         baselineScore = 1;
+    //     } else if (baselineCenter < targetBaselineMin) {
+    //         // Penalty for being too low (negative values are problematic)
+    //         const distance = Math.abs(baselineCenter - targetBaselineMin);
+    //         baselineScore = Math.max(0, 1 - distance / 100); // Penalize 1% per point below 0
+    //     } else {
+    //         // Penalty for being too high
+    //         const distance = baselineCenter - targetBaselineMax;
+    //         baselineScore = Math.max(0, 1 - distance / 200); // Penalize 0.5% per point above 250
+    //     }
 
-        // Score high threshold reasonableness (how close to 500)
-        const highThresholdDistance = Math.abs(
-            adaptiveThresholds.highThreshold - targetHighThreshold
-        );
-        const highThresholdScore = Math.max(0, 1 - highThresholdDistance / 300); // Penalize based on distance from 500
+    //     // Score high threshold reasonableness (how close to 500)
+    //     const highThresholdDistance = Math.abs(
+    //         adaptiveThresholds.highThreshold - targetHighThreshold
+    //     );
+    //     const highThresholdScore = Math.max(0, 1 - highThresholdDistance / 300); // Penalize based on distance from 500
 
-        // Combine scores (equal weighting)
-        const overallThresholdScore = (baselineScore + highThresholdScore) / 2;
+    //     // Combine scores (equal weighting)
+    //     const overallThresholdScore = (baselineScore + highThresholdScore) / 2;
 
-        console.log(
-            `Threshold reasonableness: baseline=${baselineScore.toFixed(
-                3
-            )} (center=${baselineCenter.toFixed(
-                1
-            )}), high=${highThresholdScore.toFixed(
-                3
-            )} (${adaptiveThresholds.highThreshold.toFixed(
-                1
-            )}), overall=${overallThresholdScore.toFixed(3)}`
-        );
+    //     // console.log(
+    //     //     `Threshold reasonableness: baseline=${baselineScore.toFixed(
+    //     //         3
+    //     //     )} (center=${baselineCenter.toFixed(
+    //     //         1
+    //     //     )}), high=${highThresholdScore.toFixed(
+    //     //         3
+    //     //     )} (${adaptiveThresholds.highThreshold.toFixed(
+    //     //         1
+    //     //     )}), overall=${overallThresholdScore.toFixed(3)}`
+    //     // );
 
-        return overallThresholdScore;
+    //     return overallThresholdScore;
+    // }
+
+    scoresWithinBaseline(thresholds) {
+        if (!this.scores) return 0;
+
+        const baselineScores = this.scores.filter((row) => {
+            return (
+                row.score >= thresholds.baselineLowerBound &&
+                row.score <= thresholds.baselineUpperBound
+            );
+        });
+
+        return baselineScores.length / this.scores.length;
     }
 
-    evaluatePositiveResponse(time, paramOverrides = {}) {
+    evaluate(time, paramOverrides = {}) {
         const params = { ...this.positiveParams, ...paramOverrides };
 
-        // Calculate adaptive thresholds based on entire dataset
-        const adaptiveThresholds = this.calculateAdaptiveThresholds();
+        // Ensure scores are built
+        if (!this.scores) this.buildScores();
 
+        let thresholds = {
+            highThreshold: params.highThreshold,
+            highMax: params.highMax,
+            baselineLowerBound: params.baselineLower,
+            baselineUpperBound: params.baselineUpper,
+        };
+
+        if (params.useAdaptiveThresholds) {
+            // Calculate adaptive thresholds based on entire dataset
+            thresholds = this.calculateAdaptiveThresholds();
+        }
+
+        let shapeScore = 0;
         let sustainScore = 0;
         let timingScore = 0;
         let highStddevScore = 0;
         let baselineStddevScore = 0;
         let thresholdScore = 0;
+        let baselineAmountScore = 0;
+
         // Extract time windows
-        const reactionWindow = this.getTimeWindow(time, time + 10);
+        const reactionWindow = this.getTimeWindow(time, time + 15);
 
         // 1. Find sustained high period using adaptive threshold
         const highPeriod = this.findSustainedPeriod(
             reactionWindow,
-            (value) => value >= adaptiveThresholds.highThreshold,
+            (value) =>
+                value >= thresholds.highThreshold &&
+                value <= thresholds.highMax,
             params.sustainDuration
         );
         sustainScore = highPeriod ? 1 : 0;
@@ -18496,8 +18561,8 @@ class Fitness {
         const preBaselinePeriod = this.findSustainedBefore(
             highPeriod,
             (value) =>
-                value >= adaptiveThresholds.baselineLowerBound &&
-                value <= adaptiveThresholds.baselineUpperBound,
+                value >= thresholds.baselineLowerBound &&
+                value <= thresholds.highThreshold, //thresholds.baselineUpperBound,
             params.sustainDuration
         );
         const preBaselineStddevScore = this.calculateStddevScore(
@@ -18507,8 +18572,8 @@ class Fitness {
         const postBaselinePeriod = this.findSustainedAfter(
             highPeriod,
             (value) =>
-                value >= adaptiveThresholds.baselineLowerBound &&
-                value <= adaptiveThresholds.baselineUpperBound,
+                value >= thresholds.baselineLowerBound &&
+                value <= thresholds.highThreshold, //thresholds.baselineUpperBound,
             params.sustainDuration
         );
         const postBaselineStddevScore = this.calculateStddevScore(
@@ -18516,16 +18581,38 @@ class Fitness {
             params.maxBaselineStddev
         );
 
-        baselineStddevScore = Math.max(
-            preBaselineStddevScore,
-            postBaselineStddevScore
-        );
+        baselineStddevScore = preBaselineStddevScore * 0.5 + postBaselineStddevScore * 0.5;
 
         // 5. Calculate threshold reasonableness score
-        thresholdScore =
-            this.calculateThresholdReasonablenessScore(adaptiveThresholds);
+        if (highPeriod) {
+            thresholdScore =
+                highPeriod.max < 1000
+                    ? 1
+                    : Math.max(0, (1200 - highPeriod.max) / 200);
+            //this.calculateThresholdReasonablenessScore(adaptiveThresholds);
+
+            shapeScore =
+                (preBaselinePeriod ? 0.5 : 0) + (postBaselinePeriod ? 0.5 : 0);
+        }
+
+        // 6. Calculate amount of time within baseline range
+        baselineAmountScore = this.scoresWithinBaseline(thresholds);
+
+        let overallScore =
+            shapeScore * 0.2 +
+            timingScore * 0.1 +
+            sustainScore * 0.1 +
+            highStddevScore * 0.15 +
+            baselineStddevScore * 0.15 +
+            thresholdScore * 0.1 +
+            baselineAmountScore * 0.2;
+
+        if (baselineAmountScore == 0) {
+            overallScore = 0;
+        }
 
         return {
+            shape: shapeScore,
             timing: timingScore,
             sustain: sustainScore,
             highStability: highStddevScore,
@@ -18533,17 +18620,13 @@ class Fitness {
             thresholdReasonableness: thresholdScore,
             preBaselineStability: preBaselineStddevScore,
             postBaselineStability: postBaselineStddevScore,
-            overall:
-                timingScore * 0.25 +
-                sustainScore * 0.25 +
-                highStddevScore * 0.2 +
-                baselineStddevScore * 0.2 +
-                thresholdScore * 0.1,
+            baselineAmountScore: baselineAmountScore,
+            overall: overallScore,
             details: {
                 highPeriod: highPeriod,
                 preBaselinePeriod: preBaselinePeriod,
                 postBaselinePeriod: postBaselinePeriod,
-                adaptiveThresholds: adaptiveThresholds,
+                thresholds: thresholds,
             },
             params: params,
         };
@@ -18709,6 +18792,10 @@ class Settings {
     createProfileElements() {
         const { div, button } = van.tags;
 
+        eventBus.on("ui.requestProfile", async (e) => {
+            this.switchToProfile(e.detail);
+        });
+
         return div(
             { class: "mt-4 flex flex-wrap gap-4" },
             div(
@@ -18791,7 +18878,7 @@ class Settings {
         const newProfileId = await profiles.duplicate(profiles.profile.id, {
             name: name,
             description: `Copy of ${profiles.profile.name}`,
-            scoring: scoringParams,
+            params: scoringParams,
             emotions: emotionWeights,
         });
 
@@ -18801,6 +18888,7 @@ class Settings {
                 newProfileId
             );
             // Switch to the new profile
+            await this.reloadProfileList();
             await this.switchToProfile(newProfileId);
         } else {
             console.error("Failed to duplicate profile");
@@ -18827,23 +18915,26 @@ class Settings {
         if (success) {
             console.log("Profile deleted successfully");
             // The profiles module will automatically switch to the default profile
+            await this.reloadProfileList();
             await this.switchToProfile(this.defaultProfileId);
         } else {
             console.error("Failed to delete profile");
         }
     }
 
+    async reloadProfileList() {
+        // Refresh the profile selector to reflect any changes
+        await profiles.setSelectorToAll();
+    }
+
     async switchToProfile(profileId) {
+        console.log("Switching to profile:", profileId);
         this.profileId = profileId;
         await profiles.setActive(profileId);
         await this.refreshProfileElements();
     }
 
     async refreshProfileElements() {
-        // Refresh the profile selector to reflect any changes
-        await profiles.setSelectorToAll();
-        document.getElementById("profile-select").value = this.profileId;
-
         // Re-initialize the profile data
         await this.initProfile();
 
@@ -18868,6 +18959,13 @@ class Settings {
             adaptiveScalingFunction: this.getSelectValue("adaptive-function"),
             adaptiveMinMultiplier: this.getFloatValue("adaptive-min"),
             adaptiveMaxMultiplier: this.getFloatValue("adaptive-max"),
+            boxVolatilityFactor: this.getFloatValue("box-volatility-factor"),
+            newBoxVolatilityFactor: this.getFloatValue(
+                "new-box-volatility-factor"
+            ),
+            lostBoxVolatilityFactor: this.getFloatValue(
+                "lost-box-volatility-factor"
+            ),
         };
     }
 
@@ -18912,6 +19010,12 @@ class Settings {
             scoringParams.adaptiveMinMultiplier;
         document.getElementById("adaptive-max").value =
             scoringParams.adaptiveMaxMultiplier;
+        document.getElementById("box-volatility-factor").value =
+            scoringParams.boxVolatilityFactor;
+        document.getElementById("new-box-volatility-factor").value =
+            scoringParams.newBoxVolatilityFactor;
+        document.getElementById("lost-box-volatility-factor").value =
+            scoringParams.lostBoxVolatilityFactor;
 
         // Update emotion weight inputs
         for (const emotion of this.validEmotions) {
@@ -19057,7 +19161,51 @@ class Settings {
                 })
             ),
 
-            this.createUISquashElements()
+            this.createUISquashElements(),
+
+            this.createVolatilityElements()
+        );
+    }
+
+    createVolatilityElements() {
+        const { div, label, input } = van.tags;
+        return div(
+            { class: "flex items-center gap-2" },
+            label("Volatility Factors"),
+            this.createInfoIcon(
+                "Controls the volatility factors for different types of boxes."
+            ),
+            div(
+                { class: "flex items-center gap-2 ml-4" },
+                label("New"),
+                this.createInfoIcon("New box volatility factor."),
+                input({
+                    id: "new-box-volatility-factor",
+                    type: "number",
+                    value: this.scoring.newBoxVolatilityFactor,
+                    step: 0.1,
+                    class: "text-black w-20",
+                }),
+                label("Lost"),
+                this.createInfoIcon("Lost box volatility factor."),
+                input({
+                    id: "lost-box-volatility-factor",
+                    type: "number",
+                    value: this.scoring.lostBoxVolatilityFactor,
+                    step: 0.1,
+                    class: "text-black w-20",
+                }),
+
+                label("Net"),
+                this.createInfoIcon("Net box volatility factor."),
+                input({
+                    id: "box-volatility-factor",
+                    type: "number",
+                    value: this.scoring.boxVolatilityFactor,
+                    step: 0.1,
+                    class: "text-black w-20",
+                })
+            )
         );
     }
 
@@ -19251,6 +19399,7 @@ class Settings {
 
     async initProfile() {
         await profiles.getById(this.profileId);
+        console.log(profiles.profile);
 
         this.validEmotions = [];
         for (let key in profiles.profile.emotions) {
@@ -19448,22 +19597,22 @@ class Settings {
         this.chart.update();
     }
 
-    async getSourceData() {
-        const sourceInfo = this.getSourceInputs();
-        const hierarchy = this.createHierarchy(sourceInfo);
-        const chunks = await this.getChunks(hierarchy);
+    // async getSourceData() {
+    //     const sourceInfo = this.getSourceInputs();
+    //     const hierarchy = this.createHierarchy(sourceInfo);
+    //     const chunks = await this.getChunks(hierarchy);
 
-        if (!chunks || chunks.length === 0) {
-            return null;
-        }
+    //     if (!chunks || chunks.length === 0) {
+    //         return null;
+    //     }
 
-        const targetChunk = this.findTargetChunk(chunks, sourceInfo);
-        if (!targetChunk) {
-            return null;
-        }
+    //     const targetChunk = this.findTargetChunk(chunks, sourceInfo);
+    //     if (!targetChunk) {
+    //         return null;
+    //     }
 
-        return this.buildSourceUrl(targetChunk, chunks, sourceInfo);
-    }
+    //     return this.buildSourceUrl(targetChunk, chunks, sourceInfo);
+    // }
 
     getSourceInputs() {
         return {
@@ -19488,35 +19637,47 @@ class Settings {
     }
 
     async getChunks(hierarchy) {
-        return await database.query("chunks", {
+        let chunks = await database.query("chunks", {
             hierarchy: hierarchy.toString(),
         });
+
+        chunks.sort((a, b) => a.minuteOfDay - b.minuteOfDay);
+        return chunks;
     }
 
-    findTargetChunk(chunks, sourceInfo) {
-        const reqTime = sourceInfo.time + sourceInfo.offset;
-
-        // Sort the chunks and set the event wallclock start time
-        chunks.sort((a, b) => a.minuteOfDay - b.minuteOfDay);
-
-        // Get the correct minute of the day by adding to the first minuteOfDay
-        chunks[0].minuteOfDay;
+    getMinuteOfDay(chunks, reqTime) {
         const startDate = new Date(chunks[0].creationTime);
         const targetDate = new Date(startDate.getTime() + reqTime * 1000);
         const minuteOfDay =
             targetDate.getUTCHours() * 60 + targetDate.getUTCMinutes();
 
-        console.log(
-            `Looking for minuteOfDay ${minuteOfDay} ${chunks[0].creationTime}`
-        );
-
-        return chunks.find((c) => c.minuteOfDay == minuteOfDay);
+        return minuteOfDay;
     }
 
-    buildSourceUrl(chunk, chunks, sourceInfo) {
-        const reqTime = sourceInfo.time + sourceInfo.offset;
+    filterChunksForTime(chunks, reqTime) {
+        // Return the chunks for the requested time plus/minus one minute
+        const minuteOfDay = this.getMinuteOfDay(chunks, reqTime);
+        const result = chunks.filter(
+            (c) =>
+                c.minuteOfDay >= minuteOfDay - 1 &&
+                c.minuteOfDay <= minuteOfDay + 1
+        );
 
-        // Construct the URL based on the storage type
+        // for (
+        //     let minute = minuteOfDay - 1;
+        //     minute <= minuteOfDay + 1;
+        //     minute++
+        // ) {
+        //     const chunk = chunks.find((c) => c.minuteOfDay == minute);
+        //     if (chunk) {
+        //         result.push(chunk);
+        //     }
+        // }
+
+        return result;
+    }
+
+    getExpressionsUrl(chunk) {
         let path = chunk.expressionsPath;
         let prefix = "";
         let suffix = "";
@@ -19529,32 +19690,105 @@ class Settings {
             prefix = "https://storage.roarscore.ai/production/";
         }
 
-        // Calculate the offset within this chunk
-        const startDate = new Date(chunks[0].creationTime);
-        const chunkDate = new Date(chunk.creationTime);
-        const chunkTime = (chunkDate - startDate) / 1000.0;
-        const offset = reqTime - chunkTime;
+        return `${prefix}${path}${suffix}`;
+    }
 
-        return {
-            url: `${prefix}${path}${suffix}`,
-            offset: offset,
-        };
+    getDuration(chunk) {
+        if (chunk.playbackDurations) {
+            return chunk.playbackDurations.reduce((a, b) => a + b, 0);
+        }
+
+        return chunk.duration || 60;
+    }
+
+    getLoadSchedule(chunks) {
+        let start = 0;
+        let schedule = [];
+
+        for (let chunk of chunks) {
+            const duration = this.getDuration(chunk);
+            schedule.push({
+                url: this.getExpressionsUrl(chunk),
+                start: start,
+                duration: duration,
+            });
+            start += duration;
+        }
+
+        return schedule;
+    }
+
+    getWindowTime(reqTime, chunks, targetChunks) {
+        const startDate = new Date(chunks[0].creationTime);
+        const chunkDate = new Date(targetChunks[0].creationTime);
+        const chunkTime = (chunkDate - startDate) / 1000.0;
+        const windowTime = reqTime - chunkTime;
+
+        return windowTime;
+    }
+
+    async setupLoadSchedule(targetChunks) {
+        const loadSchedule = this.getLoadSchedule(targetChunks);
+
+        this.scoring.loadSchedule = loadSchedule;
+        this.scoring.loadScheduleIndex = 0;
+        await this.scoring.loadWindowFromSchedule(0);
     }
 
     async update() {
+        const sourceInfo = this.getSourceInputs();
+        const hierarchy = this.createHierarchy(sourceInfo);
+        const reqTime = sourceInfo.time + sourceInfo.offset;
+
         console.log("Updating graph...");
 
+        // Set up a new score instance with profile weights and params
         this.scoring = new Score();
+        this.scoring.enableWindowSplicing = false; // Disable window splice so we can rewind for fitness test
         this.updateScoringFromInputs();
         this.updateProfileEmotionsFromInputs();
 
-        const sourceData = await this.getSourceData();
-        if (!sourceData) {
-            console.warn("No source data found.");
+        // Get all the chunks for this hierarchy
+        const chunks = await this.getChunks(hierarchy);
+
+        if (!chunks || chunks.length === 0) {
+            console.warn("No chunks found for the specified hierarchy");
             return;
         }
 
-        await this.loadAndProcessData(sourceData);
+        // Filter for the ones around the requested time
+        const targetChunks = this.filterChunksForTime(chunks, reqTime);
+
+        if (!targetChunks || targetChunks.length === 0) {
+            console.warn("No chunks found for the specified time");
+            return;
+        }
+
+        // Get the time within the 3-minute window
+        const windowTime = this.getWindowTime(reqTime, chunks, targetChunks);
+
+        // Set up a load schedule around the requested time
+        await this.setupLoadSchedule(targetChunks);
+
+        // Calculate scores for the full 3-minute window
+        await this.calculateScores(windowTime);
+
+        // Update the offset line
+        this.updateOffsetLine(windowTime);
+
+        // Calculate fitness and update threshold/period lines
+        await this.calculateFitness(windowTime);
+
+        // Update the chart
+        this.chart.update();
+
+        // const sourceData = await this.getSourceData();
+        // if (!sourceData) {
+        //     console.warn("No source data found.");
+        //     return;
+        // }
+
+        // await this.loadAndProcessData(sourceData);
     }
 
     updateScoringFromInputs() {
@@ -19594,6 +19828,17 @@ class Settings {
             this.getSelectValue("adaptive-function");
         this.scoring.adaptiveMinMultiplier = this.getFloatValue("adaptive-min");
         this.scoring.adaptiveMaxMultiplier = this.getFloatValue("adaptive-max");
+
+        // Volatility factors
+        this.scoring.newBoxVolatilityFactor = this.getFloatValue(
+            "new-box-volatility-factor"
+        );
+        this.scoring.lostBoxVolatilityFactor = this.getFloatValue(
+            "lost-box-volatility-factor"
+        );
+        this.scoring.boxVolatilityFactor = this.getFloatValue(
+            "box-volatility-factor"
+        );
     }
 
     updateProfileEmotionsFromInputs() {
@@ -19607,24 +19852,25 @@ class Settings {
         }
     }
 
-    async loadAndProcessData(sourceData) {
-        const { url, offset } = sourceData;
+    // async loadAndProcessData(sourceData) {
+    //     const { url, offset } = sourceData;
 
-        // Convert offset time (seconds) to data index (4 samples per second)
-        const offsetIndex = offset * 4;
-        this.updateOffsetLine(offsetIndex);
+    //     // Convert offset time (seconds) to data index (4 samples per second)
+    //     const offsetIndex = offset * 4;
+    //     this.updateOffsetLine(offsetIndex);
 
-        console.log(
-            `Loading ${url}, offset: ${offset}s (index: ${offsetIndex})`
-        );
-        await this.scoring.loadWindow(url);
-        this.processDataPoints();
+    //     console.log(
+    //         `Loading ${url}, offset: ${offset}s (index: ${offsetIndex})`
+    //     );
+    //     await this.scoring.loadWindow(url);
+    //     this.processDataPoints();
 
-        await this.calculateFitness(offset);
-        this.chart.update();
-    }
+    //     this.calculateFitness(offset);
+    //     this.chart.update();
+    // }
 
-    updateOffsetLine(offsetIndex) {
+    updateOffsetLine(reqTime) {
+        const offsetIndex = 30 * 4;
         this.offsetLine.xMin = offsetIndex;
         this.offsetLine.xMax = offsetIndex;
     }
@@ -19638,10 +19884,12 @@ class Settings {
         this.highLine.yMax = high;
     }
 
-    updatePeriodBox(box, period, label) {
+    updatePeriodBox(time, box, period, label) {
         if (period) {
-            box.xMin = period.startTime * 4;
-            box.xMax = period.endTime * 4;
+            const startTime = 30 - time + period.startTime;
+            const endTime = 30 - time + period.endTime;
+            box.xMin = startTime * 4;
+            box.xMax = endTime * 4;
             box.display = true;
             box.label.content = label;
         } else {
@@ -19649,18 +19897,33 @@ class Settings {
         }
     }
 
-    processDataPoints() {
-        for (let t = 0; t < 60 * 4.0; t += 0.25) {
-            this.updateScoring(0.25);
-            this.data[Math.floor(t * 4)] = this.scoring.currentScore;
+    async calculateScores(windowTime) {
+        // We don't want to reset the array because
+        // Chart.js keeps a reference to it
+
+        let idx = 0;
+        for (let t = 0; t < 180; t += 0.25) {
+            await this.scoring.handleTimeUpdate(t);
+
+            if (t >= windowTime - 30 && t <= windowTime + 30) {
+                this.data[idx] = this.scoring.currentScore;
+                idx++;
+            }
         }
     }
 
+    // processDataPoints() {
+    //     for (let t = 0; t < 60 * 4.0; t += 0.25) {
+    //         this.updateScoring(0.25);
+    //         this.data[Math.floor(t * 4)] = this.scoring.currentScore;
+    //     }
+    // }
+
     async calculateFitness(time) {
         const fitness = new Fitness(this.scoring);
-        await fitness.buildScores();
+        await fitness.buildScores(180.0);
 
-        const score = fitness.evaluatePositiveResponse(time);
+        const score = fitness.evaluate(time);
 
         const highLabel = [
             "High Period",
@@ -19678,24 +19941,27 @@ class Settings {
         ];
 
         this.updatePeriodBox(
+            time,
             this.highPeriodBox,
             score.details.highPeriod,
             highLabel
         );
         this.updatePeriodBox(
+            time,
             this.preBaselineBox,
             score.details.preBaselinePeriod,
             preBaselineLabel
         );
         this.updatePeriodBox(
+            time,
             this.postBaselineBox,
             score.details.postBaselinePeriod,
             postBaselineLabel
         );
         this.updateThreholdLines(
-            score.details.adaptiveThresholds.baselineLowerBound,
-            score.details.adaptiveThresholds.baselineUpperBound,
-            score.details.adaptiveThresholds.highThreshold
+            score.details.thresholds.baselineLowerBound,
+            score.details.thresholds.baselineUpperBound,
+            score.details.thresholds.highThreshold
         );
 
         console.log(score);
@@ -19714,16 +19980,16 @@ class Settings {
         return document.getElementById(id).value;
     }
 
-    updateScoring(dt) {
-        const newTime = this.scoring.currentTime + dt;
-        this.scoring.lastTime = this.scoring.currentTime;
-        this.scoring.currentTime = newTime;
-        this.scoring.lastSecond = this.scoring.currentSecond;
-        this.scoring.currentSecond = Math.floor(this.scoring.currentTime);
+    // updateScoring(dt) {
+    //     const newTime = this.scoring.currentTime + dt;
+    //     this.scoring.lastTime = this.scoring.currentTime;
+    //     this.scoring.currentTime = newTime;
+    //     this.scoring.lastSecond = this.scoring.currentSecond;
+    //     this.scoring.currentSecond = Math.floor(this.scoring.currentTime);
 
-        this.scoring.moveWindow();
-        this.scoring.updateCurrentFromWindow();
-    }
+    //     this.scoring.moveWindow();
+    //     this.scoring.updateCurrentFromWindow();
+    // }
 
     createInfoIcon(tooltipText) {
         const { span } = van.tags;

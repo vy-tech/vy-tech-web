@@ -46,6 +46,13 @@ class Annotations {
         return rows;
     }
 
+    async getByTag(tag) {
+        let rows = await database.query("annotations", {
+            tags: { value: tag, op: "array-contains" },
+        });
+        return rows;
+    }
+
     createElement(options = {}) {
         const { div } = van.tags;
 
@@ -454,11 +461,18 @@ class Annotations {
             time = timeUtil.toSecondsFromLocalString(timeInput);
         }
 
+        // Extract tags from content as an array
+        const tags = content
+            .split(/\s+/)
+            .filter((word) => word.startsWith("#"))
+            .map((tag) => tag.slice(1));
+
         const annotation = {
             time,
             type,
             importance,
             content,
+            tags,
         };
 
         return annotation;

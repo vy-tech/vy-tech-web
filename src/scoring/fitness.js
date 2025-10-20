@@ -1,23 +1,48 @@
 class Fitness {
     constructor(scoring) {
-        this.scores = [];
+        this.scores = null;
         this.scoring = scoring;
         this.positiveParams = {
+            // Timing
             responseWindow: 5.0, // seconds to look for initial response
             sustainDuration: 3.0, // minimum sustained elevation
-            highThresholdMultiplier: 2.0, // median + 2x MAD
-            baselineRangeMultiplier: 1.25, // median +/- 1x MAD for baseline range
+
+            // Non-adaptive thresholds
+            highMax: 1200,
+            highThreshold: 600,
+            baselineUpper: 400,
+            baselineLower: 0,
+
+            // Adaptive thresholds
+            useAdaptiveThresholds: false,
+            highThresholdMultiplier: 2, // median + this x MAD
+            highThresholdMin: 450,
+            highThresholdMax: 800,
+            baselineRangeMultiplier: 1.5, // median +/- this x MAD for baseline range
+            baselineLowerMin: -200,
+            baselineLowerMax: 200,
+            baselineUpperMin: 200,
+            baselineUpperMax: 400,
+
+            // Flatness
             maxHighStddev: 300, // max std dev during high period
             maxBaselineStddev: 200, // max std dev during baseline
         };
     }
 
-    async buildScores() {
+    async buildScores(totalTime = 60.0) {
         this.scoring.rewindWindow();
         this.scores = [];
 
-        for (let i = 0; i < 60; i += 0.1) {
+        for (let i = 0; i < totalTime; i += 0.1) {
             await this.scoring.handleTimeUpdate(i);
+
+            if (isNaN(this.scoring.currentScore)) {
+                throw new Error(
+                    `Invalid score at time ${i}: ${this.scoring.currentScore}`
+                );
+            }
+
             this.scores.push({
                 time: i,
                 score: this.scoring.currentScore,
@@ -43,30 +68,40 @@ class Fitness {
         const median = this.calculateMedian(allScores);
         const mad = this.calculateMAD(allScores, median);
 
+        const params = this.positiveParams;
+        const bound = (min, value, max) => Math.min(max, Math.max(min, value));
+
         const thresholds = {
             median: median,
             mad: mad,
-            highThreshold: Math.max(
-                500,
-                median + this.positiveParams.highThresholdMultiplier * mad
+            highThreshold: bound(
+                params.highThresholdMin,
+                median + params.highThresholdMultiplier * mad,
+                params.highThresholdMax
             ),
-            baselineUpperBound:
-                median + this.positiveParams.baselineRangeMultiplier * mad,
-            baselineLowerBound:
-                median - this.positiveParams.baselineRangeMultiplier * mad,
+            baselineUpperBound: bound(
+                params.baselineUpperMin,
+                median + params.baselineRangeMultiplier * mad,
+                params.baselineUpperMax
+            ),
+            baselineLowerBound: bound(
+                params.baselineLowerMin,
+                median - params.baselineRangeMultiplier * mad,
+                params.baselineLowerMax
+            ),
         };
 
-        console.log(
-            `Adaptive thresholds: median=${median.toFixed(
-                1
-            )}, MAD=${mad.toFixed(1)}`
-        );
-        console.log(`High threshold: ${thresholds.highThreshold.toFixed(1)}`);
-        console.log(
-            `Baseline range: ${thresholds.baselineLowerBound.toFixed(
-                1
-            )} to ${thresholds.baselineUpperBound.toFixed(1)}`
-        );
+        // console.log(
+        //     `Adaptive thresholds: median=${median.toFixed(
+        //         1
+        //     )}, MAD=${mad.toFixed(1)}`
+        // );
+        // console.log(`High threshold: ${thresholds.highThreshold.toFixed(1)}`);
+        // console.log(
+        //     `Baseline range: ${thresholds.baselineLowerBound.toFixed(
+        //         1
+        //     )} to ${thresholds.baselineUpperBound.toFixed(1)}`
+        // );
 
         return thresholds;
     }
@@ -86,8 +121,8 @@ class Fitness {
             data.reduce((sum, row) => sum + (row.score - mean) ** 2, 0) /
             data.length;
 
-        console.log(`mean: ${mean}`);
-        console.log(`stddev: ${Math.sqrt(variance)}`);
+        // console.log(`mean: ${mean}`);
+        // console.log(`stddev: ${Math.sqrt(variance)}`);
 
         return Math.sqrt(variance);
     }
@@ -111,78 +146,108 @@ class Fitness {
         return Math.max(0, 1 - (stddev - maxStddev) / maxStddev);
     }
 
-    calculateThresholdReasonablenessScore(adaptiveThresholds) {
-        // Target ranges for reasonable thresholds
-        const targetBaselineMin = 0;
-        const targetBaselineMax = 250;
-        const targetHighThreshold = 500;
+    // calculateThresholdReasonablenessScore(adaptiveThresholds) {
+    //     // Target ranges for reasonable thresholds
+    //     const targetBaselineMin = 0;
+    //     const targetBaselineMax = 250;
+    //     const targetHighThreshold = 500;
 
-        // Calculate baseline center point
-        const baselineCenter =
-            (adaptiveThresholds.baselineLowerBound +
-                adaptiveThresholds.baselineUpperBound) /
-            2;
+    //     // Calculate baseline center point
+    //     const baselineCenter =
+    //         (adaptiveThresholds.baselineLowerBound +
+    //             adaptiveThresholds.baselineUpperBound) /
+    //         2;
 
-        // Score baseline reasonableness (how close to 0-250 range)
-        let baselineScore = 0;
-        if (
-            baselineCenter >= targetBaselineMin &&
-            baselineCenter <= targetBaselineMax
-        ) {
-            // Perfect score if within target range
-            baselineScore = 1;
-        } else if (baselineCenter < targetBaselineMin) {
-            // Penalty for being too low (negative values are problematic)
-            const distance = Math.abs(baselineCenter - targetBaselineMin);
-            baselineScore = Math.max(0, 1 - distance / 100); // Penalize 1% per point below 0
-        } else {
-            // Penalty for being too high
-            const distance = baselineCenter - targetBaselineMax;
-            baselineScore = Math.max(0, 1 - distance / 200); // Penalize 0.5% per point above 250
-        }
+    //     // Score baseline reasonableness (how close to 0-250 range)
+    //     let baselineScore = 0;
+    //     if (
+    //         baselineCenter >= targetBaselineMin &&
+    //         baselineCenter <= targetBaselineMax
+    //     ) {
+    //         // Perfect score if within target range
+    //         baselineScore = 1;
+    //     } else if (baselineCenter < targetBaselineMin) {
+    //         // Penalty for being too low (negative values are problematic)
+    //         const distance = Math.abs(baselineCenter - targetBaselineMin);
+    //         baselineScore = Math.max(0, 1 - distance / 100); // Penalize 1% per point below 0
+    //     } else {
+    //         // Penalty for being too high
+    //         const distance = baselineCenter - targetBaselineMax;
+    //         baselineScore = Math.max(0, 1 - distance / 200); // Penalize 0.5% per point above 250
+    //     }
 
-        // Score high threshold reasonableness (how close to 500)
-        const highThresholdDistance = Math.abs(
-            adaptiveThresholds.highThreshold - targetHighThreshold
-        );
-        const highThresholdScore = Math.max(0, 1 - highThresholdDistance / 300); // Penalize based on distance from 500
+    //     // Score high threshold reasonableness (how close to 500)
+    //     const highThresholdDistance = Math.abs(
+    //         adaptiveThresholds.highThreshold - targetHighThreshold
+    //     );
+    //     const highThresholdScore = Math.max(0, 1 - highThresholdDistance / 300); // Penalize based on distance from 500
 
-        // Combine scores (equal weighting)
-        const overallThresholdScore = (baselineScore + highThresholdScore) / 2;
+    //     // Combine scores (equal weighting)
+    //     const overallThresholdScore = (baselineScore + highThresholdScore) / 2;
 
-        console.log(
-            `Threshold reasonableness: baseline=${baselineScore.toFixed(
-                3
-            )} (center=${baselineCenter.toFixed(
-                1
-            )}), high=${highThresholdScore.toFixed(
-                3
-            )} (${adaptiveThresholds.highThreshold.toFixed(
-                1
-            )}), overall=${overallThresholdScore.toFixed(3)}`
-        );
+    //     // console.log(
+    //     //     `Threshold reasonableness: baseline=${baselineScore.toFixed(
+    //     //         3
+    //     //     )} (center=${baselineCenter.toFixed(
+    //     //         1
+    //     //     )}), high=${highThresholdScore.toFixed(
+    //     //         3
+    //     //     )} (${adaptiveThresholds.highThreshold.toFixed(
+    //     //         1
+    //     //     )}), overall=${overallThresholdScore.toFixed(3)}`
+    //     // );
 
-        return overallThresholdScore;
+    //     return overallThresholdScore;
+    // }
+
+    scoresWithinBaseline(thresholds) {
+        if (!this.scores) return 0;
+
+        const baselineScores = this.scores.filter((row) => {
+            return (
+                row.score >= thresholds.baselineLowerBound &&
+                row.score <= thresholds.baselineUpperBound
+            );
+        });
+
+        return baselineScores.length / this.scores.length;
     }
 
-    evaluatePositiveResponse(time, paramOverrides = {}) {
+    evaluate(time, paramOverrides = {}) {
         const params = { ...this.positiveParams, ...paramOverrides };
 
-        // Calculate adaptive thresholds based on entire dataset
-        const adaptiveThresholds = this.calculateAdaptiveThresholds();
+        // Ensure scores are built
+        if (!this.scores) this.buildScores();
 
+        let thresholds = {
+            highThreshold: params.highThreshold,
+            highMax: params.highMax,
+            baselineLowerBound: params.baselineLower,
+            baselineUpperBound: params.baselineUpper,
+        };
+
+        if (params.useAdaptiveThresholds) {
+            // Calculate adaptive thresholds based on entire dataset
+            thresholds = this.calculateAdaptiveThresholds();
+        }
+
+        let shapeScore = 0;
         let sustainScore = 0;
         let timingScore = 0;
         let highStddevScore = 0;
         let baselineStddevScore = 0;
         let thresholdScore = 0;
+        let baselineAmountScore = 0;
+
         // Extract time windows
-        const reactionWindow = this.getTimeWindow(time, time + 10);
+        const reactionWindow = this.getTimeWindow(time, time + 15);
 
         // 1. Find sustained high period using adaptive threshold
         const highPeriod = this.findSustainedPeriod(
             reactionWindow,
-            (value) => value >= adaptiveThresholds.highThreshold,
+            (value) =>
+                value >= thresholds.highThreshold &&
+                value <= thresholds.highMax,
             params.sustainDuration
         );
         sustainScore = highPeriod ? 1 : 0;
@@ -204,8 +269,8 @@ class Fitness {
         const preBaselinePeriod = this.findSustainedBefore(
             highPeriod,
             (value) =>
-                value >= adaptiveThresholds.baselineLowerBound &&
-                value <= adaptiveThresholds.baselineUpperBound,
+                value >= thresholds.baselineLowerBound &&
+                value <= thresholds.highThreshold, //thresholds.baselineUpperBound,
             params.sustainDuration
         );
         const preBaselineStddevScore = this.calculateStddevScore(
@@ -215,8 +280,8 @@ class Fitness {
         const postBaselinePeriod = this.findSustainedAfter(
             highPeriod,
             (value) =>
-                value >= adaptiveThresholds.baselineLowerBound &&
-                value <= adaptiveThresholds.baselineUpperBound,
+                value >= thresholds.baselineLowerBound &&
+                value <= thresholds.highThreshold, //thresholds.baselineUpperBound,
             params.sustainDuration
         );
         const postBaselineStddevScore = this.calculateStddevScore(
@@ -224,16 +289,38 @@ class Fitness {
             params.maxBaselineStddev
         );
 
-        baselineStddevScore = Math.max(
-            preBaselineStddevScore,
-            postBaselineStddevScore
-        );
+        baselineStddevScore = preBaselineStddevScore * 0.5 + postBaselineStddevScore * 0.5;
 
         // 5. Calculate threshold reasonableness score
-        thresholdScore =
-            this.calculateThresholdReasonablenessScore(adaptiveThresholds);
+        if (highPeriod) {
+            thresholdScore =
+                highPeriod.max < 1000
+                    ? 1
+                    : Math.max(0, (1200 - highPeriod.max) / 200);
+            //this.calculateThresholdReasonablenessScore(adaptiveThresholds);
+
+            shapeScore =
+                (preBaselinePeriod ? 0.5 : 0) + (postBaselinePeriod ? 0.5 : 0);
+        }
+
+        // 6. Calculate amount of time within baseline range
+        baselineAmountScore = this.scoresWithinBaseline(thresholds);
+
+        let overallScore =
+            shapeScore * 0.2 +
+            timingScore * 0.1 +
+            sustainScore * 0.1 +
+            highStddevScore * 0.15 +
+            baselineStddevScore * 0.15 +
+            thresholdScore * 0.1 +
+            baselineAmountScore * 0.2;
+
+        if (baselineAmountScore == 0) {
+            overallScore = 0;
+        }
 
         return {
+            shape: shapeScore,
             timing: timingScore,
             sustain: sustainScore,
             highStability: highStddevScore,
@@ -241,17 +328,13 @@ class Fitness {
             thresholdReasonableness: thresholdScore,
             preBaselineStability: preBaselineStddevScore,
             postBaselineStability: postBaselineStddevScore,
-            overall:
-                timingScore * 0.25 +
-                sustainScore * 0.25 +
-                highStddevScore * 0.2 +
-                baselineStddevScore * 0.2 +
-                thresholdScore * 0.1,
+            baselineAmountScore: baselineAmountScore,
+            overall: overallScore,
             details: {
                 highPeriod: highPeriod,
                 preBaselinePeriod: preBaselinePeriod,
                 postBaselinePeriod: postBaselinePeriod,
-                adaptiveThresholds: adaptiveThresholds,
+                thresholds: thresholds,
             },
             params: params,
         };
