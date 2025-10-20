@@ -26,17 +26,7 @@ class Time {
             return null;
         }
 
-        // Parse the UTC start time from JavaScript Date object
-        const startDate = new Date(this.wallclockStartTime);
-        const startDateTime = DateTime.fromJSDate(startDate, {
-            zone: "utc",
-        });
-        const currentDateTime = startDateTime.plus({
-            seconds: this.playbackTime,
-        });
-
-        // Convert to local timezone
-        return currentDateTime.setZone(this.localTimezone);
+        return this.toLocalDateFromSeconds(this.playbackTime);
     }
 
     get playbackLocalString() {
@@ -45,6 +35,31 @@ class Time {
 
         // Use Luxon's toFormat method instead of toLocaleString
         return localTime.toFormat("MM/dd/yyyy HH:mm:ss");
+    }
+
+    toLocalDateFromSeconds(seconds) {
+        if (!this.wallclockStartTime) {
+            return null;
+        }
+
+        // Parse the UTC start time from JavaScript Date object
+        const startDate = new Date(this.wallclockStartTime);
+        const startDateTime = DateTime.fromJSDate(startDate, {
+            zone: "utc",
+        });
+        const currentDateTime = startDateTime.plus({
+            seconds: seconds,
+        });
+
+        // Convert to local timezone
+        return currentDateTime.setZone(this.localTimezone);
+    }
+
+    toLocalTimeStringFromSeconds(seconds) {
+        const localDateTime = this.toLocalDateFromSeconds(seconds);
+        if (!localDateTime) return null;
+
+        return localDateTime.toFormat("MM/dd/yyyy HH:mm:ss");
     }
 
     toSecondsFromLocalString(timeString) {

@@ -8,6 +8,9 @@ import { Hierarchy } from "../util/hierarchy.js";
 
 class Annotations {
     constructor() {
+        this.annotations = [];
+        this.hierarchy = null;
+
         eventBus.addEventListener("ui.addAnnotation", async (e) => {
             this.addAnnotation(e.detail.hierarchy);
         });
@@ -28,15 +31,32 @@ class Annotations {
         });
     }
 
+    getCurrent() {
+        if (this.annotations && this.hierarchy) {
+            return this.annotations;
+        }
+
+        throw new Error("No hierarchy loaded");
+    }
+
     async getByHierarchy(hierarchy) {
         let hier = new Hierarchy(hierarchy);
         let h = hier.toEventString();
-        let rows = await database.query(
+
+        if (this.annotations && this.hierarchy === h) {
+            return this.annotations;
+        }
+
+        this.hierarchy = h;
+        this.annotations = await database.query(
             "annotations",
             { hierarchy: h },
             "time"
         );
-        return rows;
+
+        eventBus.fire("annotations.ready", { hierarchy: h });
+
+        return this.annotations;
     }
 
     async getByImportance(importance) {
