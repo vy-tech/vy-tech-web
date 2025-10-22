@@ -24,13 +24,6 @@ WORKDIR /app
 COPY public ./public
 COPY server.js .
 
-# Copy the package.json and install the dependencies
-COPY functions/package.json ./functions/
-COPY functions/views ./functions/views
-COPY functions/lib ./functions/lib
-COPY functions/*.js ./functions/
-RUN cd functions && npm install
-
 # Install nodemon for hot reloading of development
 RUN npm install -g nodemon
 RUN ln -s /usr/local/node/bin/nodemon /usr/local/bin/nodemon
@@ -38,4 +31,12 @@ RUN ln -s /usr/local/node/bin/nodemon /usr/local/bin/nodemon
 COPY conf/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
+# Copy the functions and install the dependencies
+COPY functions ./functions
+WORKDIR /app/functions/app
+RUN npm install
+WORKDIR /app/functions/chat
+RUN npm install
+
+WORKDIR /app
 ENTRYPOINT [ "/app/entrypoint.sh" ]

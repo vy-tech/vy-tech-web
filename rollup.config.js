@@ -13,6 +13,7 @@ export default {
         rssettings: "src/rssettings.js",
         rsprofile: "src/rsprofile.js",
         rsadmin: "src/rsadmin.js",
+        rschat: "src/rschat.js",
     },
     external: (id) => {
         // Ignore Firebase Admin SDK imports

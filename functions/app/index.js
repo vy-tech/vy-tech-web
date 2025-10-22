@@ -184,6 +184,7 @@ const appEndpoints = [
     "settings",
     "profile",
     "admin",
+    "chat"
 ];
 
 // Add the app endpoints to the express app

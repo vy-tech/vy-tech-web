@@ -11,10 +11,7 @@ services:
           - "5007:80"
         volumes:
           - ./public:/app/public
-          - ./functions/views:/app/functions/views
-          - ./functions/lib:/app/functions/lib
-          - ./functions/index.js:/app/functions/index.js
-          - ./server.js:/app/server.js
+          - ./functions:/app/functions
     vy-tech-web-tunnel:
         image: cloudflare/cloudflared:latest
         container_name: vy-tech-web-tunnel
