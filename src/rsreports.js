@@ -9,6 +9,7 @@ import { activeBoxManager } from "./scoring/activeBoxManager.js";
 
 import { events } from "./data/events.js";
 import { annotations } from "./data/annotations.js";
+import { exporter } from "./data/exporter.js";
 
 import { timeUtil } from "./util/time.js";
 
@@ -349,11 +350,22 @@ class Reports {
                                     type: "button",
                                     class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
                                     onclick: () => {
-                                        eventBus.fire("ui.requestEditMode");
+                                        eventBus.fire("ui.requestExport");
                                     },
                                 },
-                                "Edit Summary"
+                                "Export as CSV"
                             )
+
+                            // button(
+                            //     {
+                            //         type: "button",
+                            //         class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
+                            //         onclick: () => {
+                            //             eventBus.fire("ui.requestEditMode");
+                            //         },
+                            //     },
+                            //     "Edit Summary"
+                            // )
                         )
                     ),
 

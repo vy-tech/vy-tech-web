@@ -6,7 +6,6 @@ import { Score } from "./scoring.js";
 import { activeBoxManager } from "./activeBoxManager.js";
 import { Hierarchy } from "../util/hierarchy.js";
 import { events } from "../data/events.js";
-import { max } from "d3";
 
 class Summarizer {
     constructor() {

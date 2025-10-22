@@ -1,5 +1,5 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { S as Score, c as profiles, b as annotations, H as Hierarchy } from './chunks/annotations-C7MTp0Ek.js';
+import { S as Score, c as profiles, b as annotations, H as Hierarchy } from './chunks/annotations-BnlwNCIq.js';
 import { e as events } from './chunks/events-DYoMJ74J.js';
 import { d as database } from './chunks/db-B1sKsMd1.js';
 import { e as eventBus } from './chunks/eventbus-BbLtLH1t.js';

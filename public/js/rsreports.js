@@ -1,6 +1,6 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
 import { e as eventBus } from './chunks/eventbus-BbLtLH1t.js';
-import { H as Hierarchy, S as Score, p as progress, a as activeBoxManager, g as geomUtil, s as scoring, t as timeUtil, b as annotations, c as profiles } from './chunks/annotations-C7MTp0Ek.js';
+import { H as Hierarchy, S as Score, p as progress, a as activeBoxManager, b as annotations, t as timeUtil, g as geomUtil, s as scoring, c as profiles } from './chunks/annotations-BnlwNCIq.js';
 import { d as database } from './chunks/db-B1sKsMd1.js';
 import { a as app } from './chunks/firebase-DTGT__LK.js';
 import { e as events } from './chunks/events-DYoMJ74J.js';
@@ -41,6 +41,2087 @@ let storage = new Storage();
 if (typeof window !== "undefined") {
     window._vy_storage = storage;
 }
+
+class Summarizer {
+    constructor() {
+        this.currentCamera = 1;
+        this.summaries = [];
+
+        eventBus.addEventListener("ui.requestSummaryRebuild", async (e) => {
+            const { hierarchy } = e.detail;
+            await this.rebuild(hierarchy);
+        });
+
+        eventBus.addEventListener("ui.requestSummaryRebuildAll", async (e) => {
+            await this.rebuildAll();
+        });
+
+        eventBus.addEventListener("playback.cameraChanged", (e) => {
+            this.currentCamera = e.detail.camera;
+        });
+    }
+
+    getCurrent() {
+        return this.summaries[this.currentCamera - 1];
+    }
+
+    getAll() {
+        return this.summaries;
+    }
+
+    async rebuild(hierarchy) {
+        let hier = new Hierarchy(hierarchy);
+        hierarchy = hier.toString("-");
+
+        let summary = await this.create(hierarchy);
+        //await this.saveToFirestore(hierarchy, summary);
+        await this.saveToStorage(hierarchy, summary);
+        return summary;
+    }
+
+    async create(hierarchy) {
+        // Initialize a new scoring instance
+        var scoring = new Score();
+
+        // Load fragments and initalize the schedule
+        let fragments;
+
+        try {
+            fragments = await scoring.getFragments(hierarchy);
+            await scoring.initLoadSchedule(fragments);
+        } catch (error) {
+            console.error(`Error loading fragments for ${hierarchy}: ${error}`);
+            return [];
+        }
+
+        scoring.resetWindow();
+        let scores = {};
+
+        console.log("Creating summary...");
+        var { closed, pct } = progress.show("Creating summary...");
+
+        // Run through the fragments as if the video was playing 0.25 seconds
+        // at a time.
+        for (let i = 0; i < fragments.length; i++) {
+            const fragment = fragments[i];
+            pct.val = (i / fragments.length) * 100;
+
+            for (let dt = 0; dt < fragment.duration; dt += 0.25) {
+                // Update the scoring engine to this time
+                const newTime = fragment.start + dt;
+                const second = Math.floor(newTime);
+                await scoring.handleTimeUpdate(newTime);
+
+                // Get or initialize the score accumulator for this second
+                const score = (scores[second] = scores[second] || {
+                    startTime: 99999999,
+                    endTime: 0,
+                    score: 0,
+                    count: 0,
+                    people: 0,
+                    maxScore: 0,
+                });
+
+                // Accumulate the score
+                score.startTime = Math.min(score.startTime, newTime);
+                score.endTime = Math.max(score.endTime, newTime);
+                score.score += scoring.currentScore;
+                score.people += activeBoxManager.activeBoxes.length;
+                score.count += 1;
+                if (Math.abs(scoring.currentScore) > Math.abs(score.maxScore)) {
+                    score.maxScore = scoring.currentScore;
+                }
+            }
+        }
+
+        // Compute averages and format times
+        for (const second in scores) {
+            const score = scores[second];
+            score.score = score.maxScore; //Math.round(score.score / score.count);
+            score.people = Math.round(score.people / score.count);
+            score.startTime = score.startTime.toFixed(2);
+            score.endTime = score.endTime.toFixed(2);
+        }
+
+        closed.val = true;
+
+        return Object.values(scores);
+    }
+
+    // checkPeople(summary) {
+    //     let lastScore = summary[0];
+    //     for (const score of summary) {
+    //         const delta = Math.abs(lastScore.people - score.people);
+    //         if (delta / lastScore.people > 0.5) {
+    //             console.log(lastScore, score);
+    //         }
+    //         lastScore = score;
+    //     }
+    // }
+
+    getUrl(token, date, camera) {
+        const urlPrefix = "https://storage.roarscore.ai/production/play/";
+        // Make sure camera is zero padded two digits
+        camera = parseInt(camera).toString().padStart(2, "0");
+
+        return (
+            `${urlPrefix}${token}/${date}/${camera}/` +
+            `summary-${token}-${date}-${camera}.json`
+        );
+    }
+
+    async loadFromUrl(url) {
+        console.log(`Loading summary ${url}..`);
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.error(`Error loading ${url}: ${response.statusText}`);
+            return [];
+        }
+        const rows = await response.json();
+
+        for (const row of rows) {
+            row.startTime = parseFloat(row.startTime);
+            row.endTime = parseFloat(row.endTime);
+        }
+
+        return rows;
+    }
+
+    async loadAllFromUrl(hierarchy, cameras = 5) {
+        console.log(`Loading summaries for ${hierarchy}...`);
+        this.summaries = [];
+
+        const [token, date] = hierarchy.split("-");
+        for (let camera = 1; camera <= cameras; camera++) {
+            const url = this.getSummaryUrl(token, date, camera);
+            this.summaries.push(await this.loadSummary(url));
+        }
+    }
+
+    async loadFromStorage(hierarchy) {
+        let [token, date, camera] = hierarchy.split("-");
+        let path = `summaries/${token}/${date}/summary-${token}-${date}-${camera}.json`;
+
+        try {
+            // let storage = getStorage(app);
+            // let storageRef = ref(storage, path);
+            // let url = await getDownloadURL(storageRef);
+            console.log(`Loading summary from storage: ${hierarchy}...`);
+            let url = await storage.getDownloadUrl(path);
+
+            return await this.loadFromUrl(url);
+        } catch (error) {
+            console.error(`Error loading from storage: ${error}`);
+            return null;
+        }
+    }
+
+    async saveToStorage(hierarchy, summary) {
+        let [token, date, camera] = hierarchy.split("-");
+        let path = `summaries/${token}/${date}/summary-${token}-${date}-${camera}.json`;
+
+        console.log(`Saving summary to storage: ${path}...`);
+
+        //let storage = getStorage(app);
+        // let storageRef = ref(storage, path);
+        // await uploadString(storageRef, JSON.stringify(summary));
+
+        await storage.uploadString(path, JSON.stringify(summary));
+
+        console.log(`Saved summary to storage.`);
+    }
+
+    async saveToFirestore(hierarchy, summary) {
+        var { closed, pct } = progress.show("Saving summary...");
+        console.log(`Saving summary to firestore: ${hierarchy}...`);
+
+        const batchSize = 1000;
+        for (let i = 0; i < summary.length; i += batchSize) {
+            pct.val = (i / summary.length) * 100;
+
+            const key = `${hierarchy}-${i.toString().padStart(5, "0")}`;
+            const rows = summary.slice(i, i + batchSize);
+            const data = {
+                id: key,
+                hierarchy: hierarchy,
+                offset: i,
+                rows: rows,
+            };
+
+            console.log("Saving summary batch:", key, rows.length, "rows");
+            await database.set("summaries", data);
+            //const docRef = doc(firestore, "summaries", key);
+            //await setDoc(docRef, data);
+        }
+
+        closed.val = true;
+        console.log(`Saved summary to firestore.`);
+    }
+
+    async loadFromFirestore(hierarchy) {
+        let result = [];
+        let batches = [];
+
+        // Get summaries by hierarchy
+        //const summariesRef = collection(firestore, "summaries");
+        //const q = query(summariesRef, where("hierarchy", "==", hierarchy));
+        //const snap = await getDocs(q);
+        console.log(`Loading summary from firestore: ${hierarchy}...`);
+        const rows = await database.query("summaries", {
+            hierarchy: hierarchy,
+        });
+
+        // Ensure they're sorted by offset
+        rows.forEach((data) => {
+            batches.push(data);
+        });
+        batches.sort((a, b) => a.offset - b.offset);
+
+        // Splice into the result
+        for (const batch of batches) {
+            for (const row of batch.rows) {
+                row.startTime = parseFloat(row.startTime);
+                row.endTime = parseFloat(row.endTime);
+            }
+            result.splice(batch.offset, 0, ...batch.rows);
+        }
+
+        return result;
+    }
+
+    async ensure(hierarchy, cameras = 5) {
+        const hier = new Hierarchy(hierarchy);
+
+        console.log(`Ensuring summaries for ${hier.location}-${hier.date}...`);
+
+        var { closed, pct } = progress.show("Loading summaries..");
+
+        this.summaries = [];
+        for (let camera = 1; camera <= cameras; camera++) {
+            hier.camera = camera;
+            const h = hier.toString("-");
+
+            console.log(`Loading ${h} from storage...`);
+            let summary = await this.loadFromStorage(h);
+
+            // if (!summary || !summary.length) {
+            //     console.log(`Loading ${h} from firestore..`);
+            //     summary = await this.loadFromFirestore(h);
+            //     await this.saveToStorage(h, summary);
+            // }
+
+            if (!summary || !summary.length) {
+                console.warn(
+                    `SUMMARY ${h} MISSING.  CREATING.  THIS WILL TAKE AWHILE...`
+                );
+
+                summary = await this.create(h);
+                //await this.saveToFirestore(h, summary);
+                await this.saveToStorage(h, summary);
+            }
+
+            pct.val = (camera / cameras) * 100;
+            this.summaries.push(summary);
+        }
+
+        hier.camera = 1;
+        await this.ensureEventSummary(hier.toString(":"));
+
+        closed.val = true;
+
+        eventBus.fire("summarizer.ready");
+
+        return this.summaries;
+    }
+
+    createCameraSummary(camera = 1) {
+        const summary = this.summaries[camera - 1] || [];
+
+        if (!summary.length) {
+            return null;
+        }
+
+        const result = {
+            totalScore: 0,
+            totalPeople: 0,
+            seconds: summary.length,
+            averageScore: 0,
+            averagePeople: 0,
+            minScore: 99999,
+            maxScore: -99999,
+            minPeople: 99999,
+            maxPeople: -99999,
+        };
+
+        for (const row of summary) {
+            result.totalScore += row.score;
+            result.totalPeople += row.people;
+            result.minScore = Math.min(result.minScore, row.score);
+            result.maxScore = Math.max(result.maxScore, row.score);
+            result.minPeople = Math.min(result.minPeople, row.people);
+            result.maxPeople = Math.max(result.maxPeople, row.people);
+        }
+
+        result.averageScore = Math.round(result.totalScore / result.seconds);
+        result.averagePeople = Math.round(result.totalPeople / result.seconds);
+
+        return result;
+    }
+
+    combineCameraSummaries(a, b) {
+        const totalSeconds = a.seconds + b.seconds;
+
+        a.totalPeople += b.totalPeople;
+        a.totalScore += b.totalScore;
+        a.seconds = Math.max(a.seconds, b.seconds);
+        a.minScore = Math.min(a.minScore, b.minScore);
+        a.maxScore = Math.max(a.maxScore, b.maxScore);
+        a.minPeople = Math.min(a.minPeople, b.minPeople);
+        a.maxPeople = Math.max(a.maxPeople, b.maxPeople);
+        a.averageScore = Math.round(a.totalScore / totalSeconds);
+        a.averagePeople = Math.round(a.totalPeople / totalSeconds);
+
+        return a;
+    }
+
+    createEventSummary(relevantCameras = 4) {
+        const summary = this.createCameraSummary(1);
+        if (!summary) {
+            return null;
+        }
+
+        for (let camera = 2; camera <= relevantCameras; camera++) {
+            const camSummary = this.createCameraSummary(camera);
+            if (camSummary) {
+                this.combineCameraSummaries(summary, camSummary);
+            }
+        }
+
+        summary.cameras = this.getCameraCount();
+
+        return summary;
+    }
+
+    getCameraCount() {
+        let count = 0;
+        for (const summary of this.summaries) {
+            if (summary && summary.length) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    async saveEventSummary(hierarchy, summary) {
+        await events.updateEventSummary(hierarchy, summary);
+    }
+
+    async rebuildEventSummary(hierarchy, relevantCameras = 4) {
+        if (!this.summaries.length) {
+            await this.ensure(hierarchy);
+        }
+
+        const summary = this.createEventSummary(hierarchy, relevantCameras);
+        await this.saveEventSummary(hierarchy, summary);
+        return summary;
+    }
+
+    async ensureEventSummary(hierarchy, relevantCameras = 4) {
+        const event = await events.getByHierarchy(hierarchy);
+        if (event) {
+            if (!event.summary) {
+                console.log(`Event summary missing.  Rebuilding...`);
+                return await this.rebuildEventSummary(
+                    hierarchy,
+                    relevantCameras
+                );
+            }
+        }
+    }
+}
+
+const summarizer = new Summarizer();
+
+class Exporter {
+    constructor() {
+        this.hierarchy = null;
+        this.annotations = null;
+        this.aidx = null;
+
+        this.summaries = null;
+        this.sidx = null;
+
+        eventBus.on("ui.requestExport", () => {
+            this.export();
+        });
+
+        eventBus.on("annotations.ready", () => {
+            this.annotations = annotations.getCurrent();
+            this.aidx = 0;
+        });
+
+        eventBus.on("summarizer.ready", () => {
+            this.summaries = summarizer.getAll();
+            this.sidx = 0;
+        });
+
+        eventBus.on("playback.ready", (e) => {
+            this.hierarchy = new Hierarchy(e.detail.hierarchy);
+        });
+    }
+
+    getRow() {
+        let row = {};
+        let hasData = false;
+        let time = null;
+
+        for (let i = 0; i < this.summaries.length; i++) {
+            let camera = i + 1;
+            let summary = this.summaries[i][this.sidx];
+
+            if (summary) {
+                hasData = true;
+                time = summary.startTime;
+                row[`score_${camera}`] = summary.score.toFixed(0);
+                row[`people_${camera}`] = summary.people;
+            } else {
+                row[`score_${camera}`] = null;
+                row[`people_${camera}`] = null;
+            }
+        }
+
+        this.sidx++;
+
+        if (!hasData) return null;
+
+        row["location"] = this.hierarchy.location;
+        row["date"] = this.hierarchy.date;
+        row["time"] = Math.floor(time);
+        row["wallclock_time"] = timeUtil.toLocalTimeStringFromSeconds(time);
+
+        if (this.annotations && this.aidx < this.annotations.length) {
+            let annotation = this.annotations[this.aidx];
+            if (annotation.time <= Math.floor(time)) {
+                row["annotation_type"] = annotation.type;
+                row["annotation_importance"] = annotation.importance;
+                row["annotation_content"] = annotation.content;
+                this.aidx++;
+            } else {
+                row["annotation_type"] = null;
+                row["annotation_importance"] = null;
+                row["annotation_content"] = null;
+            }
+        }
+
+        return row;
+    }
+
+    createCsvContent() {
+        const columns = [
+            "location",
+            "date",
+            "time",
+            "wallclock_time",
+            "score_1",
+            "score_2",
+            "score_3",
+            "score_4",
+            "score_5",
+            "people_1",
+            "people_2",
+            "people_3",
+            "people_4",
+            "people_5",
+            "annotation_type",
+            "annotation_importance",
+            "annotation_content",
+        ];
+
+        const rows = [columns.join(",")]; // Header row
+
+        // Reset indices for fresh iteration
+        this.sidx = 0;
+        this.aidx = 0;
+
+        let row;
+        while ((row = this.getRow()) !== null) {
+            const values = columns.map((column) => {
+                const value = row[column];
+                if (value === null || value === undefined) return "";
+
+                const stringValue = String(value);
+                // Escape CSV special characters
+                if (
+                    stringValue.includes(",") ||
+                    stringValue.includes('"') ||
+                    stringValue.includes("\n")
+                ) {
+                    return `"${stringValue.replace(/"/g, '""')}"`;
+                }
+                return stringValue;
+            });
+
+            rows.push(values.join(","));
+        }
+
+        return rows.join("\n");
+    }
+
+    downloadBlob(filename, content) {
+        const blob = new Blob([content], {
+            type: "text/csv;charset=utf-8;",
+        });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+
+        link.setAttribute("href", url);
+        link.setAttribute("download", filename);
+        link.style.visibility = "hidden";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    getFilename() {
+        let h = this.hierarchy;
+        return `export-${h.location}-${h.date}.csv`;
+    }
+
+    async export() {
+        console.log("Exporting data...");
+
+        const filename = this.getFilename();
+        const csvContent = this.createCsvContent();
+        this.downloadBlob(filename, csvContent);
+
+        console.log("Export complete.");
+    }
+}
+
+new Exporter();
+
+class Heatmap {
+    constructor() {
+        this.canvas = null;
+
+        eventBus.addEventListener("playback.timeupdate", (e) => {
+            this.paint();
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+
+        let merged = {
+            id: "report-viz-heatmap",
+            width: 1280,
+            height: 720,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.canvas.addEventListener("click", (e) => {
+            eventBus.fire("heatmap.click", {});
+        });
+        this.canvas.addEventListener("mousemove", (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            // Calculate the mouse position relative to the canvas
+            // and scale it to the original video resolution (3840x2160)
+            const x = Math.floor(((e.clientX - rect.left) / rect.width) * 3840);
+            const y = Math.floor(((e.clientY - rect.top) / rect.height) * 2160);
+
+            eventBus.fire("heatmap.mousemove", { x: x, y: y });
+        });
+
+        return this.canvas;
+    }
+
+    paint() {
+        if (!this.canvas) {
+            console.error("Canvas element not found");
+            return;
+        }
+        const ctx = this.canvas.getContext("2d");
+        if (!ctx) {
+            console.error("Failed to get canvas context");
+            return;
+        }
+
+        // Clear the canvas
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        const activeBoxes = activeBoxManager.get();
+        for (const box of activeBoxes) {
+            const ox = box.x;
+            const oy = box.y;
+            const ow = box.w;
+            const oh = box.h;
+            const score = Math.floor(box.score);
+            const expires = box.expires;
+
+            // Scale the box coordinates to the canvas size
+            const x = (ox / 3840) * this.canvas.width;
+            const y = (oy / 2160) * this.canvas.height;
+            const w = (ow / 3840) * this.canvas.width;
+            const h = (oh / 2160) * this.canvas.height;
+
+            // Calculate center and radiuses for the radial gradient
+            const cx = x + w / 2;
+            const cy = y + h / 2;
+            const rw = w * 5.0;
+            const rh = h * 5.0;
+            const rx = cx - rw / 2;
+            const ry = cy - rh / 2;
+            const innerR = 1;
+            const outerR = rh * 0.25;
+
+            // Create the hue based on the score
+            var hueOffset = (score / 1000.0) * 64;
+            if (hueOffset < 0) hueOffset = Math.max(hueOffset, -64);
+            else hueOffset = Math.min(hueOffset, 64);
+            const hue = 64 + hueOffset;
+            const gradient = ctx.createRadialGradient(
+                cx,
+                cy,
+                innerR,
+                cx,
+                cy,
+                outerR
+            );
+            const alpha = Math.floor((expires / 3000.0) * 80);
+            gradient.addColorStop(0, `hsl(${hue}, 100%, 50%, ${alpha}%)`);
+            gradient.addColorStop(1, `hsl(${hue}, 100%, 50%, 0%)`);
+            ctx.fillStyle = gradient;
+
+            ctx.fillRect(rx, ry, rw, rh);
+        }
+    }
+}
+
+const heatmap = new Heatmap();
+
+class CameraMap {
+    constructor() {
+        this.canvas = null;
+        this.second = null;
+
+        eventBus.addEventListener("playback.timeupdate", (e) => {
+            this.second = Math.floor(e.detail.currentTime);
+            this.paint();
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+
+        let merged = {
+            id: "report-viz-cameramap",
+            class: "w-full h-full",
+            width: 500,
+            height: 250,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.init();
+
+        return this.canvas;
+    }
+
+    scoreToHue(score) {
+        let hueOffset = (score / 1000.0) * 64;
+        if (hueOffset < 0) hueOffset = Math.max(hueOffset, -64);
+        else hueOffset = Math.min(hueOffset, 64);
+        const hue = 64 + hueOffset;
+        return hue;
+    }
+
+    findTrangleFromMouse(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        // Calculate the mouse position relative to the canvas
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+
+        // Scale coordinates to match canvas internal dimensions
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const scaledX = Math.floor(x * scaleX);
+        const scaledY = Math.floor(y * scaleY);
+
+        // Find the triangle that contains the mouse position
+        const point = geomUtil.findTriangleContainingPoint(
+            scaledX,
+            scaledY,
+            this.triangles
+        );
+
+        return point;
+    }
+
+    init() {
+        this.active = 1;
+        this.hover = null;
+
+        this.triangles = [
+            [390, 84, 499, 7, 499, 125],
+            [-20, -40, 107, 80, 0, 103],
+            [303, 180, 376, 249, 279, 249],
+            [195, 180, 172, 249, 250, 249],
+            [479, 145, 407, 233, 360, 180],
+        ];
+
+        this.labels = [
+            [408, 87, 1],
+            [83, 79, 2],
+            [301, 200, 3],
+            [192, 202, 4],
+            [452, 166, 5],
+        ];
+
+        this.summaryLabels = [
+            [408, 87, 1],
+            [83, 79, 2],
+            [301, 200, 3],
+            [192, 202, 4],
+            [452, 166, 5],
+        ];
+
+        // Load /img/raimondi-seat-map.png
+        this.img = new Image();
+        this.img.src = "/img/raimondi-seat-map.png";
+        this.img.onload = () => {
+            this.paint();
+        };
+        this.img.onerror = () => {
+            console.error("Failed to load the seat map image.");
+        };
+
+        this.canvas.addEventListener("mousemove", (event) => {
+            const point = this.findTrangleFromMouse(
+                event.clientX,
+                event.clientY
+            );
+            this.hover = point;
+            this.paint();
+
+            // Set mouse pointer if hovering over a triangle
+            this.canvas.style.cursor = point ? "pointer" : "default";
+        });
+
+        this.canvas.addEventListener("mouseout", () => {
+            this.hover = null;
+            this.paint();
+        });
+
+        this.canvas.addEventListener("click", (event) => {
+            const point = this.findTrangleFromMouse(
+                event.clientX,
+                event.clientY
+            );
+
+            if (point) {
+                this.active = point;
+                this.paint();
+                eventBus.fire("ui.requestCamera", { camera: point });
+            }
+        });
+    }
+
+    paint() {
+        let second = this.second;
+        let summaries = summarizer.getAll();
+
+        var ctx = this.canvas.getContext("2d");
+        ctx.drawImage(this.img, 0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.fillStyle = "rgba(200,200,200,0.5)";
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.lineWidth = 2;
+        for (let i = 0; i < this.triangles.length; i++) {
+            let score =
+                summaries &&
+                summaries[i] &&
+                summaries[i][second] &&
+                summaries[i][second].score;
+
+            if (this.hover === i + 1) {
+                ctx.strokeStyle = "#00eeffff";
+            } else if (this.active === i + 1) {
+                ctx.strokeStyle = "#3fa7d7ff";
+            } else {
+                ctx.strokeStyle = "#999";
+            }
+
+            if (score) {
+                const hue = this.scoreToHue(score);
+                ctx.fillStyle = `hsl(${hue}, 100%, 50%, 0.5)`;
+            } else {
+                ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+            }
+            const triangle = this.triangles[i];
+            const [x1, y1, x2, y2, x3, y3] = triangle;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineTo(x3, y3);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            const label = this.labels[i];
+            const [lx, ly, ltext] = label;
+            ctx.font = "16px Arial";
+            ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+            ctx.fillText(ltext, lx, ly);
+        }
+    }
+}
+
+const cameramap = new CameraMap();
+
+class Ekg {
+    constructor() {
+        this.showSummary = false;
+        this.canvas = null;
+        this.container = null;
+        this.score = null;
+        this.sumScore = null;
+
+        eventBus.addEventListener("playback.timeupdate", (e) => {
+            this.score = scoring.currentScore;
+
+            const second = Math.floor(e.detail.currentTime);
+            const summary = summarizer.getCurrent();
+            if (summary) {
+                this.sumScore = summary[second].score || 0;
+            }
+
+            this.paint();
+        });
+
+        eventBus.addEventListener("playback.pause", () => {
+            this.smoothie.stop();
+        });
+
+        eventBus.addEventListener("playback.play", () => {
+            this.smoothie.start();
+        });
+
+        eventBus.addEventListener("playback.timeseek", () => {
+            this.timeSeries.clear();
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas, div } = van.tags;
+
+        let merged = { ...options };
+
+        this.canvas = canvas({
+            id: "report-viz-ekg",
+            class: "w-full h-full",
+            width: 500,
+            height: 250,
+        });
+        this.label = div(
+            {
+                id: "report-viz-ekg-score",
+                class: "absolute top-0 left-0 p-1 text-xl text-black",
+            },
+            "0"
+        );
+        this.container = div(merged, this.canvas, this.label);
+
+        this.init();
+
+        return this.container;
+    }
+
+    init() {
+        this.smoothie = new SmoothieChart({
+            responsive: true,
+            interpolation: "bezier",
+            minValue: -1e3,
+            maxValue: 1000,
+            grid: {
+                strokeStyle: "rgb(200, 200, 200)",
+                fillStyle: "rgb(255,255,255)",
+                lineWidth: 1,
+                millisPerLine: 1000,
+                verticalSections: 4,
+            },
+            labels: {
+                fillStyle: "rgb(0, 0, 0)",
+                strokeStyle: "rgb(255, 255, 0)",
+                fontFamily: "Arial",
+                fontSize: 16,
+                precision: 0,
+                showIntermediateLabels: true,
+            },
+        });
+
+        this.smoothie.streamTo(this.canvas, 1000);
+        window.setTimeout(() => this.smoothie.stop(), 10);
+        this.timeSeries = new TimeSeries();
+
+        this.smoothie.addTimeSeries(this.timeSeries, {
+            strokeStyle: "rgb(0, 0, 255)",
+            fillStyle: "rgba(0,0,255, 0.4)",
+            lineWidth: 3,
+        });
+    }
+
+    paint() {
+        this.timeSeries.append(Date.now(), this.score);
+        this.label.innerText = this.score.toFixed(0);
+
+        if (this.sumScore && this.showSummary) {
+            this.label.innerText += ` (${this.sumScore.toFixed(0)})`;
+        }
+    }
+}
+
+const ekg = new Ekg();
+
+class Spider {
+    constructor() {
+        this.canvas = null;
+
+        eventBus.addEventListener("playback.timeupdate", (e) => {
+            this.paint();
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+
+        let merged = {
+            id: "report-viz-spider",
+            class: "w-full h-full",
+            width: 500,
+            height: 500,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.init();
+
+        return this.canvas;
+    }
+
+    init() {
+        var ctx = this.canvas.getContext("2d");
+
+        var labels = [
+            "Anger", //0
+            "Disgust", //1
+            "Fear", //2
+            "Happiness", //3
+            "Sadness", //4
+            "Surprise", //5
+            "Neutral", //6
+        ];
+
+        // GROSS TODO FIXME (this is a hack to reorder the labels)
+        let d = labels.splice(3, 1);
+        labels.splice(6, 0, ...d);
+        d = labels.splice(4, 1);
+        labels.splice(0, 0, ...d);
+        d = labels.splice(4, 1);
+        labels.splice(1, 0, ...d);
+        d = labels.splice(5, 1);
+        labels.splice(4, 0, ...d);
+
+        this.spiderDataMap = {};
+        for (var i = 0; i < labels.length; i++) {
+            this.spiderDataMap[labels[i]] = i;
+        }
+
+        if (this.spiderChart) this.spiderChart.destroy();
+
+        this.spiderChart = new Chart(ctx, {
+            type: "radar",
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "T=0",
+                        data: labels.map(() => 0),
+                        fill: true,
+                        backgroundColor: "rgba(0, 0, 255, 0.2)",
+                        borderColor: "rgb(0, 0, 255)",
+                        pointBackgroundColor: "rgb(0, 0, 255)",
+                        pointBorderColor: "#fff",
+                        pointHoverBackgroundColor: "#fff",
+                        pointHoverBorderColor: "rgb(0, 0, 255)",
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false,
+                    },
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        suggestedMin: 0,
+                        suggestedMax: 1000,
+                        pointLabels: {
+                            font: {
+                                size: 16,
+                                family: "Arial",
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        this.spiderChart.update();
+    }
+
+    paint() {
+        if (!this.spiderChart) return;
+        let cores = scoring.currentCores;
+        let data = cores.map((c) => Math.min(1000, Math.abs(c)));
+
+        let d = data.splice(3, 1);
+        data.splice(6, 0, ...d);
+        d = data.splice(4, 1);
+        data.splice(0, 0, ...d);
+        d = data.splice(4, 1);
+        data.splice(1, 0, ...d);
+        d = data.splice(5, 1);
+        data.splice(4, 0, ...d);
+
+        // Update the spider chart data
+        this.spiderChart.data.datasets[0].data = data;
+        this.spiderChart.update();
+    }
+}
+
+const spider = new Spider();
+
+class SummaryGraph {
+    constructor() {
+        this.canvas = null;
+        this.ctx = null;
+        this.isStale = true;
+        this.timeComplete = 0;
+
+        eventBus.addEventListener("playback.ready", (e) => {
+            this.paint();
+            this.isStale = false;
+        });
+
+        eventBus.addEventListener("playback.timeupdate", (e) => {
+            //if (this.isStale) this.paint();
+            //this.isStale = false;
+            if (!e.detail.currentTime || !e.detail.duration) return;
+            this.timeComplete = e.detail.currentTime / e.detail.duration;
+            this.paint();
+        });
+
+        eventBus.addEventListener("playback.cameraChanged", (e) => {
+            this.isStale = true;
+        });
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+
+        let merged = {
+            id: "report-viz-ppl",
+            class: "w-full h-auto aspect-[calc(16/4.5)] mt-2",
+            width: 1280,
+            height: 360,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.init();
+
+        return this.canvas;
+    }
+
+    init() {
+        this.ctx = this.canvas.getContext("2d");
+
+        const labels = [];
+        const peopleColors = [];
+        const scoreColors = [];
+
+        for (let i = 0; i < 100; i++) {
+            labels.push(`${i + 1}%`);
+            peopleColors.push("#3fa7d7");
+            scoreColors.push("#fdb080");
+        }
+
+        if (this.chart) this.chart.destroy();
+
+        // Plugin to draw the time indicator line
+        const timeLinePlugin = {
+            id: "timeLine",
+            afterDraw: (chart) => {
+                if (this.timeComplete) {
+                    const ctx = chart.ctx;
+                    const chartArea = chart.chartArea;
+                    const currentX =
+                        chartArea.left +
+                        this.timeComplete * (chartArea.right - chartArea.left);
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.moveTo(currentX, chartArea.top);
+                    ctx.lineTo(currentX, chartArea.bottom);
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = "red";
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            },
+        };
+
+        this.chart = new Chart(this.ctx, {
+            type: "line",
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: "People",
+                        data: labels.map(() => 0),
+                        fill: false,
+                        borderColor: peopleColors,
+                        borderWidth: 1,
+                    },
+                    {
+                        label: "Score",
+                        data: labels.map(() => 0),
+                        fill: false,
+                        borderColor: scoreColors,
+                        borderWidth: 1,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: true,
+                    },
+                },
+            },
+            plugins: [timeLinePlugin],
+        });
+        this.chart.update();
+
+        this.canvas.addEventListener("click", (evt) => {
+            const points = this.chart.getElementsAtEventForMode(
+                evt,
+                "nearest",
+                { intersect: true },
+                true
+            );
+
+            if (points.length) {
+                const firstPoint = points[0];
+                const label = this.chart.data.labels[firstPoint.index];
+                // const value =
+                //     this.pplChart.data.datasets[firstPoint.datasetIndex].data[
+                //         firstPoint.index
+                //     ];
+                eventBus.fire("ui.requestTimeSeek", { time: label });
+            }
+        });
+    }
+
+    paint() {
+        let summary = summarizer.getCurrent();
+        if (!this.chart) return;
+
+        // // Only paint it when the summary changes..
+        // if (this.lastSummary === summary) return;
+        // this.lastSummary = summary;
+
+        let peopleData = [];
+        let scoreData = [];
+        let labels = [];
+
+        // for (let i = 0; i < 100; i++) {
+        //     let idx = Math.floor(i * (summary.length / 100));
+        //     labels.push(this.formatTime(summary[idx].startTime));
+        //     data.push(summary[idx].people);
+        // }
+
+        let step = Math.floor(summary.length / 100);
+
+        for (let i = 0; i < 100; i++) {
+            let idx = i * step;
+            let people = 0;
+            let score = 0;
+            let elapsedTime = 0;
+
+            for (let j = 0; j < step; j++) {
+                people += summary[idx + j].people;
+                score += summary[idx + j].score;
+                elapsedTime += parseInt(summary[idx + j].startTime);
+            }
+
+            peopleData.push(people / step);
+            scoreData.push(score / step);
+            labels.push(timeUtil.format(elapsedTime / step));
+        }
+
+        // Update the chart data
+        this.chart.data.labels = labels;
+        this.chart.data.datasets[0].data = peopleData;
+        this.chart.data.datasets[1].data = scoreData;
+        this.chart.update();
+    }
+}
+
+const summaryGraph = new SummaryGraph();
+
+class Demographics {
+    constructor(title, labels, data) {
+        this.canvas = null;
+        this.title = title;
+        this.labels = labels;
+        this.data = data;
+    }
+
+    createElement(options = {}) {
+        const { canvas } = van.tags;
+        let merged = {
+            id: "report-viz-demo",
+            width: 448,
+            height: 126,
+            ...options,
+        };
+
+        this.canvas = canvas(merged);
+
+        this.init();
+
+        return this.canvas;
+    }
+
+    init() {
+        const ctx = this.canvas.getContext("2d");
+
+        var demoChart = new Chart(ctx, {
+            type: "bar",
+            data: {
+                labels: [this.title],
+                datasets: [
+                    {
+                        label: this.labels[0],
+                        data: [this.data[0]],
+                        fill: true,
+                        borderWidth: 1,
+                        borderColor: ["#d94d507f"],
+                        backgroundColor: ["#d94d50"],
+                    },
+
+                    {
+                        label: this.labels[1],
+                        data: [this.data[1]],
+                        fill: true,
+                        borderWidth: 1,
+                        borderColor: ["#3fa7d77f"],
+                        backgroundColor: ["#3fa7d7"],
+                    },
+                ],
+            },
+            options: {
+                indexAxis: "y",
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false,
+                    },
+                },
+                scale: {
+                    x: {
+                        stacked: true,
+                    },
+                    y: {
+                        stacked: true,
+                    },
+                },
+            },
+        });
+        demoChart.update();
+    }
+}
+
+const genderDemo = new Demographics("Gender", ["male", "female"], [60, 40]);
+const ageDemo = new Demographics("Age", ["adult", "child"], [80, 20]);
+
+class MomentFinder {
+    constructor() {
+        this.moments = null;
+
+        eventBus.addEventListener("summarizer.ready", () => {
+            this.find();
+        });
+
+        eventBus.addEventListener("playback.cameraChanged", () => {
+            this.find();
+        });
+    }
+
+    get() {
+        return this.moments;
+    }
+
+    isSame(s1, s2) {
+        const buffer = 180;
+        return (
+            (s2.startTime >= s1.startTime - buffer &&
+                s2.startTime <= s1.endTime + buffer) ||
+            (s2.endTime >= s1.startTime - buffer &&
+                s2.endTime <= s1.endTime + buffer)
+        );
+    }
+
+    find() {
+        let summary = summarizer.getCurrent();
+        let sorted = [...summary];
+        let moments = [];
+
+        // Sort by score and limit to top 100
+        sorted.sort((a, b) => b.score - a.score);
+        sorted.splice(100, sorted.length - 100);
+
+        // Top score is our first moment
+        moments.push(sorted.shift());
+
+        while (moments.length < 10 && sorted.length > 0) {
+            let moment = sorted.shift();
+
+            // Find any same moment and merge them, or add a new one
+            let merge = moments.find((a) => this.isSame(a, moment));
+            if (merge) {
+                merge.startTime = Math.min(moment.startTime, merge.startTime);
+                merge.endTime = Math.max(moment.endTime, merge.endTime);
+            } else {
+                console.log("Adding..", moment);
+                moments.push(moment);
+            }
+        }
+
+        // Sort moments by time and add time label
+        moments.sort((a, b) => a.startTime - b.startTime);
+        moments.forEach((a) => (a.label = timeUtil.format(a.startTime)));
+
+        this.moments = moments;
+
+        eventBus.fire("momentFinder.changed");
+
+        return moments;
+    }
+}
+
+const momentFinder = new MomentFinder();
+
+class MomentList {
+    constructor() {
+        this.count = 10;
+        this.container = null;
+
+        eventBus.addEventListener("momentFinder.changed", () => {
+            this.update();
+        });
+    }
+
+    createElement(options = {}) {
+        const { div } = van.tags;
+
+        let merged = { ...options };
+        this.container = div(merged);
+
+        for (let i = 0; i < this.count; i++) {
+            let moment = div(
+                {
+                    id: `report-moment-${i + 1}`,
+                    class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
+                    onclick: () => {
+                        this.seekTo(i + 1);
+                    },
+                },
+                div({ class: "text-2xl mb-1" }, "▶"),
+                div({ class: "text-sm" }, "0")
+            );
+            van.add(this.container, moment);
+        }
+
+        return this.container;
+    }
+
+    update() {
+        let moments = momentFinder.get();
+
+        for (let i = 0; i < this.count; i++) {
+            const moment = moments[i];
+            const momentDiv = document.getElementById(`report-moment-${i + 1}`);
+
+            if (!momentDiv) continue;
+
+            if (moment) {
+                momentDiv.querySelector(
+                    "div.text-sm"
+                ).textContent = `${moment.label}`;
+                momentDiv.style.display = "block";
+            } else {
+                momentDiv.style.display = "none";
+            }
+        }
+    }
+
+    seekTo(number) {
+        let moments = momentFinder.get();
+        const moment = moments[number - 1];
+        if (moment) {
+            eventBus.fire("ui.requestTimeSeek", {
+                seconds: moment.startTime - 15,
+            });
+        }
+    }
+}
+
+new MomentList();
+
+class LinkedPlayer {
+    constructor() {
+        this.container = null;
+
+        eventBus.addEventListener("playback.play", () => {
+            if (this.embedPlayer) {
+                console.log(this.embedPlayer);
+                this.embedPlayer.playVideo();
+            }
+        });
+
+        eventBus.addEventListener("playback.pause", () => {
+            if (this.embedPlayer) {
+                this.embedPlayer.pauseVideo();
+            }
+        });
+
+        eventBus.addEventListener("playback.timeupdate", (e) => {
+            this.sync(e.detail.currentTime);
+        });
+    }
+
+    createElement(options = {}) {
+        const { div } = van.tags;
+
+        let merged = { ...options };
+
+        this.container = div(merged);
+
+        return this.container;
+    }
+
+    init() {
+        const event = events.get();
+        const embedVideo = event.embed;
+
+        if (!embedVideo) {
+            console.error("No embed available");
+            return;
+        }
+
+        this.embedVideoId = embedVideo.id;
+        this.embedOffset = embedVideo.offset;
+
+        const videoId = this.embedVideoId;
+        const origin = window.location.origin;
+        this.container.innerHTML =
+            '<iframe id="report-embed-player" width="500" height="281" ' +
+            'class="w-full h-auto aspect-video" ' +
+            `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${origin}"` +
+            ' title="YouTube video player" frameborder="0" allow="web-share"' +
+            ' referrerpolicy="strict-origin-when-cross-origin" ' +
+            "allowfullscreen></iframe>";
+        this.embedPlayer = new YT.Player("report-embed-player");
+    }
+
+    sync(currentTime) {
+        if (this.embedPlayer) {
+            let embedTime = this.embedPlayer.getCurrentTime();
+            let embedState = this.embedPlayer.getPlayerState();
+            let duration = this.embedPlayer.getDuration();
+            let targetTime = currentTime + this.embedOffset;
+
+            if (targetTime < 0 || targetTime > duration) {
+                if (embedState == 1) {
+                    console.log(
+                        `Target time is ${targetTime}, pausing embed..`
+                    );
+                    this.embedPlayer.pauseVideo();
+                    this.embedPlayer.mute();
+                }
+            } else {
+                if (Math.abs(targetTime - embedTime) > 1) {
+                    console.log(`Seeking embed to ${targetTime}..`);
+                    this.embedPlayer.seekTo(targetTime, true);
+                }
+                if (embedState != 1) {
+                    console.log(`Playing embedded video..`);
+                    this.embedPlayer.playVideo();
+                }
+                if (this.embedPlayer.isMuted()) {
+                    this.embedPlayer.unMute();
+                }
+            }
+        }
+    }
+}
+
+const linkedPlayer = new LinkedPlayer();
+
+class AnnotationLog {
+    /**
+     * The annotation log displays a chat-like view of annotations associated with an event.
+     * Annotations scroll automatically as the video time progresses.
+     * It listens for "playback.ready" to load annotations for the current hierarchy
+     * and "playback.timeupdate" to refresh the display.
+     *
+     * Annotations are marked with an importance of "low", "medium", "high" or "critical".
+     *   * When importance="low" show a grey background
+     *   * When importance="medium" show a blue background
+     *   * When importance="high" show a yellow background
+     *   * When importance="critical" show a red background and stick to the top or bottom of the log
+     *
+     * Annotations are marked with a type of "note", "transcript", "action" or "event".
+     *   * When type="note" show a pencil emoji ✏️
+     *   * When type="transcript" show a speech balloon emoji 💬
+     *   * When type="action" show a baseball emoji ⚾
+     *   * When type="event" show a party popper emoji 🎉
+     *
+     * Annotations have a format like: "✏️ This is a note annotation (hh:mm:ss)"
+     * Annotations use the timeUtil.format function to format the time as hh:mm:ss
+     **/
+    constructor() {
+        this.container = null;
+        this.currentTime = 0;
+        this.visibleElements = new Set(); // Track currently visible annotation IDs
+        this.userScrollPaused = false; // Track if auto-scrolling is paused
+        this.scrollPauseTimer = null; // Timer for auto-scroll pause
+        this.isProgrammaticScroll = false; // Flag to distinguish programmatic vs user scrolling
+
+        eventBus.on("playback.ready", async (e) => {
+            this.hierarchy = e.detail.hierarchy;
+            this.annotations = await annotations.getByHierarchy(this.hierarchy);
+            this.createAnnotationElements();
+        });
+
+        eventBus.on("playback.timeupdate", (e) => {
+            this.currentTime = e.detail.currentTime;
+            this.paint();
+        });
+
+        eventBus.on("annotations.updated", async (e) => {
+            console.log(
+                "Annotations updated for current hierarchy, reinitializing..."
+            );
+            // Reload annotations and recreate elements
+            this.annotations = await annotations.getByHierarchy(this.hierarchy);
+            this.reinitializeContainers();
+        });
+    }
+
+    createElement(options = {}) {
+        const { div } = van.tags;
+
+        let merged = {
+            id: "report-annotation-log",
+            class: "w-full h-[95vh] flex flex-col",
+            ...options,
+        };
+
+        this.container = div(merged);
+
+        // Create the three main containers with proper flex constraints
+        this.topStickyContainer = div({
+            class: "flex-none max-h-[20vh] overflow-auto",
+        });
+
+        this.middleContainer = div({
+            class: "flex-1 min-h-0 overflow-auto",
+        });
+
+        this.bottomStickyContainer = div({
+            class: "flex-none max-h-[20vh] overflow-auto",
+        });
+
+        // Add all containers to main container
+        van.add(
+            this.container,
+            this.topStickyContainer,
+            this.middleContainer,
+            this.bottomStickyContainer
+        );
+
+        this.setupVisibilityObserver();
+        this.setupScrollListener();
+
+        return this.container;
+    }
+
+    setStickyElementVisibility(container, dataId, isVisible) {
+        if (!container) return;
+
+        const element = container.querySelector(`[data-id="${dataId}"]`);
+        if (element) {
+            if (isVisible) {
+                element.classList.remove("hidden");
+            } else {
+                element.classList.add("hidden");
+            }
+        }
+    }
+
+    // Add this method to your AnnotationLog class
+    setupVisibilityObserver() {
+        if (
+            !this.middleContainer ||
+            !this.topStickyContainer ||
+            !this.bottomStickyContainer
+        )
+            return;
+
+        // Track currently visible elements
+        this.visibleElements = new Set();
+
+        // Disconnect existing observer if it exists
+        if (this.visibilityObserver) {
+            this.visibilityObserver.disconnect();
+        }
+
+        this.visibilityObserver = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    const element = entry.target;
+                    const annotationId = element.dataset.id;
+
+                    if (entry.isIntersecting) {
+                        this.visibleElements.add(annotationId);
+                    } else {
+                        this.visibleElements.delete(annotationId);
+                    }
+
+                    // Only handle critical annotations
+                    if (element.dataset.importance === "critical") {
+                        this.updateCriticalAnnotationVisibility();
+                    }
+                });
+            },
+            {
+                root: this.middleContainer,
+                rootMargin: "0px",
+                threshold: 0.1,
+            }
+        );
+    }
+
+    setupScrollListener() {
+        if (!this.middleContainer) return;
+
+        // Use scrollend event to detect when programmatic scrolling completes
+        this.middleContainer.addEventListener("scrollend", () => {
+            this.isProgrammaticScroll = false;
+        });
+
+        this.middleContainer.addEventListener("scroll", (event) => {
+            // Ignore programmatic scrolling
+            if (this.isProgrammaticScroll) {
+                return;
+            }
+
+            // User initiated scroll detected
+            this.userScrollPaused = true;
+
+            // Clear any existing timer
+            if (this.scrollPauseTimer) {
+                clearTimeout(this.scrollPauseTimer);
+            }
+
+            // Set timer to resume auto-scrolling after 5 seconds
+            this.scrollPauseTimer = setTimeout(() => {
+                this.userScrollPaused = false;
+                console.log("Auto-scrolling resumed after user scroll pause");
+            }, 5000); // 5 seconds
+
+            console.log(
+                "User scroll detected - pausing auto-scroll for 5 seconds"
+            );
+        });
+    }
+
+    updateCriticalAnnotationVisibility() {
+        // Get all critical annotations
+        const criticalAnnotations = this.annotations.filter(
+            (a) => a.importance === "critical"
+        );
+
+        // Get the times of all currently visible annotations
+        const visibleTimes = this.getVisibleAnnotationTimes();
+
+        criticalAnnotations.forEach((annotation) => {
+            const isVisible = this.visibleElements.has(annotation.id);
+
+            if (isVisible) {
+                // Hide from both sticky containers
+                this.setStickyElementVisibility(
+                    this.topStickyContainer,
+                    annotation.id,
+                    false
+                );
+                this.setStickyElementVisibility(
+                    this.bottomStickyContainer,
+                    annotation.id,
+                    false
+                );
+            } else {
+                // Determine if this annotation should go in top or bottom container
+                // If the critical annotation's time is less than any visible annotation's time,
+                // it should go in the top container, otherwise in the bottom container
+                const shouldGoInTop = this.shouldCriticalAnnotationGoInTop(
+                    annotation,
+                    visibleTimes
+                );
+
+                if (shouldGoInTop) {
+                    // Show in top sticky, hide from bottom
+                    this.setStickyElementVisibility(
+                        this.topStickyContainer,
+                        annotation.id,
+                        true
+                    );
+                    this.setStickyElementVisibility(
+                        this.bottomStickyContainer,
+                        annotation.id,
+                        false
+                    );
+                    // Scroll top sticky to the bottom to show latest annotations
+                    this.topStickyContainer.scrollTo({
+                        top: this.topStickyContainer.scrollHeight,
+                        behavior: "smooth",
+                    });
+                } else {
+                    // Show in bottom sticky, hide from top
+                    this.setStickyElementVisibility(
+                        this.topStickyContainer,
+                        annotation.id,
+                        false
+                    );
+                    this.setStickyElementVisibility(
+                        this.bottomStickyContainer,
+                        annotation.id,
+                        true
+                    );
+                }
+            }
+        });
+    }
+
+    getVisibleAnnotationTimes() {
+        const visibleTimes = [];
+
+        // Get times from all visible annotations
+        this.visibleElements.forEach((annotationId) => {
+            const annotation = this.annotations.find(
+                (a) => a.id === annotationId
+            );
+            if (annotation) {
+                visibleTimes.push(annotation.time);
+            }
+        });
+
+        return visibleTimes;
+    }
+
+    shouldCriticalAnnotationGoInTop(criticalAnnotation, visibleTimes) {
+        // If no annotations are visible, we can't determine position reliably
+        // Default to bottom container
+        if (visibleTimes.length === 0) {
+            return false;
+        }
+
+        // If the critical annotation's time is less than ANY of the visible times,
+        // it should go in the top container (it's "before" the visible content)
+        return visibleTimes.some(
+            (visibleTime) => criticalAnnotation.time < visibleTime
+        );
+    }
+
+    getTypeEmoji(type) {
+        switch (type) {
+            case "note":
+                return "✏️";
+            case "transcript":
+                return "💬";
+            case "action":
+                return "⚾";
+            case "event":
+                return "🎉";
+            default:
+                return "✏️";
+        }
+    }
+
+    getImportanceClass(importance) {
+        switch (importance) {
+            case "low":
+                return "bg-gray-200 text-gray-800";
+            case "medium":
+                return "bg-blue-200 text-blue-800";
+            case "high":
+                return "bg-yellow-200 text-yellow-800";
+            case "critical":
+                return "bg-red-200 text-red-800";
+            default:
+                return "bg-gray-200 text-gray-800";
+        }
+    }
+
+    createAnnotationElement(annotation, addClass = "") {
+        const { div, span, button } = van.tags;
+        const timeStr = timeUtil.format(annotation.time, true);
+        const emoji = this.getTypeEmoji(annotation.type);
+        const bgClass = this.getImportanceClass(annotation.importance);
+
+        const result = div(
+            {
+                class: `relative group p-2 m-1 rounded text-sm ${bgClass} border-l-4 ${
+                    annotation.importance === "critical"
+                        ? "border-red-500"
+                        : "border-gray-300"
+                } ${addClass}`,
+            },
+            div(
+                {
+                    class: "cursor-pointer",
+                    onclick: () => {
+                        eventBus.fire("ui.requestTimeSeek", {
+                            seconds: annotation.time,
+                        });
+                        this.userScrollPaused = false; // Resume auto-scrolling on click
+                    },
+                },
+                span(`${emoji} ${annotation.content}`),
+                span({ class: "text-gray-500 text-xs ml-1" }, `(${timeStr})`)
+            ),
+            // Three dots menu button - hidden by default, shown on group hover
+            button(
+                {
+                    class: "absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-6 h-6 rounded-full bg-gray-600 bg-opacity-75 hover:bg-opacity-90 text-white text-xs flex items-center justify-center",
+                    onclick: (e) => {
+                        e.stopPropagation(); // Prevent the seek action
+                        eventBus.fire("ui.editAnnotation", {
+                            annotation: annotation,
+                        });
+                    },
+                    title: "Edit annotation",
+                },
+                "⋯" // Three dots character
+            )
+        );
+
+        result.dataset.id = annotation.id;
+        result.dataset.importance = annotation.importance;
+        result.dataset.time = annotation.time;
+
+        return result;
+    }
+
+    createAnnotationElements() {
+        if (!this.middleContainer || !this.annotations) return;
+
+        const { div } = van.tags;
+
+        // Create and add annotation elements
+        if (this.annotations.length > 0) {
+            const elements = this.annotations.map((annotation) =>
+                this.createAnnotationElement(annotation)
+            );
+
+            // Add elements to DOM first
+            van.add(this.middleContainer, ...elements);
+
+            // Then observe them (after they're in the DOM)
+            if (this.visibilityObserver) {
+                elements.forEach((element) => {
+                    this.visibilityObserver.observe(element);
+                });
+            }
+
+            let criticalElements = this.annotations.filter(
+                (a) => a.importance === "critical"
+            );
+
+            van.add(
+                this.topStickyContainer,
+                ...criticalElements.map((annotation) =>
+                    this.createAnnotationElement(annotation, "hidden")
+                )
+            );
+
+            van.add(
+                this.bottomStickyContainer,
+                ...criticalElements.map((annotation) =>
+                    this.createAnnotationElement(annotation)
+                )
+            );
+        } else {
+            // No annotations available
+            van.add(
+                this.middleContainer,
+                div(
+                    { class: "p-4 text-center text-gray-500 text-sm" },
+                    "No annotations for this event"
+                )
+            );
+        }
+    }
+
+    reinitializeContainers() {
+        if (
+            !this.middleContainer ||
+            !this.topStickyContainer ||
+            !this.bottomStickyContainer
+        ) {
+            return;
+        }
+
+        // Clear all containers
+        this.middleContainer.innerHTML = "";
+        this.topStickyContainer.innerHTML = "";
+        this.bottomStickyContainer.innerHTML = "";
+
+        // Reset the visibility observer
+        if (this.visibilityObserver) {
+            this.visibilityObserver.disconnect();
+        }
+        this.visibleElements.clear();
+
+        // Recreate all annotation elements
+        this.createAnnotationElements();
+
+        console.log("Annotation containers reinitialized");
+    }
+
+    // async editAnnotation(annotation) {
+    //     try {
+    //         // Show the annotation form pre-populated with existing data
+    //         const updatedAnnotation = await annotations.showAnnotationForm(
+    //             annotation.time,
+    //             null, // No wallclock time for editing existing annotations
+    //             annotation // Pass existing annotation for pre-population
+    //         );
+
+    //         if (updatedAnnotation) {
+    //             console.log("Annotation updated:", updatedAnnotation);
+    //             // The form will handle the update/delete, no need to do anything here
+    //         }
+    //     } catch (error) {
+    //         console.error("Error editing annotation:", error);
+    //         alert("Failed to edit annotation. Please try again.");
+    //     }
+    // }
+
+    paint() {
+        if (
+            !this.middleContainer ||
+            !this.annotations ||
+            this.annotations.length === 0
+        )
+            return;
+
+        // Find the annotation with the greatest time that is less than current time
+        const lastPassedAnnotation = this.annotations
+            .filter((annotation) => annotation.time <= this.currentTime)
+            .pop(); // Since array is sorted, pop() gets the last (greatest time) element
+
+        if (lastPassedAnnotation) {
+            // Find the DOM element for this annotation and scroll it to the bottom
+            const annotationElements = this.middleContainer.children;
+            const annotationIndex =
+                this.annotations.indexOf(lastPassedAnnotation);
+
+            if (
+                annotationIndex >= 0 &&
+                annotationIndex < annotationElements.length
+            ) {
+                const targetElement = annotationElements[annotationIndex];
+
+                // Use getBoundingClientRect for accurate positioning
+                const containerRect =
+                    this.middleContainer.getBoundingClientRect();
+                const elementRect = targetElement.getBoundingClientRect();
+
+                // Calculate how much we need to scroll to get the element at the bottom
+                const containerBottom = containerRect.bottom;
+                const elementBottom = elementRect.bottom;
+
+                // If element is below the visible area, scroll down to show it at bottom
+                if (elementBottom > containerBottom) {
+                    // Check if user scroll is paused
+                    if (!this.userScrollPaused) {
+                        const scrollAmount = elementBottom - containerBottom;
+                        const currentScrollTop = this.middleContainer.scrollTop;
+
+                        // Set flag to indicate this is programmatic scrolling
+                        this.isProgrammaticScroll = true;
+
+                        this.middleContainer.scrollTo({
+                            top: currentScrollTop + scrollAmount,
+                            behavior: "smooth",
+                        });
+                    }
+                }
+                // If element is above the visible area, scroll up to show it at bottom
+                else if (elementRect.top < containerRect.top) {
+                    // Check if user scroll is paused
+                    if (!this.userScrollPaused) {
+                        const elementTop = elementRect.top;
+                        const containerTop = containerRect.top;
+                        const containerHeight = containerRect.height;
+                        const elementHeight = elementRect.height;
+
+                        const scrollAmount =
+                            elementTop -
+                            containerTop +
+                            elementHeight -
+                            containerHeight;
+                        const currentScrollTop = this.middleContainer.scrollTop;
+
+                        // Set flag to indicate this is programmatic scrolling
+                        this.isProgrammaticScroll = true;
+
+                        this.middleContainer.scrollTo({
+                            top: Math.max(0, currentScrollTop + scrollAmount),
+                            behavior: "smooth",
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+const annotationLog = new AnnotationLog();
 
 function ascending$1(a, b) {
   return a == null || b == null ? NaN : a < b ? -1 : a > b ? 1 : a >= b ? 0 : NaN;
@@ -4635,1928 +6716,6 @@ Transform.prototype = {
 
 Transform.prototype;
 
-class Summarizer {
-    constructor() {
-        this.currentCamera = 1;
-        this.summaries = [];
-
-        eventBus.addEventListener("ui.requestSummaryRebuild", async (e) => {
-            const { hierarchy } = e.detail;
-            await this.rebuild(hierarchy);
-        });
-
-        eventBus.addEventListener("ui.requestSummaryRebuildAll", async (e) => {
-            await this.rebuildAll();
-        });
-
-        eventBus.addEventListener("playback.cameraChanged", (e) => {
-            this.currentCamera = e.detail.camera;
-        });
-    }
-
-    getCurrent() {
-        return this.summaries[this.currentCamera - 1];
-    }
-
-    getAll() {
-        return this.summaries;
-    }
-
-    async rebuild(hierarchy) {
-        let hier = new Hierarchy(hierarchy);
-        hierarchy = hier.toString("-");
-
-        let summary = await this.create(hierarchy);
-        //await this.saveToFirestore(hierarchy, summary);
-        await this.saveToStorage(hierarchy, summary);
-        return summary;
-    }
-
-    async create(hierarchy) {
-        // Initialize a new scoring instance
-        var scoring = new Score();
-
-        // Load fragments and initalize the schedule
-        let fragments;
-
-        try {
-            fragments = await scoring.getFragments(hierarchy);
-            await scoring.initLoadSchedule(fragments);
-        } catch (error) {
-            console.error(`Error loading fragments for ${hierarchy}: ${error}`);
-            return [];
-        }
-
-        scoring.resetWindow();
-        let scores = {};
-
-        console.log("Creating summary...");
-        var { closed, pct } = progress.show("Creating summary...");
-
-        // Run through the fragments as if the video was playing 0.25 seconds
-        // at a time.
-        for (let i = 0; i < fragments.length; i++) {
-            const fragment = fragments[i];
-            pct.val = (i / fragments.length) * 100;
-
-            for (let dt = 0; dt < fragment.duration; dt += 0.25) {
-                // Update the scoring engine to this time
-                const newTime = fragment.start + dt;
-                const second = Math.floor(newTime);
-                await scoring.handleTimeUpdate(newTime);
-
-                // Get or initialize the score accumulator for this second
-                const score = (scores[second] = scores[second] || {
-                    startTime: 99999999,
-                    endTime: 0,
-                    score: 0,
-                    count: 0,
-                    people: 0,
-                    maxScore: 0,
-                });
-
-                // Accumulate the score
-                score.startTime = Math.min(score.startTime, newTime);
-                score.endTime = Math.max(score.endTime, newTime);
-                score.score += scoring.currentScore;
-                score.people += activeBoxManager.activeBoxes.length;
-                score.count += 1;
-                if (Math.abs(scoring.currentScore) > Math.abs(score.maxScore)) {
-                    score.maxScore = scoring.currentScore;
-                }
-            }
-        }
-
-        // Compute averages and format times
-        for (const second in scores) {
-            const score = scores[second];
-            score.score = score.maxScore; //Math.round(score.score / score.count);
-            score.people = Math.round(score.people / score.count);
-            score.startTime = score.startTime.toFixed(2);
-            score.endTime = score.endTime.toFixed(2);
-        }
-
-        closed.val = true;
-
-        return Object.values(scores);
-    }
-
-    // checkPeople(summary) {
-    //     let lastScore = summary[0];
-    //     for (const score of summary) {
-    //         const delta = Math.abs(lastScore.people - score.people);
-    //         if (delta / lastScore.people > 0.5) {
-    //             console.log(lastScore, score);
-    //         }
-    //         lastScore = score;
-    //     }
-    // }
-
-    getUrl(token, date, camera) {
-        const urlPrefix = "https://storage.roarscore.ai/production/play/";
-        // Make sure camera is zero padded two digits
-        camera = parseInt(camera).toString().padStart(2, "0");
-
-        return (
-            `${urlPrefix}${token}/${date}/${camera}/` +
-            `summary-${token}-${date}-${camera}.json`
-        );
-    }
-
-    async loadFromUrl(url) {
-        console.log(`Loading summary ${url}..`);
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error(`Error loading ${url}: ${response.statusText}`);
-            return [];
-        }
-        const rows = await response.json();
-
-        for (const row of rows) {
-            row.startTime = parseFloat(row.startTime);
-            row.endTime = parseFloat(row.endTime);
-        }
-
-        return rows;
-    }
-
-    async loadAllFromUrl(hierarchy, cameras = 5) {
-        console.log(`Loading summaries for ${hierarchy}...`);
-        this.summaries = [];
-
-        const [token, date] = hierarchy.split("-");
-        for (let camera = 1; camera <= cameras; camera++) {
-            const url = this.getSummaryUrl(token, date, camera);
-            this.summaries.push(await this.loadSummary(url));
-        }
-    }
-
-    async loadFromStorage(hierarchy) {
-        let [token, date, camera] = hierarchy.split("-");
-        let path = `summaries/${token}/${date}/summary-${token}-${date}-${camera}.json`;
-
-        try {
-            // let storage = getStorage(app);
-            // let storageRef = ref(storage, path);
-            // let url = await getDownloadURL(storageRef);
-            console.log(`Loading summary from storage: ${hierarchy}...`);
-            let url = await storage.getDownloadUrl(path);
-
-            return await this.loadFromUrl(url);
-        } catch (error) {
-            console.error(`Error loading from storage: ${error}`);
-            return null;
-        }
-    }
-
-    async saveToStorage(hierarchy, summary) {
-        let [token, date, camera] = hierarchy.split("-");
-        let path = `summaries/${token}/${date}/summary-${token}-${date}-${camera}.json`;
-
-        console.log(`Saving summary to storage: ${path}...`);
-
-        //let storage = getStorage(app);
-        // let storageRef = ref(storage, path);
-        // await uploadString(storageRef, JSON.stringify(summary));
-
-        await storage.uploadString(path, JSON.stringify(summary));
-
-        console.log(`Saved summary to storage.`);
-    }
-
-    async saveToFirestore(hierarchy, summary) {
-        var { closed, pct } = progress.show("Saving summary...");
-        console.log(`Saving summary to firestore: ${hierarchy}...`);
-
-        const batchSize = 1000;
-        for (let i = 0; i < summary.length; i += batchSize) {
-            pct.val = (i / summary.length) * 100;
-
-            const key = `${hierarchy}-${i.toString().padStart(5, "0")}`;
-            const rows = summary.slice(i, i + batchSize);
-            const data = {
-                id: key,
-                hierarchy: hierarchy,
-                offset: i,
-                rows: rows,
-            };
-
-            console.log("Saving summary batch:", key, rows.length, "rows");
-            await database.set("summaries", data);
-            //const docRef = doc(firestore, "summaries", key);
-            //await setDoc(docRef, data);
-        }
-
-        closed.val = true;
-        console.log(`Saved summary to firestore.`);
-    }
-
-    async loadFromFirestore(hierarchy) {
-        let result = [];
-        let batches = [];
-
-        // Get summaries by hierarchy
-        //const summariesRef = collection(firestore, "summaries");
-        //const q = query(summariesRef, where("hierarchy", "==", hierarchy));
-        //const snap = await getDocs(q);
-        console.log(`Loading summary from firestore: ${hierarchy}...`);
-        const rows = await database.query("summaries", {
-            hierarchy: hierarchy,
-        });
-
-        // Ensure they're sorted by offset
-        rows.forEach((data) => {
-            batches.push(data);
-        });
-        batches.sort((a, b) => a.offset - b.offset);
-
-        // Splice into the result
-        for (const batch of batches) {
-            for (const row of batch.rows) {
-                row.startTime = parseFloat(row.startTime);
-                row.endTime = parseFloat(row.endTime);
-            }
-            result.splice(batch.offset, 0, ...batch.rows);
-        }
-
-        return result;
-    }
-
-    async ensure(hierarchy, cameras = 5) {
-        const hier = new Hierarchy(hierarchy);
-
-        console.log(`Ensuring summaries for ${hier.location}-${hier.date}...`);
-
-        var { closed, pct } = progress.show("Loading summaries..");
-
-        this.summaries = [];
-        for (let camera = 1; camera <= cameras; camera++) {
-            hier.camera = camera;
-            const h = hier.toString("-");
-
-            console.log(`Loading ${h} from storage...`);
-            let summary = await this.loadFromStorage(h);
-
-            // if (!summary || !summary.length) {
-            //     console.log(`Loading ${h} from firestore..`);
-            //     summary = await this.loadFromFirestore(h);
-            //     await this.saveToStorage(h, summary);
-            // }
-
-            if (!summary || !summary.length) {
-                console.warn(
-                    `SUMMARY ${h} MISSING.  CREATING.  THIS WILL TAKE AWHILE...`
-                );
-
-                summary = await this.create(h);
-                //await this.saveToFirestore(h, summary);
-                await this.saveToStorage(h, summary);
-            }
-
-            pct.val = (camera / cameras) * 100;
-            this.summaries.push(summary);
-        }
-
-        hier.camera = 1;
-        await this.ensureEventSummary(hier.toString(":"));
-
-        closed.val = true;
-
-        eventBus.fire("summarizer.ready");
-
-        return this.summaries;
-    }
-
-    createCameraSummary(camera = 1) {
-        const summary = this.summaries[camera - 1] || [];
-
-        if (!summary.length) {
-            return null;
-        }
-
-        const result = {
-            totalScore: 0,
-            totalPeople: 0,
-            seconds: summary.length,
-            averageScore: 0,
-            averagePeople: 0,
-            minScore: 99999,
-            maxScore: -99999,
-            minPeople: 99999,
-            maxPeople: -99999,
-        };
-
-        for (const row of summary) {
-            result.totalScore += row.score;
-            result.totalPeople += row.people;
-            result.minScore = Math.min(result.minScore, row.score);
-            result.maxScore = Math.max(result.maxScore, row.score);
-            result.minPeople = Math.min(result.minPeople, row.people);
-            result.maxPeople = Math.max(result.maxPeople, row.people);
-        }
-
-        result.averageScore = Math.round(result.totalScore / result.seconds);
-        result.averagePeople = Math.round(result.totalPeople / result.seconds);
-
-        return result;
-    }
-
-    combineCameraSummaries(a, b) {
-        const totalSeconds = a.seconds + b.seconds;
-
-        a.totalPeople += b.totalPeople;
-        a.totalScore += b.totalScore;
-        a.seconds = Math.max(a.seconds, b.seconds);
-        a.minScore = Math.min(a.minScore, b.minScore);
-        a.maxScore = Math.max(a.maxScore, b.maxScore);
-        a.minPeople = Math.min(a.minPeople, b.minPeople);
-        a.maxPeople = Math.max(a.maxPeople, b.maxPeople);
-        a.averageScore = Math.round(a.totalScore / totalSeconds);
-        a.averagePeople = Math.round(a.totalPeople / totalSeconds);
-
-        return a;
-    }
-
-    createEventSummary(relevantCameras = 4) {
-        const summary = this.createCameraSummary(1);
-        if (!summary) {
-            return null;
-        }
-
-        for (let camera = 2; camera <= relevantCameras; camera++) {
-            const camSummary = this.createCameraSummary(camera);
-            if (camSummary) {
-                this.combineCameraSummaries(summary, camSummary);
-            }
-        }
-
-        summary.cameras = this.getCameraCount();
-
-        return summary;
-    }
-
-    getCameraCount() {
-        let count = 0;
-        for (const summary of this.summaries) {
-            if (summary && summary.length) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    async saveEventSummary(hierarchy, summary) {
-        await events.updateEventSummary(hierarchy, summary);
-    }
-
-    async rebuildEventSummary(hierarchy, relevantCameras = 4) {
-        if (!this.summaries.length) {
-            await this.ensure(hierarchy);
-        }
-
-        const summary = this.createEventSummary(hierarchy, relevantCameras);
-        await this.saveEventSummary(hierarchy, summary);
-        return summary;
-    }
-
-    async ensureEventSummary(hierarchy, relevantCameras = 4) {
-        const event = await events.getByHierarchy(hierarchy);
-        if (event) {
-            if (!event.summary) {
-                console.log(`Event summary missing.  Rebuilding...`);
-                return await this.rebuildEventSummary(
-                    hierarchy,
-                    relevantCameras
-                );
-            }
-        }
-    }
-}
-
-const summarizer = new Summarizer();
-
-class Heatmap {
-    constructor() {
-        this.canvas = null;
-
-        eventBus.addEventListener("playback.timeupdate", (e) => {
-            this.paint();
-        });
-    }
-
-    createElement(options = {}) {
-        const { canvas } = van.tags;
-
-        let merged = {
-            id: "report-viz-heatmap",
-            width: 1280,
-            height: 720,
-            ...options,
-        };
-
-        this.canvas = canvas(merged);
-
-        this.canvas.addEventListener("click", (e) => {
-            eventBus.fire("heatmap.click", {});
-        });
-        this.canvas.addEventListener("mousemove", (e) => {
-            const rect = this.canvas.getBoundingClientRect();
-            // Calculate the mouse position relative to the canvas
-            // and scale it to the original video resolution (3840x2160)
-            const x = Math.floor(((e.clientX - rect.left) / rect.width) * 3840);
-            const y = Math.floor(((e.clientY - rect.top) / rect.height) * 2160);
-
-            eventBus.fire("heatmap.mousemove", { x: x, y: y });
-        });
-
-        return this.canvas;
-    }
-
-    paint() {
-        if (!this.canvas) {
-            console.error("Canvas element not found");
-            return;
-        }
-        const ctx = this.canvas.getContext("2d");
-        if (!ctx) {
-            console.error("Failed to get canvas context");
-            return;
-        }
-
-        // Clear the canvas
-        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        const activeBoxes = activeBoxManager.get();
-        for (const box of activeBoxes) {
-            const ox = box.x;
-            const oy = box.y;
-            const ow = box.w;
-            const oh = box.h;
-            const score = Math.floor(box.score);
-            const expires = box.expires;
-
-            // Scale the box coordinates to the canvas size
-            const x = (ox / 3840) * this.canvas.width;
-            const y = (oy / 2160) * this.canvas.height;
-            const w = (ow / 3840) * this.canvas.width;
-            const h = (oh / 2160) * this.canvas.height;
-
-            // Calculate center and radiuses for the radial gradient
-            const cx = x + w / 2;
-            const cy = y + h / 2;
-            const rw = w * 5.0;
-            const rh = h * 5.0;
-            const rx = cx - rw / 2;
-            const ry = cy - rh / 2;
-            const innerR = 1;
-            const outerR = rh * 0.25;
-
-            // Create the hue based on the score
-            var hueOffset = (score / 1000.0) * 64;
-            if (hueOffset < 0) hueOffset = Math.max(hueOffset, -64);
-            else hueOffset = Math.min(hueOffset, 64);
-            const hue = 64 + hueOffset;
-            const gradient = ctx.createRadialGradient(
-                cx,
-                cy,
-                innerR,
-                cx,
-                cy,
-                outerR
-            );
-            const alpha = Math.floor((expires / 3000.0) * 80);
-            gradient.addColorStop(0, `hsl(${hue}, 100%, 50%, ${alpha}%)`);
-            gradient.addColorStop(1, `hsl(${hue}, 100%, 50%, 0%)`);
-            ctx.fillStyle = gradient;
-
-            ctx.fillRect(rx, ry, rw, rh);
-        }
-    }
-}
-
-const heatmap = new Heatmap();
-
-class CameraMap {
-    constructor() {
-        this.canvas = null;
-        this.second = null;
-
-        eventBus.addEventListener("playback.timeupdate", (e) => {
-            this.second = Math.floor(e.detail.currentTime);
-            this.paint();
-        });
-    }
-
-    createElement(options = {}) {
-        const { canvas } = van.tags;
-
-        let merged = {
-            id: "report-viz-cameramap",
-            class: "w-full h-full",
-            width: 500,
-            height: 250,
-            ...options,
-        };
-
-        this.canvas = canvas(merged);
-
-        this.init();
-
-        return this.canvas;
-    }
-
-    scoreToHue(score) {
-        let hueOffset = (score / 1000.0) * 64;
-        if (hueOffset < 0) hueOffset = Math.max(hueOffset, -64);
-        else hueOffset = Math.min(hueOffset, 64);
-        const hue = 64 + hueOffset;
-        return hue;
-    }
-
-    findTrangleFromMouse(clientX, clientY) {
-        const rect = this.canvas.getBoundingClientRect();
-        // Calculate the mouse position relative to the canvas
-        const x = clientX - rect.left;
-        const y = clientY - rect.top;
-
-        // Scale coordinates to match canvas internal dimensions
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        const scaledX = Math.floor(x * scaleX);
-        const scaledY = Math.floor(y * scaleY);
-
-        // Find the triangle that contains the mouse position
-        const point = geomUtil.findTriangleContainingPoint(
-            scaledX,
-            scaledY,
-            this.triangles
-        );
-
-        return point;
-    }
-
-    init() {
-        this.active = 1;
-        this.hover = null;
-
-        this.triangles = [
-            [390, 84, 499, 7, 499, 125],
-            [-20, -40, 107, 80, 0, 103],
-            [303, 180, 376, 249, 279, 249],
-            [195, 180, 172, 249, 250, 249],
-            [479, 145, 407, 233, 360, 180],
-        ];
-
-        this.labels = [
-            [408, 87, 1],
-            [83, 79, 2],
-            [301, 200, 3],
-            [192, 202, 4],
-            [452, 166, 5],
-        ];
-
-        this.summaryLabels = [
-            [408, 87, 1],
-            [83, 79, 2],
-            [301, 200, 3],
-            [192, 202, 4],
-            [452, 166, 5],
-        ];
-
-        // Load /img/raimondi-seat-map.png
-        this.img = new Image();
-        this.img.src = "/img/raimondi-seat-map.png";
-        this.img.onload = () => {
-            this.paint();
-        };
-        this.img.onerror = () => {
-            console.error("Failed to load the seat map image.");
-        };
-
-        this.canvas.addEventListener("mousemove", (event) => {
-            const point = this.findTrangleFromMouse(
-                event.clientX,
-                event.clientY
-            );
-            this.hover = point;
-            this.paint();
-
-            // Set mouse pointer if hovering over a triangle
-            this.canvas.style.cursor = point ? "pointer" : "default";
-        });
-
-        this.canvas.addEventListener("mouseout", () => {
-            this.hover = null;
-            this.paint();
-        });
-
-        this.canvas.addEventListener("click", (event) => {
-            const point = this.findTrangleFromMouse(
-                event.clientX,
-                event.clientY
-            );
-
-            if (point) {
-                this.active = point;
-                this.paint();
-                eventBus.fire("ui.requestCamera", { camera: point });
-            }
-        });
-    }
-
-    paint() {
-        let second = this.second;
-        let summaries = summarizer.getAll();
-
-        var ctx = this.canvas.getContext("2d");
-        ctx.drawImage(this.img, 0, 0, this.canvas.width, this.canvas.height);
-
-        ctx.fillStyle = "rgba(200,200,200,0.5)";
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        ctx.lineWidth = 2;
-        for (let i = 0; i < this.triangles.length; i++) {
-            let score =
-                summaries &&
-                summaries[i] &&
-                summaries[i][second] &&
-                summaries[i][second].score;
-
-            if (this.hover === i + 1) {
-                ctx.strokeStyle = "#00eeffff";
-            } else if (this.active === i + 1) {
-                ctx.strokeStyle = "#3fa7d7ff";
-            } else {
-                ctx.strokeStyle = "#999";
-            }
-
-            if (score) {
-                const hue = this.scoreToHue(score);
-                ctx.fillStyle = `hsl(${hue}, 100%, 50%, 0.5)`;
-            } else {
-                ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-            }
-            const triangle = this.triangles[i];
-            const [x1, y1, x2, y2, x3, y3] = triangle;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.lineTo(x3, y3);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-
-            const label = this.labels[i];
-            const [lx, ly, ltext] = label;
-            ctx.font = "16px Arial";
-            ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-            ctx.fillText(ltext, lx, ly);
-        }
-    }
-}
-
-const cameramap = new CameraMap();
-
-class Ekg {
-    constructor() {
-        this.showSummary = false;
-        this.canvas = null;
-        this.container = null;
-        this.score = null;
-        this.sumScore = null;
-
-        eventBus.addEventListener("playback.timeupdate", (e) => {
-            this.score = scoring.currentScore;
-
-            const second = Math.floor(e.detail.currentTime);
-            const summary = summarizer.getCurrent();
-            if (summary) {
-                this.sumScore = summary[second].score || 0;
-            }
-
-            this.paint();
-        });
-
-        eventBus.addEventListener("playback.pause", () => {
-            this.smoothie.stop();
-        });
-
-        eventBus.addEventListener("playback.play", () => {
-            this.smoothie.start();
-        });
-
-        eventBus.addEventListener("playback.timeseek", () => {
-            this.timeSeries.clear();
-        });
-    }
-
-    createElement(options = {}) {
-        const { canvas, div } = van.tags;
-
-        let merged = { ...options };
-
-        this.canvas = canvas({
-            id: "report-viz-ekg",
-            class: "w-full h-full",
-            width: 500,
-            height: 250,
-        });
-        this.label = div(
-            {
-                id: "report-viz-ekg-score",
-                class: "absolute top-0 left-0 p-1 text-xl text-black",
-            },
-            "0"
-        );
-        this.container = div(merged, this.canvas, this.label);
-
-        this.init();
-
-        return this.container;
-    }
-
-    init() {
-        this.smoothie = new SmoothieChart({
-            responsive: true,
-            interpolation: "bezier",
-            minValue: -1e3,
-            maxValue: 1000,
-            grid: {
-                strokeStyle: "rgb(200, 200, 200)",
-                fillStyle: "rgb(255,255,255)",
-                lineWidth: 1,
-                millisPerLine: 1000,
-                verticalSections: 4,
-            },
-            labels: {
-                fillStyle: "rgb(0, 0, 0)",
-                strokeStyle: "rgb(255, 255, 0)",
-                fontFamily: "Arial",
-                fontSize: 16,
-                precision: 0,
-                showIntermediateLabels: true,
-            },
-        });
-
-        this.smoothie.streamTo(this.canvas, 1000);
-        window.setTimeout(() => this.smoothie.stop(), 10);
-        this.timeSeries = new TimeSeries();
-
-        this.smoothie.addTimeSeries(this.timeSeries, {
-            strokeStyle: "rgb(0, 0, 255)",
-            fillStyle: "rgba(0,0,255, 0.4)",
-            lineWidth: 3,
-        });
-    }
-
-    paint() {
-        this.timeSeries.append(Date.now(), this.score);
-        this.label.innerText = this.score.toFixed(0);
-
-        if (this.sumScore && this.showSummary) {
-            this.label.innerText += ` (${this.sumScore.toFixed(0)})`;
-        }
-    }
-}
-
-const ekg = new Ekg();
-
-class Spider {
-    constructor() {
-        this.canvas = null;
-
-        eventBus.addEventListener("playback.timeupdate", (e) => {
-            this.paint();
-        });
-    }
-
-    createElement(options = {}) {
-        const { canvas } = van.tags;
-
-        let merged = {
-            id: "report-viz-spider",
-            class: "w-full h-full",
-            width: 500,
-            height: 500,
-            ...options,
-        };
-
-        this.canvas = canvas(merged);
-
-        this.init();
-
-        return this.canvas;
-    }
-
-    init() {
-        var ctx = this.canvas.getContext("2d");
-
-        var labels = [
-            "Anger", //0
-            "Disgust", //1
-            "Fear", //2
-            "Happiness", //3
-            "Sadness", //4
-            "Surprise", //5
-            "Neutral", //6
-        ];
-
-        // GROSS TODO FIXME (this is a hack to reorder the labels)
-        let d = labels.splice(3, 1);
-        labels.splice(6, 0, ...d);
-        d = labels.splice(4, 1);
-        labels.splice(0, 0, ...d);
-        d = labels.splice(4, 1);
-        labels.splice(1, 0, ...d);
-        d = labels.splice(5, 1);
-        labels.splice(4, 0, ...d);
-
-        this.spiderDataMap = {};
-        for (var i = 0; i < labels.length; i++) {
-            this.spiderDataMap[labels[i]] = i;
-        }
-
-        if (this.spiderChart) this.spiderChart.destroy();
-
-        this.spiderChart = new Chart(ctx, {
-            type: "radar",
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: "T=0",
-                        data: labels.map(() => 0),
-                        fill: true,
-                        backgroundColor: "rgba(0, 0, 255, 0.2)",
-                        borderColor: "rgb(0, 0, 255)",
-                        pointBackgroundColor: "rgb(0, 0, 255)",
-                        pointBorderColor: "#fff",
-                        pointHoverBackgroundColor: "#fff",
-                        pointHoverBorderColor: "rgb(0, 0, 255)",
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: false,
-                    },
-                },
-                scales: {
-                    r: {
-                        beginAtZero: true,
-                        suggestedMin: 0,
-                        suggestedMax: 1000,
-                        pointLabels: {
-                            font: {
-                                size: 16,
-                                family: "Arial",
-                            },
-                        },
-                    },
-                },
-            },
-        });
-        this.spiderChart.update();
-    }
-
-    paint() {
-        if (!this.spiderChart) return;
-        let cores = scoring.currentCores;
-        let data = cores.map((c) => Math.min(1000, Math.abs(c)));
-
-        let d = data.splice(3, 1);
-        data.splice(6, 0, ...d);
-        d = data.splice(4, 1);
-        data.splice(0, 0, ...d);
-        d = data.splice(4, 1);
-        data.splice(1, 0, ...d);
-        d = data.splice(5, 1);
-        data.splice(4, 0, ...d);
-
-        // Update the spider chart data
-        this.spiderChart.data.datasets[0].data = data;
-        this.spiderChart.update();
-    }
-}
-
-const spider = new Spider();
-
-class SummaryGraph {
-    constructor() {
-        this.canvas = null;
-        this.ctx = null;
-        this.isStale = true;
-        this.timeComplete = 0;
-
-        eventBus.addEventListener("playback.ready", (e) => {
-            this.paint();
-            this.isStale = false;
-        });
-
-        eventBus.addEventListener("playback.timeupdate", (e) => {
-            //if (this.isStale) this.paint();
-            //this.isStale = false;
-            if (!e.detail.currentTime || !e.detail.duration) return;
-            this.timeComplete = e.detail.currentTime / e.detail.duration;
-            this.paint();
-        });
-
-        eventBus.addEventListener("playback.cameraChanged", (e) => {
-            this.isStale = true;
-        });
-    }
-
-    createElement(options = {}) {
-        const { canvas } = van.tags;
-
-        let merged = {
-            id: "report-viz-ppl",
-            class: "w-full h-auto aspect-[calc(16/4.5)] mt-2",
-            width: 1280,
-            height: 360,
-            ...options,
-        };
-
-        this.canvas = canvas(merged);
-
-        this.init();
-
-        return this.canvas;
-    }
-
-    init() {
-        this.ctx = this.canvas.getContext("2d");
-
-        const labels = [];
-        const peopleColors = [];
-        const scoreColors = [];
-
-        for (let i = 0; i < 100; i++) {
-            labels.push(`${i + 1}%`);
-            peopleColors.push("#3fa7d7");
-            scoreColors.push("#fdb080");
-        }
-
-        if (this.chart) this.chart.destroy();
-
-        // Plugin to draw the time indicator line
-        const timeLinePlugin = {
-            id: "timeLine",
-            afterDraw: (chart) => {
-                if (this.timeComplete) {
-                    const ctx = chart.ctx;
-                    const chartArea = chart.chartArea;
-                    const currentX =
-                        chartArea.left +
-                        this.timeComplete * (chartArea.right - chartArea.left);
-
-                    ctx.save();
-                    ctx.beginPath();
-                    ctx.moveTo(currentX, chartArea.top);
-                    ctx.lineTo(currentX, chartArea.bottom);
-                    ctx.lineWidth = 2;
-                    ctx.strokeStyle = "red";
-                    ctx.stroke();
-                    ctx.restore();
-                }
-            },
-        };
-
-        this.chart = new Chart(this.ctx, {
-            type: "line",
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: "People",
-                        data: labels.map(() => 0),
-                        fill: false,
-                        borderColor: peopleColors,
-                        borderWidth: 1,
-                    },
-                    {
-                        label: "Score",
-                        data: labels.map(() => 0),
-                        fill: false,
-                        borderColor: scoreColors,
-                        borderWidth: 1,
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: true,
-                    },
-                },
-            },
-            plugins: [timeLinePlugin],
-        });
-        this.chart.update();
-
-        this.canvas.addEventListener("click", (evt) => {
-            const points = this.chart.getElementsAtEventForMode(
-                evt,
-                "nearest",
-                { intersect: true },
-                true
-            );
-
-            if (points.length) {
-                const firstPoint = points[0];
-                const label = this.chart.data.labels[firstPoint.index];
-                // const value =
-                //     this.pplChart.data.datasets[firstPoint.datasetIndex].data[
-                //         firstPoint.index
-                //     ];
-                eventBus.fire("ui.requestTimeSeek", { time: label });
-            }
-        });
-    }
-
-    paint() {
-        let summary = summarizer.getCurrent();
-        if (!this.chart) return;
-
-        // // Only paint it when the summary changes..
-        // if (this.lastSummary === summary) return;
-        // this.lastSummary = summary;
-
-        let peopleData = [];
-        let scoreData = [];
-        let labels = [];
-
-        // for (let i = 0; i < 100; i++) {
-        //     let idx = Math.floor(i * (summary.length / 100));
-        //     labels.push(this.formatTime(summary[idx].startTime));
-        //     data.push(summary[idx].people);
-        // }
-
-        let step = Math.floor(summary.length / 100);
-
-        for (let i = 0; i < 100; i++) {
-            let idx = i * step;
-            let people = 0;
-            let score = 0;
-            let elapsedTime = 0;
-
-            for (let j = 0; j < step; j++) {
-                people += summary[idx + j].people;
-                score += summary[idx + j].score;
-                elapsedTime += parseInt(summary[idx + j].startTime);
-            }
-
-            peopleData.push(people / step);
-            scoreData.push(score / step);
-            labels.push(timeUtil.format(elapsedTime / step));
-        }
-
-        // Update the chart data
-        this.chart.data.labels = labels;
-        this.chart.data.datasets[0].data = peopleData;
-        this.chart.data.datasets[1].data = scoreData;
-        this.chart.update();
-    }
-}
-
-const summaryGraph = new SummaryGraph();
-
-class Demographics {
-    constructor(title, labels, data) {
-        this.canvas = null;
-        this.title = title;
-        this.labels = labels;
-        this.data = data;
-    }
-
-    createElement(options = {}) {
-        const { canvas } = van.tags;
-        let merged = {
-            id: "report-viz-demo",
-            width: 448,
-            height: 126,
-            ...options,
-        };
-
-        this.canvas = canvas(merged);
-
-        this.init();
-
-        return this.canvas;
-    }
-
-    init() {
-        const ctx = this.canvas.getContext("2d");
-
-        var demoChart = new Chart(ctx, {
-            type: "bar",
-            data: {
-                labels: [this.title],
-                datasets: [
-                    {
-                        label: this.labels[0],
-                        data: [this.data[0]],
-                        fill: true,
-                        borderWidth: 1,
-                        borderColor: ["#d94d507f"],
-                        backgroundColor: ["#d94d50"],
-                    },
-
-                    {
-                        label: this.labels[1],
-                        data: [this.data[1]],
-                        fill: true,
-                        borderWidth: 1,
-                        borderColor: ["#3fa7d77f"],
-                        backgroundColor: ["#3fa7d7"],
-                    },
-                ],
-            },
-            options: {
-                indexAxis: "y",
-                responsive: true,
-                plugins: {
-                    legend: {
-                        display: false,
-                    },
-                },
-                scale: {
-                    x: {
-                        stacked: true,
-                    },
-                    y: {
-                        stacked: true,
-                    },
-                },
-            },
-        });
-        demoChart.update();
-    }
-}
-
-const genderDemo = new Demographics("Gender", ["male", "female"], [60, 40]);
-const ageDemo = new Demographics("Age", ["adult", "child"], [80, 20]);
-
-class MomentFinder {
-    constructor() {
-        this.moments = null;
-
-        eventBus.addEventListener("summarizer.ready", () => {
-            this.find();
-        });
-
-        eventBus.addEventListener("playback.cameraChanged", () => {
-            this.find();
-        });
-    }
-
-    get() {
-        return this.moments;
-    }
-
-    isSame(s1, s2) {
-        const buffer = 180;
-        return (
-            (s2.startTime >= s1.startTime - buffer &&
-                s2.startTime <= s1.endTime + buffer) ||
-            (s2.endTime >= s1.startTime - buffer &&
-                s2.endTime <= s1.endTime + buffer)
-        );
-    }
-
-    find() {
-        let summary = summarizer.getCurrent();
-        let sorted = [...summary];
-        let moments = [];
-
-        // Sort by score and limit to top 100
-        sorted.sort((a, b) => b.score - a.score);
-        sorted.splice(100, sorted.length - 100);
-
-        // Top score is our first moment
-        moments.push(sorted.shift());
-
-        while (moments.length < 10 && sorted.length > 0) {
-            let moment = sorted.shift();
-
-            // Find any same moment and merge them, or add a new one
-            let merge = moments.find((a) => this.isSame(a, moment));
-            if (merge) {
-                merge.startTime = Math.min(moment.startTime, merge.startTime);
-                merge.endTime = Math.max(moment.endTime, merge.endTime);
-            } else {
-                console.log("Adding..", moment);
-                moments.push(moment);
-            }
-        }
-
-        // Sort moments by time and add time label
-        moments.sort((a, b) => a.startTime - b.startTime);
-        moments.forEach((a) => (a.label = timeUtil.format(a.startTime)));
-
-        this.moments = moments;
-
-        eventBus.fire("momentFinder.changed");
-
-        return moments;
-    }
-}
-
-const momentFinder = new MomentFinder();
-
-class MomentList {
-    constructor() {
-        this.count = 10;
-        this.container = null;
-
-        eventBus.addEventListener("momentFinder.changed", () => {
-            this.update();
-        });
-    }
-
-    createElement(options = {}) {
-        const { div } = van.tags;
-
-        let merged = { ...options };
-        this.container = div(merged);
-
-        for (let i = 0; i < this.count; i++) {
-            let moment = div(
-                {
-                    id: `report-moment-${i + 1}`,
-                    class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                    onclick: () => {
-                        this.seekTo(i + 1);
-                    },
-                },
-                div({ class: "text-2xl mb-1" }, "▶"),
-                div({ class: "text-sm" }, "0")
-            );
-            van.add(this.container, moment);
-        }
-
-        return this.container;
-    }
-
-    update() {
-        let moments = momentFinder.get();
-
-        for (let i = 0; i < this.count; i++) {
-            const moment = moments[i];
-            const momentDiv = document.getElementById(`report-moment-${i + 1}`);
-
-            if (!momentDiv) continue;
-
-            if (moment) {
-                momentDiv.querySelector(
-                    "div.text-sm"
-                ).textContent = `${moment.label}`;
-                momentDiv.style.display = "block";
-            } else {
-                momentDiv.style.display = "none";
-            }
-        }
-    }
-
-    seekTo(number) {
-        let moments = momentFinder.get();
-        const moment = moments[number - 1];
-        if (moment) {
-            eventBus.fire("ui.requestTimeSeek", {
-                seconds: moment.startTime - 15,
-            });
-        }
-    }
-}
-
-new MomentList();
-
-class LinkedPlayer {
-    constructor() {
-        this.container = null;
-
-        eventBus.addEventListener("playback.play", () => {
-            if (this.embedPlayer) {
-                console.log(this.embedPlayer);
-                this.embedPlayer.playVideo();
-            }
-        });
-
-        eventBus.addEventListener("playback.pause", () => {
-            if (this.embedPlayer) {
-                this.embedPlayer.pauseVideo();
-            }
-        });
-
-        eventBus.addEventListener("playback.timeupdate", (e) => {
-            this.sync(e.detail.currentTime);
-        });
-    }
-
-    createElement(options = {}) {
-        const { div } = van.tags;
-
-        let merged = { ...options };
-
-        this.container = div(merged);
-
-        return this.container;
-    }
-
-    init() {
-        const event = events.get();
-        const embedVideo = event.embed;
-
-        if (!embedVideo) {
-            console.error("No embed available");
-            return;
-        }
-
-        this.embedVideoId = embedVideo.id;
-        this.embedOffset = embedVideo.offset;
-
-        const videoId = this.embedVideoId;
-        const origin = window.location.origin;
-        this.container.innerHTML =
-            '<iframe id="report-embed-player" width="500" height="281" ' +
-            'class="w-full h-auto aspect-video" ' +
-            `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${origin}"` +
-            ' title="YouTube video player" frameborder="0" allow="web-share"' +
-            ' referrerpolicy="strict-origin-when-cross-origin" ' +
-            "allowfullscreen></iframe>";
-        this.embedPlayer = new YT.Player("report-embed-player");
-    }
-
-    sync(currentTime) {
-        if (this.embedPlayer) {
-            let embedTime = this.embedPlayer.getCurrentTime();
-            let embedState = this.embedPlayer.getPlayerState();
-            let duration = this.embedPlayer.getDuration();
-            let targetTime = currentTime + this.embedOffset;
-
-            if (targetTime < 0 || targetTime > duration) {
-                if (embedState == 1) {
-                    console.log(
-                        `Target time is ${targetTime}, pausing embed..`
-                    );
-                    this.embedPlayer.pauseVideo();
-                    this.embedPlayer.mute();
-                }
-            } else {
-                if (Math.abs(targetTime - embedTime) > 1) {
-                    console.log(`Seeking embed to ${targetTime}..`);
-                    this.embedPlayer.seekTo(targetTime, true);
-                }
-                if (embedState != 1) {
-                    console.log(`Playing embedded video..`);
-                    this.embedPlayer.playVideo();
-                }
-                if (this.embedPlayer.isMuted()) {
-                    this.embedPlayer.unMute();
-                }
-            }
-        }
-    }
-}
-
-const linkedPlayer = new LinkedPlayer();
-
-class AnnotationLog {
-    /**
-     * The annotation log displays a chat-like view of annotations associated with an event.
-     * Annotations scroll automatically as the video time progresses.
-     * It listens for "playback.ready" to load annotations for the current hierarchy
-     * and "playback.timeupdate" to refresh the display.
-     *
-     * Annotations are marked with an importance of "low", "medium", "high" or "critical".
-     *   * When importance="low" show a grey background
-     *   * When importance="medium" show a blue background
-     *   * When importance="high" show a yellow background
-     *   * When importance="critical" show a red background and stick to the top or bottom of the log
-     *
-     * Annotations are marked with a type of "note", "transcript", "action" or "event".
-     *   * When type="note" show a pencil emoji ✏️
-     *   * When type="transcript" show a speech balloon emoji 💬
-     *   * When type="action" show a baseball emoji ⚾
-     *   * When type="event" show a party popper emoji 🎉
-     *
-     * Annotations have a format like: "✏️ This is a note annotation (hh:mm:ss)"
-     * Annotations use the timeUtil.format function to format the time as hh:mm:ss
-     **/
-    constructor() {
-        this.container = null;
-        this.currentTime = 0;
-        this.visibleElements = new Set(); // Track currently visible annotation IDs
-        this.userScrollPaused = false; // Track if auto-scrolling is paused
-        this.scrollPauseTimer = null; // Timer for auto-scroll pause
-        this.isProgrammaticScroll = false; // Flag to distinguish programmatic vs user scrolling
-
-        eventBus.on("playback.ready", async (e) => {
-            this.hierarchy = e.detail.hierarchy;
-            this.annotations = await annotations.getByHierarchy(this.hierarchy);
-            this.createAnnotationElements();
-        });
-
-        eventBus.on("playback.timeupdate", (e) => {
-            this.currentTime = e.detail.currentTime;
-            this.paint();
-        });
-
-        eventBus.on("annotations.updated", async (e) => {
-            console.log(
-                "Annotations updated for current hierarchy, reinitializing..."
-            );
-            // Reload annotations and recreate elements
-            this.annotations = await annotations.getByHierarchy(this.hierarchy);
-            this.reinitializeContainers();
-        });
-    }
-
-    createElement(options = {}) {
-        const { div } = van.tags;
-
-        let merged = {
-            id: "report-annotation-log",
-            class: "w-full h-[95vh] flex flex-col",
-            ...options,
-        };
-
-        this.container = div(merged);
-
-        // Create the three main containers with proper flex constraints
-        this.topStickyContainer = div({
-            class: "flex-none max-h-[20vh] overflow-auto",
-        });
-
-        this.middleContainer = div({
-            class: "flex-1 min-h-0 overflow-auto",
-        });
-
-        this.bottomStickyContainer = div({
-            class: "flex-none max-h-[20vh] overflow-auto",
-        });
-
-        // Add all containers to main container
-        van.add(
-            this.container,
-            this.topStickyContainer,
-            this.middleContainer,
-            this.bottomStickyContainer
-        );
-
-        this.setupVisibilityObserver();
-        this.setupScrollListener();
-
-        return this.container;
-    }
-
-    setStickyElementVisibility(container, dataId, isVisible) {
-        if (!container) return;
-
-        const element = container.querySelector(`[data-id="${dataId}"]`);
-        if (element) {
-            if (isVisible) {
-                element.classList.remove("hidden");
-            } else {
-                element.classList.add("hidden");
-            }
-        }
-    }
-
-    // Add this method to your AnnotationLog class
-    setupVisibilityObserver() {
-        if (
-            !this.middleContainer ||
-            !this.topStickyContainer ||
-            !this.bottomStickyContainer
-        )
-            return;
-
-        // Track currently visible elements
-        this.visibleElements = new Set();
-
-        // Disconnect existing observer if it exists
-        if (this.visibilityObserver) {
-            this.visibilityObserver.disconnect();
-        }
-
-        this.visibilityObserver = new IntersectionObserver(
-            (entries) => {
-                entries.forEach((entry) => {
-                    const element = entry.target;
-                    const annotationId = element.dataset.id;
-
-                    if (entry.isIntersecting) {
-                        this.visibleElements.add(annotationId);
-                    } else {
-                        this.visibleElements.delete(annotationId);
-                    }
-
-                    // Only handle critical annotations
-                    if (element.dataset.importance === "critical") {
-                        this.updateCriticalAnnotationVisibility();
-                    }
-                });
-            },
-            {
-                root: this.middleContainer,
-                rootMargin: "0px",
-                threshold: 0.1,
-            }
-        );
-    }
-
-    setupScrollListener() {
-        if (!this.middleContainer) return;
-
-        // Use scrollend event to detect when programmatic scrolling completes
-        this.middleContainer.addEventListener("scrollend", () => {
-            this.isProgrammaticScroll = false;
-        });
-
-        this.middleContainer.addEventListener("scroll", (event) => {
-            // Ignore programmatic scrolling
-            if (this.isProgrammaticScroll) {
-                return;
-            }
-
-            // User initiated scroll detected
-            this.userScrollPaused = true;
-
-            // Clear any existing timer
-            if (this.scrollPauseTimer) {
-                clearTimeout(this.scrollPauseTimer);
-            }
-
-            // Set timer to resume auto-scrolling after 5 seconds
-            this.scrollPauseTimer = setTimeout(() => {
-                this.userScrollPaused = false;
-                console.log("Auto-scrolling resumed after user scroll pause");
-            }, 5000); // 5 seconds
-
-            console.log(
-                "User scroll detected - pausing auto-scroll for 5 seconds"
-            );
-        });
-    }
-
-    updateCriticalAnnotationVisibility() {
-        // Get all critical annotations
-        const criticalAnnotations = this.annotations.filter(
-            (a) => a.importance === "critical"
-        );
-
-        // Get the times of all currently visible annotations
-        const visibleTimes = this.getVisibleAnnotationTimes();
-
-        criticalAnnotations.forEach((annotation) => {
-            const isVisible = this.visibleElements.has(annotation.id);
-
-            if (isVisible) {
-                // Hide from both sticky containers
-                this.setStickyElementVisibility(
-                    this.topStickyContainer,
-                    annotation.id,
-                    false
-                );
-                this.setStickyElementVisibility(
-                    this.bottomStickyContainer,
-                    annotation.id,
-                    false
-                );
-            } else {
-                // Determine if this annotation should go in top or bottom container
-                // If the critical annotation's time is less than any visible annotation's time,
-                // it should go in the top container, otherwise in the bottom container
-                const shouldGoInTop = this.shouldCriticalAnnotationGoInTop(
-                    annotation,
-                    visibleTimes
-                );
-
-                if (shouldGoInTop) {
-                    // Show in top sticky, hide from bottom
-                    this.setStickyElementVisibility(
-                        this.topStickyContainer,
-                        annotation.id,
-                        true
-                    );
-                    this.setStickyElementVisibility(
-                        this.bottomStickyContainer,
-                        annotation.id,
-                        false
-                    );
-                    // Scroll top sticky to the bottom to show latest annotations
-                    this.topStickyContainer.scrollTo({
-                        top: this.topStickyContainer.scrollHeight,
-                        behavior: "smooth",
-                    });
-                } else {
-                    // Show in bottom sticky, hide from top
-                    this.setStickyElementVisibility(
-                        this.topStickyContainer,
-                        annotation.id,
-                        false
-                    );
-                    this.setStickyElementVisibility(
-                        this.bottomStickyContainer,
-                        annotation.id,
-                        true
-                    );
-                }
-            }
-        });
-    }
-
-    getVisibleAnnotationTimes() {
-        const visibleTimes = [];
-
-        // Get times from all visible annotations
-        this.visibleElements.forEach((annotationId) => {
-            const annotation = this.annotations.find(
-                (a) => a.id === annotationId
-            );
-            if (annotation) {
-                visibleTimes.push(annotation.time);
-            }
-        });
-
-        return visibleTimes;
-    }
-
-    shouldCriticalAnnotationGoInTop(criticalAnnotation, visibleTimes) {
-        // If no annotations are visible, we can't determine position reliably
-        // Default to bottom container
-        if (visibleTimes.length === 0) {
-            return false;
-        }
-
-        // If the critical annotation's time is less than ANY of the visible times,
-        // it should go in the top container (it's "before" the visible content)
-        return visibleTimes.some(
-            (visibleTime) => criticalAnnotation.time < visibleTime
-        );
-    }
-
-    getTypeEmoji(type) {
-        switch (type) {
-            case "note":
-                return "✏️";
-            case "transcript":
-                return "💬";
-            case "action":
-                return "⚾";
-            case "event":
-                return "🎉";
-            default:
-                return "✏️";
-        }
-    }
-
-    getImportanceClass(importance) {
-        switch (importance) {
-            case "low":
-                return "bg-gray-200 text-gray-800";
-            case "medium":
-                return "bg-blue-200 text-blue-800";
-            case "high":
-                return "bg-yellow-200 text-yellow-800";
-            case "critical":
-                return "bg-red-200 text-red-800";
-            default:
-                return "bg-gray-200 text-gray-800";
-        }
-    }
-
-    createAnnotationElement(annotation, addClass = "") {
-        const { div, span, button } = van.tags;
-        const timeStr = timeUtil.format(annotation.time, true);
-        const emoji = this.getTypeEmoji(annotation.type);
-        const bgClass = this.getImportanceClass(annotation.importance);
-
-        const result = div(
-            {
-                class: `relative group p-2 m-1 rounded text-sm ${bgClass} border-l-4 ${
-                    annotation.importance === "critical"
-                        ? "border-red-500"
-                        : "border-gray-300"
-                } ${addClass}`,
-            },
-            div(
-                {
-                    class: "cursor-pointer",
-                    onclick: () => {
-                        eventBus.fire("ui.requestTimeSeek", {
-                            seconds: annotation.time,
-                        });
-                        this.userScrollPaused = false; // Resume auto-scrolling on click
-                    },
-                },
-                span(`${emoji} ${annotation.content}`),
-                span({ class: "text-gray-500 text-xs ml-1" }, `(${timeStr})`)
-            ),
-            // Three dots menu button - hidden by default, shown on group hover
-            button(
-                {
-                    class: "absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-6 h-6 rounded-full bg-gray-600 bg-opacity-75 hover:bg-opacity-90 text-white text-xs flex items-center justify-center",
-                    onclick: (e) => {
-                        e.stopPropagation(); // Prevent the seek action
-                        eventBus.fire("ui.editAnnotation", {
-                            annotation: annotation,
-                        });
-                    },
-                    title: "Edit annotation",
-                },
-                "⋯" // Three dots character
-            )
-        );
-
-        result.dataset.id = annotation.id;
-        result.dataset.importance = annotation.importance;
-        result.dataset.time = annotation.time;
-
-        return result;
-    }
-
-    createAnnotationElements() {
-        if (!this.middleContainer || !this.annotations) return;
-
-        const { div } = van.tags;
-
-        // Create and add annotation elements
-        if (this.annotations.length > 0) {
-            const elements = this.annotations.map((annotation) =>
-                this.createAnnotationElement(annotation)
-            );
-
-            // Add elements to DOM first
-            van.add(this.middleContainer, ...elements);
-
-            // Then observe them (after they're in the DOM)
-            if (this.visibilityObserver) {
-                elements.forEach((element) => {
-                    this.visibilityObserver.observe(element);
-                });
-            }
-
-            let criticalElements = this.annotations.filter(
-                (a) => a.importance === "critical"
-            );
-
-            van.add(
-                this.topStickyContainer,
-                ...criticalElements.map((annotation) =>
-                    this.createAnnotationElement(annotation, "hidden")
-                )
-            );
-
-            van.add(
-                this.bottomStickyContainer,
-                ...criticalElements.map((annotation) =>
-                    this.createAnnotationElement(annotation)
-                )
-            );
-        } else {
-            // No annotations available
-            van.add(
-                this.middleContainer,
-                div(
-                    { class: "p-4 text-center text-gray-500 text-sm" },
-                    "No annotations for this event"
-                )
-            );
-        }
-    }
-
-    reinitializeContainers() {
-        if (
-            !this.middleContainer ||
-            !this.topStickyContainer ||
-            !this.bottomStickyContainer
-        ) {
-            return;
-        }
-
-        // Clear all containers
-        this.middleContainer.innerHTML = "";
-        this.topStickyContainer.innerHTML = "";
-        this.bottomStickyContainer.innerHTML = "";
-
-        // Reset the visibility observer
-        if (this.visibilityObserver) {
-            this.visibilityObserver.disconnect();
-        }
-        this.visibleElements.clear();
-
-        // Recreate all annotation elements
-        this.createAnnotationElements();
-
-        console.log("Annotation containers reinitialized");
-    }
-
-    // async editAnnotation(annotation) {
-    //     try {
-    //         // Show the annotation form pre-populated with existing data
-    //         const updatedAnnotation = await annotations.showAnnotationForm(
-    //             annotation.time,
-    //             null, // No wallclock time for editing existing annotations
-    //             annotation // Pass existing annotation for pre-population
-    //         );
-
-    //         if (updatedAnnotation) {
-    //             console.log("Annotation updated:", updatedAnnotation);
-    //             // The form will handle the update/delete, no need to do anything here
-    //         }
-    //     } catch (error) {
-    //         console.error("Error editing annotation:", error);
-    //         alert("Failed to edit annotation. Please try again.");
-    //     }
-    // }
-
-    paint() {
-        if (
-            !this.middleContainer ||
-            !this.annotations ||
-            this.annotations.length === 0
-        )
-            return;
-
-        // Find the annotation with the greatest time that is less than current time
-        const lastPassedAnnotation = this.annotations
-            .filter((annotation) => annotation.time <= this.currentTime)
-            .pop(); // Since array is sorted, pop() gets the last (greatest time) element
-
-        if (lastPassedAnnotation) {
-            // Find the DOM element for this annotation and scroll it to the bottom
-            const annotationElements = this.middleContainer.children;
-            const annotationIndex =
-                this.annotations.indexOf(lastPassedAnnotation);
-
-            if (
-                annotationIndex >= 0 &&
-                annotationIndex < annotationElements.length
-            ) {
-                const targetElement = annotationElements[annotationIndex];
-
-                // Use getBoundingClientRect for accurate positioning
-                const containerRect =
-                    this.middleContainer.getBoundingClientRect();
-                const elementRect = targetElement.getBoundingClientRect();
-
-                // Calculate how much we need to scroll to get the element at the bottom
-                const containerBottom = containerRect.bottom;
-                const elementBottom = elementRect.bottom;
-
-                // If element is below the visible area, scroll down to show it at bottom
-                if (elementBottom > containerBottom) {
-                    // Check if user scroll is paused
-                    if (!this.userScrollPaused) {
-                        const scrollAmount = elementBottom - containerBottom;
-                        const currentScrollTop = this.middleContainer.scrollTop;
-
-                        // Set flag to indicate this is programmatic scrolling
-                        this.isProgrammaticScroll = true;
-
-                        this.middleContainer.scrollTo({
-                            top: currentScrollTop + scrollAmount,
-                            behavior: "smooth",
-                        });
-                    }
-                }
-                // If element is above the visible area, scroll up to show it at bottom
-                else if (elementRect.top < containerRect.top) {
-                    // Check if user scroll is paused
-                    if (!this.userScrollPaused) {
-                        const elementTop = elementRect.top;
-                        const containerTop = containerRect.top;
-                        const containerHeight = containerRect.height;
-                        const elementHeight = elementRect.height;
-
-                        const scrollAmount =
-                            elementTop -
-                            containerTop +
-                            elementHeight -
-                            containerHeight;
-                        const currentScrollTop = this.middleContainer.scrollTop;
-
-                        // Set flag to indicate this is programmatic scrolling
-                        this.isProgrammaticScroll = true;
-
-                        this.middleContainer.scrollTo({
-                            top: Math.max(0, currentScrollTop + scrollAmount),
-                            behavior: "smooth",
-                        });
-                    }
-                }
-            }
-        }
-    }
-}
-
-const annotationLog = new AnnotationLog();
-
 class SummaryEditor {
     constructor() {
         this.container = null;
@@ -7864,11 +8023,22 @@ class Reports {
                                     type: "button",
                                     class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
                                     onclick: () => {
-                                        eventBus.fire("ui.requestEditMode");
+                                        eventBus.fire("ui.requestExport");
                                     },
                                 },
-                                "Edit Summary"
+                                "Export as CSV"
                             )
+
+                            // button(
+                            //     {
+                            //         type: "button",
+                            //         class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
+                            //         onclick: () => {
+                            //             eventBus.fire("ui.requestEditMode");
+                            //         },
+                            //     },
+                            //     "Edit Summary"
+                            // )
                         )
                     ),
 
