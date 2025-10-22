@@ -1,7 +1,7 @@
 # Secrets
 secret.py
 firebase-svc-cred.json
-functions/lib/serviceAccountKey.json
+serviceAccountKey.json
 
 .vscode
 
