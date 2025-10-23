@@ -2,6 +2,9 @@
 secret.py
 firebase-svc-cred.json
 serviceAccountKey.json
+*-secret*
+*secret-*
+*secrets-*
 
 .vscode
 

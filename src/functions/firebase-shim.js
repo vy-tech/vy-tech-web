@@ -1,5 +1,5 @@
 import { initializeApp, cert } from "firebase-admin/app";
-import credential from "../conf/firebase-secrets.json" with { type: "json" };
+import credential from "../../conf/firebase-secrets.json" with { type: "json" };
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { Timestamp } from 'firebase-admin/firestore'; 

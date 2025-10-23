@@ -11,7 +11,7 @@ import {
 
 // Initialize firebase from credential (since we want to support function and standalone)
 console.log("Trying to initialize firebase with credentials..");
-import credential from "./serviceAccountKey.json" with { type: "json" };
+import credential from "../conf/firebase-secrets.json" with { type: "json" };
 initializeApp({ credential: cert(credential) });
 const db = getFirestore();
 const auth = getAuth();

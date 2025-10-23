@@ -1,0 +1,11 @@
+{
+    "dev": { 
+        "api_key": "sk_ABC123",
+        "webhook_signing_key": "whsec_ABC123" 
+    },
+
+    "prod": {
+        "api_key": "sk_DEF456",
+        "webhook_signing_key": "whsec_DEF456"
+    }
+}
