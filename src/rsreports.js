@@ -4,12 +4,13 @@ import { eventBus } from "./eventbus.js";
 
 import { scoring } from "./scoring/scoring.js";
 import { summarizer } from "./scoring/summarizer.js";
-import { profiles } from "./data/profiles.js";
+import { profilesData } from "./data/profiles.js";
+import { profiles } from "./ui/profiles.js";
 import { activeBoxManager } from "./scoring/activeBoxManager.js";
 
-import { events } from "./data/events.js";
-import { annotations } from "./data/annotations.js";
-import { exporter } from "./data/exporter.js";
+import { events } from "./ui/events.js";
+import { annotations } from "./ui/annotations.js";
+import { exporter } from "./ui/exporter.js";
 
 import { timeUtil } from "./util/time.js";
 
@@ -81,6 +82,8 @@ class Reports {
         this.initListeners();
 
         await profiles.getById(this.profileId);
+        // This is kind of hacky, todo fixme
+        profilesData.profile = profiles.profile;
 
         this.event = await events.getByHierarchy(
             this.hierarchy.replaceAll("-", ":")

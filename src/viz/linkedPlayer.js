@@ -1,6 +1,6 @@
 import van from "vanjs-core";
 
-import { events } from "../data/events.js";
+import { events } from "../ui/events.js";
 import { eventBus } from "../eventbus.js";
 
 class LinkedPlayer {
@@ -9,7 +9,6 @@ class LinkedPlayer {
 
         eventBus.addEventListener("playback.play", () => {
             if (this.embedPlayer) {
-                console.log(this.embedPlayer);
                 this.embedPlayer.playVideo();
             }
         });

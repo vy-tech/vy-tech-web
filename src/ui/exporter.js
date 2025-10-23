@@ -1,5 +1,5 @@
 import { summarizer } from "../scoring/summarizer.js";
-import { annotations } from "../data/annotations.js";
+import { annotations } from "./annotations.js";
 import { timeUtil } from "../util/time.js";
 import { eventBus } from "../eventbus.js";
 import { Hierarchy } from "../util/hierarchy.js";

@@ -1,5 +1,5 @@
 import {
-    profiles,
+    profilesData,
     defaultScoringParams,
     defaultEmotionWeights,
 } from "../data/profiles.js";
@@ -29,7 +29,7 @@ class Population {
     }
 
     async seed() {
-        const allProfiles = await profiles.getAll();
+        const allProfiles = await profilesData.getAll();
         if (allProfiles.length === 0) {
             throw new Error("No profiles available to seed the population.");
         }

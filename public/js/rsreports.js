@@ -1,9 +1,9 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { e as eventBus } from './chunks/eventbus-BbLtLH1t.js';
-import { H as Hierarchy, S as Score, p as progress, a as activeBoxManager, b as annotations, t as timeUtil, g as geomUtil, s as scoring, c as profiles } from './chunks/annotations-BnlwNCIq.js';
-import { d as database } from './chunks/db-B1sKsMd1.js';
+import { e as eventBus } from './chunks/eventbus-wpslCFSv.js';
+import { H as Hierarchy, S as Score, p as progress, a as activeBoxManager, b as annotations, t as timeUtil, g as geomUtil, s as scoring, c as profiles, d as profilesData } from './chunks/annotations-DB10HR1w.js';
+import { d as database } from './chunks/db-NWrwYyCS.js';
 import { a as app } from './chunks/firebase-DTGT__LK.js';
-import { e as events } from './chunks/events-DYoMJ74J.js';
+import { a as eventsData, e as events } from './chunks/events-D-p9FEHU.js';
 
 // Initialize Firebase storage functions based on environment
 let storageFunctions;
@@ -50,10 +50,6 @@ class Summarizer {
         eventBus.addEventListener("ui.requestSummaryRebuild", async (e) => {
             const { hierarchy } = e.detail;
             await this.rebuild(hierarchy);
-        });
-
-        eventBus.addEventListener("ui.requestSummaryRebuildAll", async (e) => {
-            await this.rebuildAll();
         });
 
         eventBus.addEventListener("playback.cameraChanged", (e) => {
@@ -413,7 +409,7 @@ class Summarizer {
     }
 
     async saveEventSummary(hierarchy, summary) {
-        await events.updateEventSummary(hierarchy, summary);
+        await eventsData.updateEventSummary(hierarchy, summary);
     }
 
     async rebuildEventSummary(hierarchy, relevantCameras = 4) {
@@ -427,7 +423,7 @@ class Summarizer {
     }
 
     async ensureEventSummary(hierarchy, relevantCameras = 4) {
-        const event = await events.getByHierarchy(hierarchy);
+        const event = await eventsData.getByHierarchy(hierarchy);
         if (event) {
             if (!event.summary) {
                 console.log(`Event summary missing.  Rebuilding...`);
@@ -1506,7 +1502,6 @@ class LinkedPlayer {
 
         eventBus.addEventListener("playback.play", () => {
             if (this.embedPlayer) {
-                console.log(this.embedPlayer);
                 this.embedPlayer.playVideo();
             }
         });
@@ -7754,6 +7749,8 @@ class Reports {
         this.initListeners();
 
         await profiles.getById(this.profileId);
+        // This is kind of hacky, todo fixme
+        profilesData.profile = profiles.profile;
 
         this.event = await events.getByHierarchy(
             this.hierarchy.replaceAll("-", ":")

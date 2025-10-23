@@ -1,6 +1,6 @@
 import { Scenarios, ScenarioWorkers } from "./scenarios.js";
 import { Population } from "./population.js";
-import { profiles } from "../data/profiles.js";
+import { profilesData } from "../data/profiles.js";
 
 const winningProfileId = "00YJi1sNM5LhKAyTVJTE";
 
@@ -75,7 +75,7 @@ class Engine {
     }
 
     async saveWinningProfile() {
-        await profiles.update(winningProfileId, this.population.pool[0]);
+        await profilesData.update(winningProfileId, this.population.pool[0]);
         console.log("Winning profile updated.");
     }
 
