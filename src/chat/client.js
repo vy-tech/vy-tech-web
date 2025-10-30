@@ -1,22 +1,29 @@
 import { getAuth } from "firebase/auth";
+
+import { getApp } from "../data/firebase.js";
 import { toolBox } from "./tools/toolbox.js";
 import { WebHooksData } from "../data/webhooks.js";
 import { MessagesData } from "../data/messages.js";
 
 class ChatClient {
     constructor() {
-        this.auth = getAuth();
+        this.auth = null;
         this.conversation = null;
         this.messages = null;
         this.webhooks = new WebHooksData();
         this.webhooks.listen((event) => {
             this.handleWebhook(event);
         });
-        this.auth.onAuthStateChanged((user) => {
-            if (user) {
-                console.log("Restoring webhooks for user:", user.uid);
-                this.webhooks.restore(user.uid);
-            }
+
+        getApp().then((app) => {
+            console.log("Initializing ChatClient Auth...");
+            this.auth = getAuth(app);
+            this.auth.onAuthStateChanged((user) => {
+                if (user) {
+                    console.log("Restoring webhooks for user:", user.uid);
+                    this.webhooks.restore(user.uid);
+                }
+            });
         });
     }
 

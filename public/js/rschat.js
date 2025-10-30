@@ -1,12 +1,12 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { d as database } from './chunks/db-t5vCVEST.js';
+import { d as database } from './chunks/db-DCDBtw2W.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
-import { g as getAuth, a as auth } from './chunks/rsauth-PMQQodq7.js';
+import { g as getAuth, a as auth } from './chunks/rsauth-BJYcHkGV.js';
 import './chunks/index.esm2017-D8q59gHf.js';
-import { E as EventsData } from './chunks/events-aqqJ9UX6.js';
-import { H as Hierarchy, A as AnnotationsData, b as progress } from './chunks/annotations-BfpI0RZJ.js';
-import { S as Summarizer } from './chunks/summarizer-B2ry8O9O.js';
-import './chunks/firebase-DTGT__LK.js';
+import { g as getApp } from './chunks/firebase-jA0aqIBe.js';
+import { E as EventsData } from './chunks/events-jzMnhCXt.js';
+import { H as Hierarchy, A as AnnotationsData, b as progress } from './chunks/annotations-NTyH573R.js';
+import { S as Summarizer } from './chunks/summarizer-C3Guw_xd.js';
 
 /**
  * marked v16.4.1 - a markdown parser
@@ -119,9 +119,9 @@ class MessagesData {
         }
     }
 
-    listen(callback) {
+    async listen(callback) {
         this.callback = callback;
-        this.listener = database.listen(
+        this.listener = await database.listen(
             "messages",
             (messages) => this.receive(messages),
             {
@@ -687,16 +687,19 @@ class WebHooksData {
         }
     }
 
-    listen(callback) {
-        this.cancelListener = database.listen("webhooks", async (webhooks) => {
-            for (const webhook of webhooks) {
-                if (this.pending[webhook.key] && webhook.payload) {
-                    delete this.pending[webhook.key];
-                    await database.delete("webhooks", webhook.id);
-                    callback(webhook.payload);
+    async listen(callback) {
+        this.cancelListener = await database.listen(
+            "webhooks",
+            async (webhooks) => {
+                for (const webhook of webhooks) {
+                    if (this.pending[webhook.key] && webhook.payload) {
+                        delete this.pending[webhook.key];
+                        await database.delete("webhooks", webhook.id);
+                        callback(webhook.payload);
+                    }
                 }
             }
-        });
+        );
     }
 
     stopListening() {
@@ -734,18 +737,23 @@ class WebHooksData {
 
 class ChatClient {
     constructor() {
-        this.auth = getAuth();
+        this.auth = null;
         this.conversation = null;
         this.messages = null;
         this.webhooks = new WebHooksData();
         this.webhooks.listen((event) => {
             this.handleWebhook(event);
         });
-        this.auth.onAuthStateChanged((user) => {
-            if (user) {
-                console.log("Restoring webhooks for user:", user.uid);
-                this.webhooks.restore(user.uid);
-            }
+
+        getApp().then((app) => {
+            console.log("Initializing ChatClient Auth...");
+            this.auth = getAuth(app);
+            this.auth.onAuthStateChanged((user) => {
+                if (user) {
+                    console.log("Restoring webhooks for user:", user.uid);
+                    this.webhooks.restore(user.uid);
+                }
+            });
         });
     }
 

@@ -8,13 +8,13 @@ async function getApp() {
         app = global._vy_firebase_app;
     } else {
         console.log("Initializing Firebase Client App...");
-        const { initializeApp } = await import("firebase/app");
-        const { config } = await import("../firebase-config.js");
+        const { initializeApp } = await import('./index.esm-0XAacddd.js');
+        const { config } = await import('./firebase-config-DABbTo-C.js');
         app = initializeApp(config);
-        console.log(app);
     }
 
     return app;
 }
 
-export { getApp };
+export { getApp as g };
+//# sourceMappingURL=firebase-omMfH1CX.js.map

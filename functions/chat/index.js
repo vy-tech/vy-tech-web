@@ -39,7 +39,7 @@ const app$1 = initializeApp({
 const db = getFirestore$1(app$1);
 const storage = getStorage(app$1);
 
-let firebaseFunctions$1 = {
+let firebaseFunctions = {
         getFirestore: () => db,
         doc: (database, ...args) => db.doc(args.join("/")),
         collection: (database, collectionPath) => db.collection(collectionPath),
@@ -93,35 +93,29 @@ let storageFunctions = {
 
 global._vy_firebase_admin_sdk = true;
 global._vy_firebase_app = app$1;
-global._vy_firebase_functions = firebaseFunctions$1;
+global._vy_firebase_functions = firebaseFunctions;
 global._vy_storage_functions = storageFunctions;
 
 let app;
 
-if (typeof global !== "undefined" && global._vy_firebase_admin_sdk) {
-    console.log("Using Firebase Admin SDK...");
-    app = global._vy_firebase_app;
-} else {
-    console.log("Initializing Firebase Client App...");
-    const { initializeApp } = await import('firebase/app');
-    const { config } = await import('../../firebase-config.js');
-    app = initializeApp(config);
+async function getApp() {
+    if (app) return app;
+
+    if (typeof global !== "undefined" && global._vy_firebase_admin_sdk) {
+        console.log("Using Firebase Admin SDK...");
+        app = global._vy_firebase_app;
+    } else {
+        console.log("Initializing Firebase Client App...");
+        const { initializeApp } = await import('firebase/app');
+        const { config } = await import('../../firebase-config.js');
+        app = initializeApp(config);
+        console.log(app);
+    }
+
+    return app;
 }
 
-// Initialize Firebase functions based on environment
-let firebaseFunctions;
-
-if (typeof global !== "undefined" && global._vy_firebase_admin_sdk) {
-    console.log("Importing Admin Firestore SDK...");
-    firebaseFunctions = global._vy_firebase_functions;
-} else {
-    console.log("Importing Client Firestore SDK...");
-    const firebaseModules = await import('firebase/firestore');
-    firebaseFunctions = firebaseModules;
-}
-
-const {
-    getFirestore,
+let getFirestore,
     doc,
     collection,
     setDoc,
@@ -134,12 +128,56 @@ const {
     where,
     onSnapshot,
     serverTimestamp,
-    runTransaction,
-} = firebaseFunctions;
+    runTransaction;
+
+async function initializeFirestore() {
+    // Initialize Firebase functions based on environment
+    let firebaseFunctions;
+
+    if (typeof global !== "undefined" && global._vy_firebase_admin_sdk) {
+        console.log("Importing Admin Firestore SDK...");
+        firebaseFunctions = global._vy_firebase_functions;
+    } else {
+        console.log("Importing Client Firestore SDK...");
+        const firebaseModules = await import('firebase/firestore');
+        firebaseFunctions = firebaseModules;
+    }
+
+    getFirestore = firebaseFunctions.getFirestore;
+    doc = firebaseFunctions.doc;
+    collection = firebaseFunctions.collection;
+    setDoc = firebaseFunctions.setDoc;
+    getDoc = firebaseFunctions.getDoc;
+    getDocs = firebaseFunctions.getDocs;
+    deleteDoc = firebaseFunctions.deleteDoc;
+    updateDoc = firebaseFunctions.updateDoc;
+    query = firebaseFunctions.query;
+    orderBy = firebaseFunctions.orderBy;
+    where = firebaseFunctions.where;
+    onSnapshot = firebaseFunctions.onSnapshot;
+    serverTimestamp = firebaseFunctions.serverTimestamp;
+    runTransaction = firebaseFunctions.runTransaction;
+}
+
+async function ensureInitialized() {
+    if (!getFirestore) {
+        await initializeFirestore();
+    }
+}
 
 class Database {
     constructor() {
-        this.db = getFirestore(app);
+        this.db = null;
+    }
+
+    async ensureFirestore() {
+        if (!this.db) {
+            const app = await getApp();
+            await ensureInitialized();
+            this.db = getFirestore(app);
+        }
+
+        return this.db;
     }
 
     pushid(now = null) {
@@ -170,6 +208,8 @@ class Database {
     }
 
     async set(collectionName, docData) {
+        await this.ensureFirestore();
+
         if (!docData.id) {
             docData.id = this.pushid();
             docData.created = serverTimestamp();
@@ -183,6 +223,8 @@ class Database {
     }
 
     async get(collectionName, docId) {
+        await this.ensureFirestore();
+
         const docRef = doc(this.db, collectionName, docId);
         const docSnap = await getDoc(docRef);
 
@@ -200,6 +242,8 @@ class Database {
     }
 
     async query(collectionName, filters = null, order = null) {
+        await this.ensureFirestore();
+
         let q = collection(this.db, collectionName);
 
         if (filters) {
@@ -241,12 +285,16 @@ class Database {
     }
 
     async delete(collectionName, docId) {
+        await this.ensureFirestore();
+
         const docRef = doc(this.db, collectionName, docId);
         await deleteDoc(docRef);
         return true;
     }
 
     async deleteAll(collectionName, filters = null) {
+        await this.ensureFirestore();
+
         let rows = await this.query(collectionName, filters);
         if (!rows || rows.length === 0) return true;
 
@@ -257,6 +305,8 @@ class Database {
     }
 
     async update(collectionName, docId, updates) {
+        await this.ensureFirestore();
+
         const docRef = doc(this.db, collectionName, docId);
         updates.updated = serverTimestamp();
         await updateDoc(docRef, updates);
@@ -271,6 +321,8 @@ class Database {
         newValue,
         updates = {}
     ) {
+        await this.ensureFirestore();
+
         const docRef = doc(this.db, collectionName, docId);
 
         try {
@@ -303,7 +355,9 @@ class Database {
         }
     }
 
-    listen(collectionName, callback, filters = null) {
+    async listen(collectionName, callback, filters = null) {
+        await this.ensureFirestore();
+
         let q = collection(this.db, collectionName);
 
         if (filters) {
@@ -341,7 +395,8 @@ class Database {
         });
     }
 
-    watch(collectionName, docId, callback) {
+    async watch(collectionName, docId, callback) {
+        await this.ensureFirestore();
         const docRef = doc(this.db, collectionName, docId);
 
         return onSnapshot(docRef, (docSnap) => {
@@ -382,16 +437,19 @@ class WebHooksData {
         }
     }
 
-    listen(callback) {
-        this.cancelListener = database.listen("webhooks", async (webhooks) => {
-            for (const webhook of webhooks) {
-                if (this.pending[webhook.key] && webhook.payload) {
-                    delete this.pending[webhook.key];
-                    await database.delete("webhooks", webhook.id);
-                    callback(webhook.payload);
+    async listen(callback) {
+        this.cancelListener = await database.listen(
+            "webhooks",
+            async (webhooks) => {
+                for (const webhook of webhooks) {
+                    if (this.pending[webhook.key] && webhook.payload) {
+                        delete this.pending[webhook.key];
+                        await database.delete("webhooks", webhook.id);
+                        callback(webhook.payload);
+                    }
                 }
             }
-        });
+        );
     }
 
     stopListening() {

@@ -1,4 +1,4 @@
-import { getApp } from "./firebase.js";
+import { g as getApp } from './firebase-jA0aqIBe.js';
 
 let getFirestore,
     doc,
@@ -24,7 +24,7 @@ async function initializeFirestore() {
         firebaseFunctions = global._vy_firebase_functions;
     } else {
         console.log("Importing Client Firestore SDK...");
-        const firebaseModules = await import("firebase/firestore");
+        const firebaseModules = await import('./index.esm-yYq9uDGm.js');
         firebaseFunctions = firebaseModules;
     }
 
@@ -300,15 +300,11 @@ class Database {
 
 let database = new Database();
 
-function changeDatabase(newDb) {
-    database = newDb;
-}
-
 // let firestore = getFirestore(app);
 
 if (typeof window !== "undefined") {
     window._vy_database = database;
 }
 
-export default database;
-export { database, Database, changeDatabase };
+export { database as d };
+//# sourceMappingURL=db-DCDBtw2W.js.map

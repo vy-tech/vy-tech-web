@@ -16,16 +16,19 @@ class WebHooksData {
         }
     }
 
-    listen(callback) {
-        this.cancelListener = database.listen("webhooks", async (webhooks) => {
-            for (const webhook of webhooks) {
-                if (this.pending[webhook.key] && webhook.payload) {
-                    delete this.pending[webhook.key];
-                    await database.delete("webhooks", webhook.id);
-                    callback(webhook.payload);
+    async listen(callback) {
+        this.cancelListener = await database.listen(
+            "webhooks",
+            async (webhooks) => {
+                for (const webhook of webhooks) {
+                    if (this.pending[webhook.key] && webhook.payload) {
+                        delete this.pending[webhook.key];
+                        await database.delete("webhooks", webhook.id);
+                        callback(webhook.payload);
+                    }
                 }
             }
-        });
+        );
     }
 
     stopListening() {

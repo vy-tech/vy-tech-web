@@ -39,9 +39,9 @@ class MessagesData {
         }
     }
 
-    listen(callback) {
+    async listen(callback) {
         this.callback = callback;
-        this.listener = database.listen(
+        this.listener = await database.listen(
             "messages",
             (messages) => this.receive(messages),
             {
