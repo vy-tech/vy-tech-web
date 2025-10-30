@@ -3,6 +3,9 @@ import { getFirestore as getFirestore$1, Timestamp } from 'firebase-admin/firest
 import { getStorage } from 'firebase-admin/storage';
 import express from 'express';
 import { onRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
+import { getAuth } from 'firebase-admin/auth';
+import OpenAI from 'openai';
 
 var type = "service_account";
 var project_id = "roarscore-1ddf5";
@@ -217,7 +220,11 @@ class Database {
             }
 
             if (order) {
-                q = query(q, orderBy(order));
+                if (typeof order === "object") {
+                    q = query(q, orderBy(order.key, order.dir));
+                } else {
+                    q = query(q, orderBy(order));
+                }
             }
         }
 
@@ -359,17 +366,252 @@ if (typeof window !== "undefined") {
     window._vy_database = database;
 }
 
+class WebHooksData {
+    constructor() {
+        this.pending = {};
+        this.cancelListener = null;
+    }
+
+    async restore(uid) {
+        const rows = await database.query("webhooks", { uid: uid });
+        if (!rows || rows.length === 0) {
+            return;
+        }
+        for (const row of rows) {
+            this.pending[row.key] = true;
+        }
+    }
+
+    listen(callback) {
+        this.cancelListener = database.listen("webhooks", async (webhooks) => {
+            for (const webhook of webhooks) {
+                if (this.pending[webhook.key] && webhook.payload) {
+                    delete this.pending[webhook.key];
+                    await database.delete("webhooks", webhook.id);
+                    callback(webhook.payload);
+                }
+            }
+        });
+    }
+
+    stopListening() {
+        if (this.cancelListener) {
+            this.cancelListener();
+            this.cancelListener = null;
+        }
+    }
+
+    async create(key, uid) {
+        console.log(`Creating webhook with key: ${key}`);
+        const result = await database.set("webhooks", {
+            key: key,
+            uid: uid,
+        });
+
+        this.pending[key] = true;
+
+        return result;
+    }
+
+    async resolve(key, payload) {
+        console.log(`Resolving webhook with key: ${key}`);
+        const webhooks = await database.query("webhooks", { key: key });
+        if (webhooks.length === 0) {
+            throw new Error(`No webhook found for key: ${key}`);
+        }
+
+        const webhook = webhooks[0];
+        return await database.update("webhooks", webhook.id, {
+            payload: payload,
+        });
+    }
+}
+
+defineSecret("OPENAI_API_KEY");
+defineSecret("OPENAI_WEBHOOK_SECRET");
+
+let openai;
+const initializeOpenAI = () => {
+    if (!openai) {
+        openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+            webhookSecret: process.env.OPENAI_WEBHOOK_SECRET,
+        });
+    }
+    return openai;
+};
+
+async function isAuthenticated(req) {
+    try {
+        // Get the Authorization header
+        const authHeader = req.headers.authorization;
+
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            return {
+                authenticated: false,
+                error: "No valid authorization header",
+            };
+        }
+
+        // Extract the ID token
+        const idToken = authHeader.split("Bearer ")[1];
+
+        // Verify the ID token
+        const decodedToken = await getAuth().verifyIdToken(idToken);
+
+        return {
+            authenticated: true,
+            uid: decodedToken.uid,
+            user: decodedToken,
+        };
+    } catch (error) {
+        console.error("Authentication error:", error);
+        return {
+            authenticated: false,
+            error: "Invalid token",
+        };
+    }
+}
+
+// Authentication middleware
+const requireAuth = async (req, res, next) => {
+    const authResult = await isAuthenticated(req);
+
+    if (!authResult.authenticated) {
+        console.warn("Unauthorized access attempt");
+        return res.status(401).json({
+            error: "Unauthorized",
+            message: authResult.error,
+        });
+    }
+
+    // Add user info to request object for use in route handlers
+    req.user = authResult.user;
+    req.uid = authResult.uid;
+
+    next();
+};
+
 // Express app for development
 const chatApp = express();
 
-chatApp.post("/completion", async (req, res) => {
-    // Your LLM logic here
-    res.json({ message: "Chat response 2" });
+chatApp.use(express.json());
+
+// NOTE: Webhook endpoint is setup to receive raw body inputs upstream
+// Define webhook route BEFORE authentication middleware
+chatApp.post("/webhook", async (req, res) => {
+    try {
+        const client = initializeOpenAI();
+
+        // Ensure we have a buffer and convert to string
+        const rawBody = Buffer.isBuffer(req.body)
+            ? req.body.toString()
+            : req.body;
+
+        // Verify and unwrap the webhook event
+        const event = await client.webhooks.unwrap(rawBody, req.headers);
+        console.log(event);
+
+        console.log(`<<< Webhook event: ${event.type}`);
+
+        // Acknowledge receipt of the webhook
+        res.status(200).send("Webhook received");
+
+        // Handle the event asynchronously
+        setImmediate(async () => await resolveWebhook(event));
+    } catch (error) {
+        console.error("Webhook processing error:", error);
+        res.status(400).send("Webhook processing failed");
+    }
 });
 
-chatApp.get("/models", async (req, res) => {
-    // List available models
-    res.json({ models: ["gpt-5"] });
+async function resolveWebhook(event) {
+    const key = event.data.id;
+    const webhooks = new WebHooksData();
+    try {
+        return await webhooks.resolve(key, event);
+    } catch (error) {
+        console.error(`Error resolving webhook with key ${key}:`, error);
+    }
+}
+
+// Apply authentication middleware to all other routes
+chatApp.use(requireAuth);
+
+chatApp.post("/start", async (req, res) => {
+    // req.user and req.uid are now available
+
+    const client = initializeOpenAI();
+
+    const conversation = await client.conversations.create();
+
+    res.json(conversation);
+});
+
+chatApp.post("/finish", async (req, res) => {
+    const client = initializeOpenAI();
+
+    const conversationId = req.body.conversation;
+    await client.conversations.delete(conversationId);
+
+    res.json({ success: true });
+});
+
+chatApp.post("/response", async (req, res) => {
+    const client = initializeOpenAI();
+
+    const type = req.body.type || "message";
+    const content = req.body.content;
+    const conversation = req.body.conversation;
+
+    let msgs = [];
+
+    if (type === "message") {
+        msgs.push({ role: "user", content: content });
+    } else if (type === "tool_response") {
+        msgs = req.body.output.map((output) => ({
+            type: "function_call_output",
+            output: output.output,
+            call_id: output.call_id,
+        }));
+    }
+
+    try {
+        const args = {
+            model: "gpt-5",
+            conversation: conversation,
+            prompt: {
+                id: "pmpt_68ff94173ef4819686db667303d9b8eb0be186025f5a95ae",
+                version: "2",
+            },
+            input: msgs,
+            background: true,
+        };
+
+        console.log("Calling Response API with", args);
+        const response = await client.responses.create(args);
+        console.log("Response API returned", response);
+
+        res.json(response);
+    } catch (error) {
+        console.error("Error creating response:", error);
+        res.status(400).json({ error: "Failed to create response" });
+    }
+});
+
+chatApp.get("/response/:responseId", async (req, res) => {
+    const client = initializeOpenAI();
+    const responseId = req.params.responseId;
+
+    try {
+        console.log(`Retrieving response ${responseId} from Response API`);
+        const response = await client.responses.retrieve(responseId);
+        console.log("Retrieved response:", response);
+        res.json(response);
+    } catch (error) {
+        console.error("Error retrieving response:", error);
+        res.status(400).json({ error: "Failed to retrieve response" });
+    }
 });
 
 // Export Cloud Function for production

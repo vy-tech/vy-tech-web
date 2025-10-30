@@ -3,7 +3,7 @@ import { Modal } from "vanjs-ui";
 import { database } from "../data/db.js";
 import { eventBus } from "../eventbus.js";
 import { timeUtil } from "../util/time.js";
-import { progress } from "../viz/progress.js";
+import { progress } from "./progress.js";
 import { Hierarchy } from "../util/hierarchy.js";
 
 import { AnnotationsData } from "../data/annotations.js";

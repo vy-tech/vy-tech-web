@@ -1,5 +1,5 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { d as database } from './chunks/db-NWrwYyCS.js';
+import { d as database } from './chunks/db-t5vCVEST.js';
 import './chunks/firebase-DTGT__LK.js';
 
 class Admin {

@@ -1,8 +1,10 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { S as Score, c as profiles, b as annotations, H as Hierarchy } from './chunks/annotations-DB10HR1w.js';
-import { e as events } from './chunks/events-D-p9FEHU.js';
-import { d as database } from './chunks/db-NWrwYyCS.js';
-import { e as eventBus } from './chunks/eventbus-wpslCFSv.js';
+import { p as profiles, a as annotations } from './chunks/annotations-lyLHiV6F.js';
+import { S as Score, H as Hierarchy } from './chunks/annotations-BfpI0RZJ.js';
+import { e as events } from './chunks/events-v2wZyvVT.js';
+import { d as database } from './chunks/db-t5vCVEST.js';
+import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
+import './chunks/events-aqqJ9UX6.js';
 import './chunks/firebase-DTGT__LK.js';
 
 /*!

@@ -1,6 +1,8 @@
 import van from "vanjs-core";
 import { app } from "./data/firebase.js";
 
+import { eventBus } from "./eventbus.js";
+
 import {
     getAuth,
     signInWithEmailAndPassword,
@@ -33,6 +35,9 @@ class Auth {
         this.hideBusyIndicator();
         if (user) {
             this.user = user;
+
+            eventBus.fire("auth.ready", { user: this.user });
+
             if (this.returnUrl) {
                 // Redirect to the return URL if it exists
                 window.location.href = this.returnUrl;

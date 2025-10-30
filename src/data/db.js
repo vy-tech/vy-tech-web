@@ -112,7 +112,11 @@ class Database {
             }
 
             if (order) {
-                q = query(q, orderBy(order));
+                if (typeof order === "object") {
+                    q = query(q, orderBy(order.key, order.dir));
+                } else {
+                    q = query(q, orderBy(order));
+                }
             }
         }
 

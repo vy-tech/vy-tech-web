@@ -1,4 +1,5 @@
 import { database } from "./db.js";
+import { timeUtil } from "../util/time.js";
 
 class EventsData {
     constructor() {
@@ -44,6 +45,15 @@ class EventsData {
         event.summary = summary;
 
         await database.update("events", event.id, event);
+    }
+
+    async create(event, timeZone="America/Los_Angeles") {
+        event.begin = timeUtil.asUTC(event.begin, timeZone);
+        event.end = timeUtil.asUTC(event.end, timeZone);
+
+        await database.set("events", event);
+        
+        return event;
     }
 }
 

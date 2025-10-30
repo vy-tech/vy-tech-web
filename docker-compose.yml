@@ -1,25 +1,27 @@
 
 services:
-    vy-tech-web:
-        image: vy-tech-web:latest
-        container_name: vy-tech-web
-        hostname: vy-tech-web
-        build:
-          context: .
-          dockerfile: Dockerfile
-        ports:
-          - "5007:80"
-        volumes:
-          - ./public:/app/public
-          - ./functions:/app/functions
-    vy-tech-web-tunnel:
-        image: cloudflare/cloudflared:latest
-        container_name: vy-tech-web-tunnel
-        hostname: vy-tech-web-tunnel
-        command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-        environment:
-          - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-          - TUNNEL_HOSTNAME=dev.roarscore.ai
-          - TUNNEL_PORT=5007
-        depends_on:
-          - vy-tech-web
+  vy-tech-web:
+    image: vy-tech-web:latest
+    container_name: vy-tech-web
+    hostname: vy-tech-web
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5007:80"
+    volumes:
+      - ./public:/app/public
+      - ./functions:/app/functions
+    env_file:
+      - .env
+  vy-tech-web-tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: vy-tech-web-tunnel
+    hostname: vy-tech-web-tunnel
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+      - TUNNEL_HOSTNAME=dev.roarscore.ai
+      - TUNNEL_PORT=5007
+    depends_on:
+      - vy-tech-web

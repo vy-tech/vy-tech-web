@@ -23,6 +23,7 @@ WORKDIR /app
 # Copy files that we need (compose replaces with volume)
 COPY public ./public
 COPY server.js .
+RUN npm install express
 
 # Install nodemon for hot reloading of development
 RUN npm install -g nodemon

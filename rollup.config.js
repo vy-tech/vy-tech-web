@@ -64,8 +64,14 @@ const functionsConfigs = Object.entries(functionEntries).map(
             // External Firebase Functions and Admin SDK
             if (id.startsWith("firebase-functions/")) return true;
             if (id.startsWith("firebase-admin/")) return true;
+
             // External common Node modules
             if (id === "express" || id.startsWith("express/")) return true;
+
+            // External OpenAI SDK
+            if (id === "openai" || id.startsWith("openai/")) return true;
+
+            // External shims and configs
             if (id === "firebase/app") return true;
             if (id === "../firebase-config.js") return true;
             if (id === "firebase/firestore") return true;

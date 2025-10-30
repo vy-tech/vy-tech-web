@@ -1,5 +1,5 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { e as eventBus } from './chunks/eventbus-wpslCFSv.js';
+import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
 import { r as rsv } from './chunks/rsvan-C-KzMu00.js';
 
 class Form {

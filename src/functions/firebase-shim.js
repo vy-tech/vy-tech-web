@@ -1,4 +1,5 @@
 import { initializeApp, cert } from "firebase-admin/app";
+// prettier-ignore
 import credential from "../../conf/firebase-secrets.json" with { type: "json" };
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";

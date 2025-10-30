@@ -1,6 +1,6 @@
 import { database } from "../data/db.js";
 import { storage } from "../data/storage.js";
-import { progress } from "../viz/progress.js";
+import { progress } from "../ui/progress.js";
 import { eventBus } from "../eventbus.js";
 import { Score } from "./scoring.js";
 import { activeBoxManager } from "./activeBoxManager.js";
