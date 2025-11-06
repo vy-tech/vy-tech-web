@@ -1,6 +1,7 @@
 import { van, rsv } from "./rsvan.js";
 import { eventBus } from "./eventbus.js";
-import { Form, List } from "./data/db.js";
+import { Form } from "./ui/form.js";
+import { List } from "./ui/list.js";
 
 class Locations {
     constructor() {

@@ -1,8 +1,14 @@
 class Hierarchy {
     constructor(fromString = null) {
-        this.parts = fromString ? fromString.split(/[\-\:]/) : [];
-        this.parts[1] = parseInt(this.parts[1]);
-        this.parts[2] = parseInt(this.parts[2] || 1);
+        if (fromString instanceof Hierarchy) {
+            this.parts = [...fromString.parts];
+        } else if (fromString) {
+            this.parts = fromString.split(/[\-\:]/);
+            this.parts[1] = parseInt(this.parts[1]);
+            this.parts[2] = parseInt(this.parts[2] || 1);
+        } else {
+            this.parts = [];
+        }
     }
 
     get location() {

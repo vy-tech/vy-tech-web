@@ -6,6 +6,7 @@ class Nav {
         { name: "locations", path: "/locations", icon: "map-marker" },
         { name: "schedule", path: "/schedule", icon: "calendar" },
         { name: "reports", path: "/reports", icon: "chart-bar" },
+        { name: "chat", path: "/chat", icon: "comments" },
         { name: "settings", path: "/settings", icon: "cog" },
         { name: "profile", path: "/profile", icon: "user-circle" },
     ];

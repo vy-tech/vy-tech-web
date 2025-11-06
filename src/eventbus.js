@@ -6,6 +6,10 @@ class EventBus extends EventTarget {
     on(name, callback) {
         this.addEventListener(name, callback);
     }
+
+    once(name, callback) {
+        this.addEventListener(name, callback, { once: true });
+    }
 }
 
 const eventBus = new EventBus();

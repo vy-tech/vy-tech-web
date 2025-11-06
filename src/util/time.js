@@ -137,6 +137,34 @@ class Time {
 
         return seconds;
     }
+
+    /**
+     * Convert a JS Date to UTC, interpreting it as being in a specific timezone.
+     *
+     * @param {Date} dateObject - JS Date whose local time should be interpreted in the given zone
+     * @param {string} timeZone - IANA timezone name (e.g. "America/New_York")
+     * @returns {DateTime} Luxon DateTime object in UTC
+     */
+    asUTC(dateObject, timeZone="America/Los_Angeles") {
+        // Step 1: interpret the date’s *wall clock time* as if it were in `timeZone`
+        const zoned = DateTime.fromObject(
+            {
+            year: dateObject.getFullYear(),
+            month: dateObject.getMonth() + 1,
+            day: dateObject.getDate(),
+            hour: dateObject.getHours(),
+            minute: dateObject.getMinutes(),
+            second: dateObject.getSeconds(),
+            millisecond: dateObject.getMilliseconds()
+            },
+            { zone: timeZone }
+        );
+
+        // Step 2: convert that moment to UTC
+        const result = zoned.toUTC();
+
+        return result.toJSDate();
+    }
 }
 
 const timeUtil = new Time();

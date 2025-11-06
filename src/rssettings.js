@@ -13,11 +13,11 @@ import {
 import zoomPlugin from "chartjs-plugin-zoom";
 import annotationPlugin from "chartjs-plugin-annotation";
 
-import { profiles } from "./data/profiles.js";
+import { profiles } from "./ui/profiles.js";
 import { Score } from "./scoring/scoring.js";
-import { annotations } from "./data/annotations.js";
+import { annotations } from "./ui/annotations.js";
 import { Hierarchy } from "./util/hierarchy.js";
-import { events } from "./data/events.js";
+import { events } from "./ui/events.js";
 import { database } from "./data/db.js";
 import { Fitness } from "./scoring/fitness.js";
 

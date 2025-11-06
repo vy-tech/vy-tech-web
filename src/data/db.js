@@ -1,21 +1,6 @@
-import { van, rsv } from "../rsvan.js";
-import { app } from "./firebase.js";
-import { eventBus } from "../eventbus.js";
+import { getApp } from "./firebase.js";
 
-// Initialize Firebase functions based on environment
-let firebaseFunctions;
-
-if (typeof global !== "undefined" && global._vy_firebase_admin_sdk) {
-    console.log("Importing Admin Firestore SDK...");
-    firebaseFunctions = global._vy_firebase_functions;
-} else {
-    console.log("Importing Client Firestore SDK...");
-    const firebaseModules = await import("firebase/firestore");
-    firebaseFunctions = firebaseModules;
-}
-
-const {
-    getFirestore,
+let getFirestore,
     doc,
     collection,
     setDoc,
@@ -28,12 +13,56 @@ const {
     where,
     onSnapshot,
     serverTimestamp,
-    runTransaction,
-} = firebaseFunctions;
+    runTransaction;
+
+async function initializeFirestore() {
+    // Initialize Firebase functions based on environment
+    let firebaseFunctions;
+
+    if (typeof global !== "undefined" && global._vy_firebase_admin_sdk) {
+        console.log("Importing Admin Firestore SDK...");
+        firebaseFunctions = global._vy_firebase_functions;
+    } else {
+        console.log("Importing Client Firestore SDK...");
+        const firebaseModules = await import("firebase/firestore");
+        firebaseFunctions = firebaseModules;
+    }
+
+    getFirestore = firebaseFunctions.getFirestore;
+    doc = firebaseFunctions.doc;
+    collection = firebaseFunctions.collection;
+    setDoc = firebaseFunctions.setDoc;
+    getDoc = firebaseFunctions.getDoc;
+    getDocs = firebaseFunctions.getDocs;
+    deleteDoc = firebaseFunctions.deleteDoc;
+    updateDoc = firebaseFunctions.updateDoc;
+    query = firebaseFunctions.query;
+    orderBy = firebaseFunctions.orderBy;
+    where = firebaseFunctions.where;
+    onSnapshot = firebaseFunctions.onSnapshot;
+    serverTimestamp = firebaseFunctions.serverTimestamp;
+    runTransaction = firebaseFunctions.runTransaction;
+}
+
+async function ensureInitialized() {
+    if (!getFirestore) {
+        await initializeFirestore();
+    }
+}
 
 class Database {
     constructor() {
-        this.db = getFirestore(app);
+        this.db = null;
+    }
+
+    async ensureFirestore() {
+        if (!this.db) {
+            const app = await getApp();
+            await ensureInitialized();
+            this.db = getFirestore(app);
+        }
+
+        return this.db;
     }
 
     pushid(now = null) {
@@ -64,6 +93,8 @@ class Database {
     }
 
     async set(collectionName, docData) {
+        await this.ensureFirestore();
+
         if (!docData.id) {
             docData.id = this.pushid();
             docData.created = serverTimestamp();
@@ -77,6 +108,8 @@ class Database {
     }
 
     async get(collectionName, docId) {
+        await this.ensureFirestore();
+
         const docRef = doc(this.db, collectionName, docId);
         const docSnap = await getDoc(docRef);
 
@@ -94,6 +127,8 @@ class Database {
     }
 
     async query(collectionName, filters = null, order = null) {
+        await this.ensureFirestore();
+
         let q = collection(this.db, collectionName);
 
         if (filters) {
@@ -114,7 +149,11 @@ class Database {
             }
 
             if (order) {
-                q = query(q, orderBy(order));
+                if (typeof order === "object") {
+                    q = query(q, orderBy(order.key, order.dir));
+                } else {
+                    q = query(q, orderBy(order));
+                }
             }
         }
 
@@ -131,12 +170,16 @@ class Database {
     }
 
     async delete(collectionName, docId) {
+        await this.ensureFirestore();
+
         const docRef = doc(this.db, collectionName, docId);
         await deleteDoc(docRef);
         return true;
     }
 
     async deleteAll(collectionName, filters = null) {
+        await this.ensureFirestore();
+
         let rows = await this.query(collectionName, filters);
         if (!rows || rows.length === 0) return true;
 
@@ -147,6 +190,8 @@ class Database {
     }
 
     async update(collectionName, docId, updates) {
+        await this.ensureFirestore();
+
         const docRef = doc(this.db, collectionName, docId);
         updates.updated = serverTimestamp();
         await updateDoc(docRef, updates);
@@ -161,6 +206,8 @@ class Database {
         newValue,
         updates = {}
     ) {
+        await this.ensureFirestore();
+
         const docRef = doc(this.db, collectionName, docId);
 
         try {
@@ -193,7 +240,9 @@ class Database {
         }
     }
 
-    listen(collectionName, callback, filters = null) {
+    async listen(collectionName, callback, filters = null) {
+        await this.ensureFirestore();
+
         let q = collection(this.db, collectionName);
 
         if (filters) {
@@ -231,7 +280,8 @@ class Database {
         });
     }
 
-    watch(collectionName, docId, callback) {
+    async watch(collectionName, docId, callback) {
+        await this.ensureFirestore();
         const docRef = doc(this.db, collectionName, docId);
 
         return onSnapshot(docRef, (docSnap) => {
@@ -248,188 +298,6 @@ class Database {
     }
 }
 
-class Form {
-    constructor(collection, fields) {
-        this.collection = collection;
-        this.fields = fields;
-        this.db = new Database();
-        eventBus.addEventListener(`${this.collection}FormSubmitClick`, (e) => {
-            this.handleSubmit();
-        });
-    }
-
-    async handleSubmit() {
-        const formData = Object.fromEntries(
-            Array.from(this.fields).map((field) => {
-                const fieldName = field.name;
-                const fieldId = field.id || `${fieldName}Input`;
-                const fieldValue = document.getElementById(fieldId).value;
-                return [fieldName, fieldValue];
-            })
-        );
-
-        console.log("Form data:", formData);
-        try {
-            const docId = await this.db.set(this.collection, formData);
-            console.log("Document written with ID: ", docId);
-        } catch (error) {
-            console.error("Error adding document: ", error);
-        }
-    }
-
-    getElementsForField(field) {
-        const { label, input, div } = van.tags;
-
-        const fieldName = field.name;
-        const fieldId = field.id || `${fieldName}Input`;
-        const fieldDisplayName = field.displayName || fieldName;
-        const isRequired = field.required || false;
-        const fieldType = field.type || "text";
-        const containerClass = field.containerClass || "w-full";
-
-        return div(
-            { class: containerClass },
-            label(
-                {
-                    for: fieldId,
-                    class: "block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2",
-                },
-                fieldDisplayName
-            ),
-            input({
-                id: fieldId,
-                name: fieldName,
-                type: fieldType,
-                placeholder: fieldDisplayName,
-                required: isRequired,
-                class: "shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 leading-tight focus:outline-none focus:shadow-outline",
-            })
-        );
-    }
-
-    addElements(parentElement) {
-        const { div } = van.tags;
-        const { button } = rsv.tags;
-
-        parentElement =
-            parentElement ||
-            document.getElementById("form-container") ||
-            document.body;
-
-        var rows = [];
-
-        for (var i = 0; i < this.fields.length; i++) {
-            const field = this.fields[i];
-            const fieldRow = field.row || i;
-            const fieldElements = this.getElementsForField(field);
-
-            if (!rows[fieldRow])
-                rows[fieldRow] = div({ class: "mb-4 flex space-x-4" });
-
-            van.add(rows[fieldRow], fieldElements);
-        }
-
-        rows.push(
-            div(
-                { class: "flex justify-center items-center mt-8" },
-                button({ name: `${this.collection}FormSubmit` }, "Submit")
-            )
-        );
-
-        van.add(
-            parentElement,
-            div(
-                { class: "flex justify-center items-center mt-8" },
-                div(
-                    {
-                        class: "bg-white dark:bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4 w-1/3",
-                    },
-                    rows
-                )
-            )
-        );
-    }
-}
-
-class List {
-    constructor(collection, fields) {
-        this.collection = collection;
-        this.fields = fields;
-        this.db = new Database();
-    }
-
-    getElementsForField(field) {
-        const { label, span, div } = van.tags;
-
-        const fieldName = field.name;
-        const fieldId = field.id || `${fieldName}Text`;
-        const fieldDisplayName = field.displayName || fieldName;
-        const containerClass = field.containerClass || "w-full";
-
-        return div(
-            { class: containerClass },
-            label(
-                {
-                    for: fieldId,
-                    class: "block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2",
-                },
-                fieldDisplayName
-            ),
-            span({
-                id: fieldId,
-                class: "w-full py-2 px-3 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 leading-tight",
-            })
-        );
-    }
-
-    addElements(parentElement) {
-        const { div } = van.tags;
-        const { button } = rsv.tags;
-
-        parentElement =
-            parentElement ||
-            document.getElementById("list-container") ||
-            document.body;
-
-        var rows = [];
-
-        for (var i = 0; i < this.fields.length; i++) {
-            const field = this.fields[i];
-            const fieldRow = field.row || i;
-            const fieldElements = this.getElementsForField(field);
-
-            if (!rows[fieldRow])
-                rows[fieldRow] = div({ class: "mb-4 flex space-x-4" });
-
-            van.add(rows[fieldRow], fieldElements);
-        }
-
-        rows.push(
-            div(
-                { class: "flex justify-center items-center mt-8" },
-                button({ name: `${this.collection}Add` }, "Add")
-            )
-        );
-
-        van.add(
-            parentElement,
-            div(
-                { class: "flex justify-center items-center mt-8" },
-                div(
-                    {
-                        class: "bg-white dark:bg-gray-800 shadow-md rounded px-8 pt-6 pb-8 mb-4 w-1/3",
-                    },
-                    rows
-                )
-            )
-        );
-    }
-
-    async getItems() {
-        return await this.db.query(this.collection);
-    }
-}
-
 let database = new Database();
 
 function changeDatabase(newDb) {
@@ -443,26 +311,4 @@ if (typeof window !== "undefined") {
 }
 
 export default database;
-export {
-    // firestore,
-    // getFirestore,
-    // doc,
-    // collection,
-    // addDoc,
-    // setDoc,
-    // getDoc,
-    // getDocs,
-    // deleteDoc,
-    // updateDoc,
-    // query,
-    // orderBy,
-    // where,
-    // onSnapshot,
-    // serverTimestamp,
-    // runTransaction,
-    database,
-    Database,
-    Form,
-    List,
-    changeDatabase,
-};
+export { database, Database, changeDatabase };

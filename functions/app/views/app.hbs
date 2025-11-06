@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html class="dark">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Vy</title>
+
+
+        <script src="https://cdn.tailwindcss.com"></script>
+
+        <script>
+            tailwind.config = { 
+                darkMode: 'class',
+                theme: { 
+                    extend: { 
+                        fontFamily: { 
+                            sans: ['Mako','Roboto','Arial','sans-serif'] 
+                        } 
+                    } 
+                } 
+            };
+        </script>
+   
+        <style>
+            .vjs-control-bar { position: absolute !important; bottom: -35px
+            !important; z-index: 1000 !important; opacity: 1 !important; }
+        </style>
+
+        <!-- Icon8 Line Awesome icons -->
+        <link
+            rel="stylesheet"
+            href="https://maxst.icons8.com/vue-static/landings/line-awesome/line-awesome/1.3.0/css/line-awesome.min.css"
+        />
+
+        <link
+            href="https://vjs.zencdn.net/8.23.3/video-js.css"
+            rel="stylesheet"
+        />
+
+        <link rel="stylesheet" href="/css/ag-grid.css">
+        <link rel="stylesheet" href="/css/ag-theme-alpine-dark.css">
+        <link rel="stylesheet" href="/css/ag-overrides.css">
+
+        <script src="https://vjs.zencdn.net/8.23.3/video.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+        <script type="text/javascript" src="/npm/smoothie.js"></script>
+        <script
+            type="text/javascript"
+            src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"
+        ></script>
+        <script
+            type="text/javascript"
+            src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"
+        ></script>
+
+        <script type="text/javascript" src="https://www.youtube.com/iframe_api"></script>
+
+        <link rel="stylesheet" href="/css/app.css?v=2024090401" />
+        <script type="module">
+            import { auth } from '/js/rsauth.js'; import { nav } from
+            '/js/rsnav.js'; import {
+            {{endpoint}}
+            } from '/js/rs{{endpoint}}.js?v=2025090401';
+            {{endpoint}}.init();
+        </script>
+    </head>
+    <body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+        <div id="container" class="flex h-screen"></div>
+    </body>
+</html>

@@ -1,7 +1,7 @@
 import van from "vanjs-core";
 
 import { eventBus } from "../eventbus.js";
-import { annotations } from "../data/annotations.js";
+import { annotations } from "../ui/annotations.js";
 import { timeUtil } from "../util/time.js";
 
 class AnnotationLog {

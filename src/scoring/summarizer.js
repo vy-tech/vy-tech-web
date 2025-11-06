@@ -1,11 +1,11 @@
 import { database } from "../data/db.js";
 import { storage } from "../data/storage.js";
-import { progress } from "../viz/progress.js";
+import { progress } from "../ui/progress.js";
 import { eventBus } from "../eventbus.js";
 import { Score } from "./scoring.js";
 import { activeBoxManager } from "./activeBoxManager.js";
 import { Hierarchy } from "../util/hierarchy.js";
-import { events } from "../data/events.js";
+import { eventsData } from "../data/events.js";
 
 class Summarizer {
     constructor() {
@@ -15,10 +15,6 @@ class Summarizer {
         eventBus.addEventListener("ui.requestSummaryRebuild", async (e) => {
             const { hierarchy } = e.detail;
             await this.rebuild(hierarchy);
-        });
-
-        eventBus.addEventListener("ui.requestSummaryRebuildAll", async (e) => {
-            await this.rebuildAll();
         });
 
         eventBus.addEventListener("playback.cameraChanged", (e) => {
@@ -378,7 +374,7 @@ class Summarizer {
     }
 
     async saveEventSummary(hierarchy, summary) {
-        await events.updateEventSummary(hierarchy, summary);
+        await eventsData.updateEventSummary(hierarchy, summary);
     }
 
     async rebuildEventSummary(hierarchy, relevantCameras = 4) {
@@ -392,7 +388,7 @@ class Summarizer {
     }
 
     async ensureEventSummary(hierarchy, relevantCameras = 4) {
-        const event = await events.getByHierarchy(hierarchy);
+        const event = await eventsData.getByHierarchy(hierarchy);
         if (event) {
             if (!event.summary) {
                 console.log(`Event summary missing.  Rebuilding...`);

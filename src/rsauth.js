@@ -1,5 +1,7 @@
 import van from "vanjs-core";
-import { app } from "./data/firebase.js";
+import { getApp } from "./data/firebase.js";
+
+import { eventBus } from "./eventbus.js";
 
 import {
     getAuth,
@@ -10,11 +12,16 @@ import {
 
 class Auth {
     constructor() {
-        this.auth = getAuth(app);
-        this.auth.onAuthStateChanged((user) => this.handleAuthState(user));
+        this.auth = null;
         this.user = null;
         this.isSignInEnabled = false;
         this.returnUrl = null;
+        this.init();
+    }
+
+    async init() {
+        this.auth = getAuth(await getApp());
+        this.auth.onAuthStateChanged((user) => this.handleAuthState(user));
     }
 
     enableSignIn() {
@@ -33,6 +40,9 @@ class Auth {
         this.hideBusyIndicator();
         if (user) {
             this.user = user;
+
+            eventBus.fire("auth.ready", { user: this.user });
+
             if (this.returnUrl) {
                 // Redirect to the return URL if it exists
                 window.location.href = this.returnUrl;

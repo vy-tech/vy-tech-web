@@ -1,5 +1,5 @@
 import { activeBoxManager } from "./activeBoxManager.js";
-import { profiles } from "../data/profiles.js";
+import { profilesData } from "../data/profiles.js";
 import { eventBus } from "../eventbus.js";
 
 // const Box = Object.freeze({
@@ -181,12 +181,10 @@ class Score {
     }
 
     applyProfileToRows(rows, profile = null, timeOffset = 0.0) {
-        profile = profile || profiles.profile;
+        profile = profile || profilesData.profile;
         let emotions = profile.emotions;
 
         if (!emotions) {
-            console.log(profile);
-            console.log(profiles.profile);
             console.error(
                 "Missing emotions from profiles.  All scores will be zero."
             );
@@ -228,7 +226,7 @@ class Score {
 
         var rows = await this.loadDetections(url);
 
-        this.applyProfileToRows(rows, profiles.profile, timeOffset);
+        this.applyProfileToRows(rows, profilesData.profile, timeOffset);
 
         return rows;
     }

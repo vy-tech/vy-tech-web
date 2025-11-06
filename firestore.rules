@@ -51,5 +51,20 @@ service cloud.firestore {
     	allow read: if request.auth != null;
       allow write: if request.auth != null;
     }
+
+    match /messages/{message} {
+    	allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    match /conversations/{conversation} {
+    	allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    match /webhooks/{webhook} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
   }
 }

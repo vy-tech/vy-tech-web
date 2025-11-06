@@ -3,7 +3,7 @@ import { createGrid } from "ag-grid-community";
 import { ModuleRegistry, AllCommunityModule } from "ag-grid-community";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
-import { events } from "../data/events.js";
+import { events } from "../ui/events.js";
 
 class EventGrid {
     constructor() {
