@@ -763,7 +763,7 @@ class ChatClient {
             throw new Error("User not authenticated");
         }
 
-        const idToken = await user.getIdToken();
+        const idToken = await user.getIdToken(true);
         return {
             Authorization: `Bearer ${idToken}`,
             "Content-Type": "application/json",
@@ -1284,19 +1284,26 @@ class Conversations {
 
         eventBus.addEventListener("ui.requestResponse", async (e) => {
             if (this.current && this.current.question == "(New Conversation)") {
-                const conversationId = this.current.conversation;
+                this.current.conversation;
                 this.data.update(this.current.id, {
                     name: e.detail.content,
                     question: e.detail.content,
                 });
 
-                await this.setSelectorToCurrentUser(auth.user.uid);
-                this.selectConversation(conversationId);
+                document.getElementById(
+                    "convo-select"
+                ).selectedOptions[0].text = e.detail.content;
 
-                window.setTimeout(() => {
-                    document.getElementById("convo-select").value =
-                        conversationId;
-                }, 100);
+                this.current.name = e.detail.content;
+                this.current.question = e.detail.content;
+
+                // await this.setSelectorToCurrentUser(auth.user.uid);
+                // this.selectConversation(conversationId);
+
+                // window.setTimeout(() => {
+                //     document.getElementById("convo-select").value =
+                //         conversationId;
+                // }, 100);
             }
         });
     }
@@ -1331,6 +1338,7 @@ class Conversations {
         const conversation = await chatClient.startConversation();
         const data = await this.data.create(uid, question, conversation);
 
+        console.log("Created new conversation:", data);
         this.current = data;
         this.conversations.val.unshift(data);
 
@@ -1346,6 +1354,7 @@ class Conversations {
                 (c) => c.conversation === conversation
             );
         } else {
+            console.log("Selecting conversation by object:", conversation);
             this.current = conversation;
         }
 
@@ -1356,7 +1365,7 @@ class Conversations {
 
     async selectNewConversation() {
         const newConversation = await this.createConversation();
-        this.conversations.val = [newConversation];
+        console.log("Selecting new conversation:", newConversation);
         this.selectConversation(newConversation);
     }
 

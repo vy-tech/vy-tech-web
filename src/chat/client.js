@@ -33,7 +33,7 @@ class ChatClient {
             throw new Error("User not authenticated");
         }
 
-        const idToken = await user.getIdToken();
+        const idToken = await user.getIdToken(true);
         return {
             Authorization: `Bearer ${idToken}`,
             "Content-Type": "application/json",
