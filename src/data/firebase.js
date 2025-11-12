@@ -11,7 +11,6 @@ async function getApp() {
         const { initializeApp } = await import("firebase/app");
         const { config } = await import("../firebase-config.js");
         app = initializeApp(config);
-        console.log(app);
     }
 
     return app;

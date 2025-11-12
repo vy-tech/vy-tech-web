@@ -45,7 +45,7 @@ class Storage {
         await this.ensureStorage();
 
         const storageRef = ref(this.storage, path);
-        console.log(`Getting download URL from storage: ${path}`);
+        //console.log(`Getting download URL from storage: ${path}`);
         return await getDownloadURL(storageRef);
     }
 

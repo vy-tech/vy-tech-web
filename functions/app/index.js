@@ -150,7 +150,8 @@ app.get("/playlist/:location-:date-:camera-:quality.m3u8", async (req, res) => {
         var prefix = `${chunk.playbackPrefix}-${quality}`;
         var initUrl = getVideoUrl(chunk.storage, `${prefix}-init.mp4`);
         var exprUrl = getVideoUrl(chunk.storage, chunk.expressionsPath);
-        playlistLines.push(`#EXT-X-MAP:URI="${initUrl}#${exprUrl}"`);
+        var url = `${initUrl}#ex=${encodeURIComponent(exprUrl)}&id=${chunk.id}`;
+        playlistLines.push(`#EXT-X-MAP:URI="${url}"`);
 
         // Add the program date-time using the chunk's creationTime
         if (chunk.creationTime) {
@@ -184,7 +185,7 @@ const appEndpoints = [
     "settings",
     "profile",
     "admin",
-    "chat"
+    "chat",
 ];
 
 // Add the app endpoints to the express app
