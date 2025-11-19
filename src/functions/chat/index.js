@@ -10,7 +10,6 @@ import OpenAI from "openai";
 import { WebHooksData } from "../../data/webhooks.js";
 import { Hierarchy } from "../../util/hierarchy.js";
 import { database } from "../../data/db.js";
-import { event } from "firebase-functions/v1/analytics";
 
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 const openaiWebhookSecret = defineSecret("OPENAI_WEBHOOK_SECRET");

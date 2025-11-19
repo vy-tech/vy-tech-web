@@ -6,7 +6,6 @@ import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { getAuth } from 'firebase-admin/auth';
 import OpenAI from 'openai';
-import 'firebase-functions/v1/analytics';
 
 var type = "service_account";
 var project_id = "roarscore-1ddf5";
