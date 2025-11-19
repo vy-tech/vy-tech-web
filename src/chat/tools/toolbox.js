@@ -3,6 +3,7 @@ import { EventsTool } from "./events.js";
 import { LocationsTool } from "./locations.js";
 import { SummarySecondsTool, SummaryMinutesTool } from "./summaries.js";
 import { AnnotationsTool } from "./annotations.js";
+import { WeatherTool } from "./weather.js";
 
 class ToolBox {
     constructor() {
@@ -13,12 +14,18 @@ class ToolBox {
             new SummarySecondsTool(),
             new SummaryMinutesTool(),
             new AnnotationsTool(),
+            new WeatherTool(),
         ];
         this.toolsLookup = {};
         this.toolsList.forEach((tool) => {
             this.toolsLookup[tool.name] = tool;
         });
         this.cursors = {};
+        this.auth = null;
+    }
+
+    setAuth(auth) {
+        this.auth = auth;
     }
 
     listAvailable() {
@@ -61,7 +68,7 @@ class ToolBox {
                 const cursorData = this.getCursor(args.cursor);
                 return cursorData;
             } else {
-                return await tool.invoke(args);
+                return await tool.invoke(args, this.auth);
             }
         }
     }

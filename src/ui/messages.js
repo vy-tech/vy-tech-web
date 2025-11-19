@@ -10,7 +10,7 @@ class Messages {
         this.conversation = null;
         this.data = null;
         this.list = null;
-        this.busyIndicator = null;
+        this.indicator = null;
     }
 
     async init() {
@@ -52,6 +52,48 @@ class Messages {
                 conversation: e.detail.conversation,
             });
         });
+
+        eventBus.on("chat.responseFailed", (e) => {
+            console.log("Handling chat.responseFailed event:", e);
+            this.showIndicator(
+                e.detail.reason ||
+                    "We haven't received a response after a long delay. Please try sending another message.",
+                "error"
+            );
+        });
+    }
+
+    showIndicator(message, icon = null) {
+        const icons = {
+            warning: "⚠️",
+            info: "ℹ️",
+            error: "❌",
+        };
+
+        const indicatorText = document.getElementById("indicator-text");
+        const indicatorIcon = document.getElementById("indicator-icon");
+        const indicatorSpinner = document.getElementById("indicator-spinner");
+        indicatorText.innerText = message;
+
+        if (icon) {
+            if (icon === "loading") {
+                indicatorSpinner.classList.remove("hidden");
+                indicatorIcon.classList.add("hidden");
+            } else {
+                indicatorIcon.innerText = icons[icon] || icon;
+                indicatorSpinner.classList.add("hidden");
+                indicatorIcon.classList.remove("hidden");
+            }
+        } else {
+            indicatorSpinner.classList.add("hidden");
+            indicatorIcon.classList.add("hidden");
+        }
+
+        this.indicator.classList.remove("hidden");
+    }
+
+    hideIndicator() {
+        this.indicator.classList.add("hidden");
     }
 
     createElements(options = {}) {
@@ -64,9 +106,10 @@ class Messages {
         };
 
         this.list = ul(merged);
-        this.busyIndicator = div(
+
+        this.indicator = div(
             {
-                id: "busy-indicator",
+                id: "indicator",
                 class: "flex items-center justify-center mt-4 mb-2 hidden",
             },
             div(
@@ -74,11 +117,22 @@ class Messages {
                     class: "flex items-center space-x-2 bg-gray-100 dark:bg-gray-700 px-4 py-2 rounded-lg",
                 },
                 div({
-                    class: "w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin",
+                    id: "indicator-spinner",
+                    class: "w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin hidden",
                 }),
+                div(
+                    {
+                        id: "indicator-icon",
+                        class: "w-4 h-4 text-yellow-500 flex items-center justify-center hidden",
+                    },
+                    "⚠️"
+                ),
                 span(
-                    { class: "text-gray-700 dark:text-gray-300 font-medium" },
-                    "Thinking..."
+                    {
+                        id: "indicator-text",
+                        class: "text-gray-700 dark:text-gray-300 font-medium",
+                    },
+                    "..."
                 )
             )
         );
@@ -86,7 +140,7 @@ class Messages {
         const container = div(
             { class: "flex-1 overflow-auto mb-4" },
             this.list,
-            this.busyIndicator
+            this.indicator
         );
 
         return container;
@@ -123,9 +177,11 @@ class Messages {
     }
 
     async sendMessage(content, type = "message", options = {}) {
-        await this.addMessage(content, type, options);
+        let response = await chatClient.postMessage(content, type, options);
 
-        await chatClient.postMessage(content, type, options);
+        options.responseId = response.id;
+
+        await this.addMessage(content, type, options);
 
         eventBus.fire("ui.requestResponse", {
             conversation: this.conversation,
@@ -199,13 +255,41 @@ class Messages {
             van.add(this.list, messageElement);
         });
 
-        if (
-            messages.length > 0 &&
-            messages[messages.length - 1].role === "user"
-        ) {
-            this.busyIndicator.classList.remove("hidden");
-        } else {
-            this.busyIndicator.classList.add("hidden");
+        if (this.waitingTimer) {
+            clearInterval(this.waitingTimer);
+            this.waitingTimer = null;
+        }
+
+        this.hideIndicator();
+
+        if (messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            const lastRole = lastMessage.role;
+            const lastAge = lastMessage.updated
+                ? new Date().getTime() - lastMessage.updated.seconds * 1000
+                : 0;
+
+            console.log("Last message role and age:", lastRole, lastAge);
+
+            if (lastRole === "user" && lastAge > 5 * 60 * 1000) {
+                this.showIndicator(
+                    "We haven't received a response from your last message. Try sending another message to retry.",
+                    "warning"
+                );
+            } else if (lastRole === "user") {
+                this.showIndicator("Waiting for response...", "loading");
+                let startWaitTime =
+                    lastMessage.updated?.toMillis() || new Date().getTime();
+
+                this.waitingTimer = window.setInterval(() => {
+                    const age = (new Date().getTime() - startWaitTime) / 1000;
+
+                    this.showIndicator(
+                        `Still waiting for response... ${age.toFixed(0)}s`,
+                        "loading"
+                    );
+                }, 5000);
+            }
         }
 
         eventBus.fire("ui.updateMessages", { messages: messages });
