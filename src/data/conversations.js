@@ -9,6 +9,7 @@ class ConversationsData {
             name: question,
             question: question,
             conversation: conversation,
+            status: "active",
         };
 
         await database.set("conversations", conversationData);

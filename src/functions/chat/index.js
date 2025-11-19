@@ -8,11 +8,14 @@ import { getAuth } from "firebase-admin/auth";
 import OpenAI from "openai";
 
 import { WebHooksData } from "../../data/webhooks.js";
+import { Hierarchy } from "../../util/hierarchy.js";
+import { database } from "../../data/db.js";
 
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 const openaiWebhookSecret = defineSecret("OPENAI_WEBHOOK_SECRET");
 const openaiPromptId = defineSecret("OPENAI_PROMPT_ID");
 const openaiPromptVersion = defineSecret("OPENAI_PROMPT_VERSION");
+const weatherApiKey = defineSecret("WEATHER_API_KEY");
 
 let openai;
 const initializeOpenAI = () => {
@@ -251,7 +254,15 @@ chatApp.post("/response", async (req, res) => {
         console.log("Prod prompt id:", openaiPromptId.value());
         console.log("Dev prompt version:", process.env.OPENAI_PROMPT_VERSION);
         console.log("Prod prompt version:", openaiPromptVersion.value());
-        res.status(400).json({ error: "Failed to create response" });
+
+        if (error.status === 404) {
+            console.warn("Prompt or conversation not found");
+            return res
+                .status(404)
+                .json({ error: "Prompt or conversation not found" });
+        } else {
+            res.status(400).json({ error: "Failed to create response" });
+        }
     }
 });
 
@@ -265,9 +276,76 @@ chatApp.get("/response/:responseId", async (req, res) => {
         console.log("Retrieved response:", response);
         res.json(response);
     } catch (error) {
-        console.error("Error retrieving response:", error);
-        res.status(400).json({ error: "Failed to retrieve response" });
+        if (error.status === 404) {
+            console.warn(`Response ${responseId} not found`);
+            res.status(404).json({ error: "Response not found" });
+        } else {
+            console.error("Error retrieving response:", error);
+            res.status(400).json({ error: "Failed to retrieve response" });
+        }
     }
+});
+
+chatApp.post("/tool/weather", async (req, res) => {
+    const data = parseJsonBody(req.body);
+    const locationHierarchy = data.hierarchy;
+    const hierarchy = new Hierarchy(locationHierarchy);
+    let rows = await database.query("locations", {
+        token: hierarchy.location,
+    });
+    if (rows.length === 0) {
+        res.status(404).json({ error: "Location not found" });
+        return;
+    }
+
+    const locationData = rows[0];
+
+    hierarchy.camera = 1;
+    rows = await database.query("events", {
+        hierarchy: hierarchy.toString(),
+    });
+
+    if (rows.length === 0) {
+        res.status(404).json({ error: "Event not found" });
+        return;
+    }
+
+    const eventData = rows[0];
+
+    // Change YYYYMMDD to YYYY-MM-DD
+    const date = hierarchy.date.toString();
+    const dt = [
+        date.substring(0, 4),
+        date.substring(4, 6),
+        date.substring(6, 8),
+    ].join("-");
+
+    const q = locationData.zip;
+
+    const apikey = process.env.WEATHER_API_KEY || weatherApiKey.value();
+    const url = `https://api.weatherapi.com/v1/history.json?key=${apikey}&q=${q}&dt=${dt}`;
+    console.log("Fetching weather data from URL:", url);
+    const response = await fetch(url);
+
+    if (!response.ok) {
+        console.error(
+            `Weather API request failed with status ${response.status}`
+        );
+        res.status(400).json({ error: "Failed to fetch weather data" });
+        return;
+    }
+
+    const weatherData = await response.json();
+
+    const hourly = weatherData.forecast.forecastday[0].hour;
+    hourly.forEach((hour) => {
+        hour.time_until_event_start =
+            eventData.begin.toMillis() / 1000 - hour.time_epoch;
+        hour.time_until_event_end =
+            eventData.end.toMillis() / 1000 - hour.time_epoch;
+    });
+
+    res.json(hourly);
 });
 
 const functionApp = express();
@@ -288,6 +366,7 @@ export const chat = onRequest(
             openaiWebhookSecret,
             openaiPromptId,
             openaiPromptVersion,
+            weatherApiKey,
         ],
         invoker: "public",
     },

@@ -4,6 +4,7 @@ import { getApp } from "../data/firebase.js";
 import { toolBox } from "./tools/toolbox.js";
 import { WebHooksData } from "../data/webhooks.js";
 import { MessagesData } from "../data/messages.js";
+import { eventBus } from "../eventbus.js";
 
 class ChatClient {
     constructor() {
@@ -11,13 +12,15 @@ class ChatClient {
         this.conversation = null;
         this.messages = null;
         this.webhooks = new WebHooksData();
-        this.webhooks.listen((event) => {
-            this.handleWebhook(event);
-        });
+        this.webhooks.listen(
+            (e) => this.handleWebhook(e),
+            (key) => this.handleWebhookExpire(key)
+        );
 
         getApp().then((app) => {
             console.log("Initializing ChatClient Auth...");
             this.auth = getAuth(app);
+            toolBox.setAuth(this.auth);
             this.auth.onAuthStateChanged((user) => {
                 if (user) {
                     console.log("Restoring webhooks for user:", user.uid);
@@ -116,6 +119,14 @@ class ChatClient {
         });
 
         if (!response.ok) {
+            let reason =
+                response.status === 404
+                    ? "Conversation not found. It may have been deleted or expired. Please start a new conversation."
+                    : "The message failed to send. The conversation may be stuck. Please try starting a new conversation.";
+
+            eventBus.fire("chat.responseFailed", {
+                reason: reason,
+            });
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
@@ -137,23 +148,66 @@ class ChatClient {
         const responseId = event.data.id;
         const response = await this.getResponseUntilCompleted(responseId);
 
+        if (response.status !== "completed") {
+            console.error("Response is not completed. Cannot process.");
+
+            eventBus.fire("chat.responseFailed", {
+                failure: `Response status is ${response.status} on webhook complete.`,
+                response: response,
+            });
+
+            return;
+        }
+
+        return await this.processResponse(response);
+    }
+
+    async processResponse(response) {
         const outputText = this.getTextFromResponse(response);
         const toolRequests = this.getToolRequestsFromResponse(response);
 
         if (outputText) {
             console.log("Received output text:", outputText);
-            this.addTextMessage(outputText);
+            this.addTextMessage(outputText, { responseId: response.id });
         }
 
         if (toolRequests.length > 0) {
-            this.addToolRequestMessage(toolRequests);
+            this.addToolRequestMessage(toolRequests, {
+                responseId: response.id,
+            });
 
             console.log("Invoking tools:", toolRequests);
             const toolResponses = await this.invokeTools(toolRequests);
             console.log("Received tool responses:", toolResponses);
 
-            this.addToolResponseMessage(toolResponses);
-            this.sendToolResponse(toolResponses);
+            let toolResponse = this.sendToolResponse(toolResponses);
+            this.addToolResponseMessage(toolResponses, {
+                responseId: toolResponse.id,
+            });
+        }
+    }
+
+    async handleWebhookExpire(key) {
+        console.log("Handling webhook expire for key:", key);
+
+        try {
+            const response = await this.getResponseUntilCompleted(key);
+            console.log("Fetched response for expired webhook:", response);
+
+            if (response.status !== "completed") {
+                console.error("Response is not completed. Cannot process.");
+
+                eventBus.fire("chat.responseFailed", {
+                    failure: `Response status is ${response.status} after webhook expired`,
+                    response: response,
+                });
+
+                return;
+            }
+
+            await this.processResponse(response);
+        } catch (error) {
+            console.error("Error getting response:", error);
         }
     }
 
@@ -165,14 +219,24 @@ class ChatClient {
         const startTime = Date.now();
 
         while (true) {
-            const response = await this.getResponse(responseId);
-
-            if (response.status === "completed") {
-                return response;
-            }
             if (Date.now() - startTime > timeout) {
                 throw new Error("Timeout waiting for response to complete");
             }
+
+            try {
+                const response = await this.getResponse(responseId);
+
+                if (response.status === "completed") {
+                    return response;
+                } else {
+                    console.log(
+                        `Response ${responseId} not completed yet. Status: ${response.status}`
+                    );
+                }
+            } catch (error) {
+                console.error("Error fetching response:", error);
+            }
+
             await new Promise((resolve) => setTimeout(resolve, interval));
         }
     }
@@ -219,15 +283,18 @@ class ChatClient {
         }));
     }
 
-    addTextMessage(text) {
-        this.messages.add({
+    addTextMessage(text, options = {}) {
+        let msg = {
             role: "assistant",
             type: "message",
             content: text,
-        });
+            ...options,
+        };
+
+        this.messages.add(msg);
     }
 
-    addToolRequestMessage(toolRequests) {
+    addToolRequestMessage(toolRequests, options = {}) {
         const msg = toolRequests.map(
             (toolRequest) => `  - ${toolRequest.name}(${toolRequest.args})`
         );
@@ -236,6 +303,7 @@ class ChatClient {
             role: "assistant",
             type: "tool_request",
             content: ["Requesting tools:", "", ...msg].join("\n"),
+            ...options,
         });
     }
 
@@ -259,4 +327,9 @@ class ChatClient {
 }
 
 const chatClient = new ChatClient();
+
+if (typeof window !== "undefined") {
+    window._vy_chatClient = chatClient;
+}
+
 export { ChatClient, chatClient };
