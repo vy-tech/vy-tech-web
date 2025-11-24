@@ -132,7 +132,7 @@ class Summarizer {
     }
 
     async loadFromUrl(url) {
-        console.log(`Loading summary ${url}..`);
+        //console.log(`Loading summary ${url}..`);
         const response = await fetch(url);
         if (!response.ok) {
             console.error(`Error loading ${url}: ${response.statusText}`);
@@ -167,7 +167,7 @@ class Summarizer {
             // let storage = getStorage(app);
             // let storageRef = ref(storage, path);
             // let url = await getDownloadURL(storageRef);
-            console.log(`Loading summary from storage: ${hierarchy}...`);
+            //console.log(`Loading summary from storage: ${hierarchy}...`);
             let url = await storage.getDownloadUrl(path);
 
             return await this.loadFromUrl(url);
@@ -227,7 +227,7 @@ class Summarizer {
         //const summariesRef = collection(firestore, "summaries");
         //const q = query(summariesRef, where("hierarchy", "==", hierarchy));
         //const snap = await getDocs(q);
-        console.log(`Loading summary from firestore: ${hierarchy}...`);
+        //console.log(`Loading summary from firestore: ${hierarchy}...`);
         const rows = await database.query("summaries", {
             hierarchy: hierarchy,
         });
@@ -262,7 +262,6 @@ class Summarizer {
             hier.camera = camera;
             const h = hier.toString("-");
 
-            console.log(`Loading ${h} from storage...`);
             let summary = await this.loadFromStorage(h);
 
             // if (!summary || !summary.length) {

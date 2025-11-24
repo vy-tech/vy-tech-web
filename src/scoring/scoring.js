@@ -1,6 +1,8 @@
 import { activeBoxManager } from "./activeBoxManager.js";
 import { profilesData } from "../data/profiles.js";
 import { eventBus } from "../eventbus.js";
+import { chunksData } from "../data/chunk.js";
+import { demographics } from "./demographics.js";
 
 // const Box = Object.freeze({
 //     X: 0,
@@ -395,9 +397,13 @@ class Score {
         this.loadSchedule = [];
 
         for (const frag of fragments) {
-            const exprUrl = frag.initSegment.url.split("#")[1];
+            const clientParams = frag.initSegment.url.split("#")[1];
+            const urlParams = new URLSearchParams(clientParams);
+            const exprUrl = urlParams.get("ex");
+            const chunkId = urlParams.get("id");
             if (current?.url != exprUrl) {
                 current = {
+                    id: chunkId,
                     url: exprUrl,
                     start: frag.start,
                     duration: frag.duration,
@@ -465,6 +471,8 @@ class Score {
             // );
 
             await this.loadWindow(sched.url, sched.start);
+            await chunksData.getById(sched.id);
+            await demographics.loadFromCurrentChunk(sched.start);
         }
     }
 

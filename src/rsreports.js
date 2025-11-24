@@ -20,7 +20,7 @@ import { ekg } from "./viz/ekg.js";
 import { spider } from "./viz/spider.js";
 import { summaryGraph } from "./viz/summarygraph.js";
 import { genderDemo, ageDemo } from "./viz/demographics.js";
-import { momentlist } from "./viz/momentlist.js";
+//import { momentlist } from "./viz/momentlist.js";
 import { linkedPlayer } from "./viz/linkedPlayer.js";
 import { annotationLog } from "./viz/annotationlog.js";
 import { summaryEditor } from "./viz/summaryeditor.js";
@@ -419,7 +419,6 @@ class Reports {
             )
         );
 
-        console.log(this.hierarchy);
         document.getElementById("report-event-select").value = this.hierarchy;
         this.addPlayer();
         this.addHeatmapListeners();

@@ -1,12 +1,12 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
-import { H as Hierarchy, a as activeBoxManager, g as geomUtil, s as scoring, p as profilesData } from './chunks/annotations-NTyH573R.js';
-import { s as summarizer } from './chunks/summarizer-Ziiwi3J5.js';
-import { a as annotations, p as profiles } from './chunks/annotations-BUQxpy8t.js';
-import { e as events } from './chunks/events-2D_hlhms.js';
-import { t as timeUtil } from './chunks/events-BMLicw4a.js';
-import './chunks/db-DCDBtw2W.js';
-import './chunks/firebase-jA0aqIBe.js';
+import { H as Hierarchy, a as activeBoxManager, g as geomUtil, s as scoring, d as demographics, p as profilesData } from './chunks/annotations-CaRC9wHN.js';
+import { s as summarizer } from './chunks/summarizer-D_Ftb4nx.js';
+import { a as annotations, p as profiles } from './chunks/annotations-DPky-jm0.js';
+import { e as events } from './chunks/events-Dyhr59ir.js';
+import { t as timeUtil } from './chunks/events-DstJobaY.js';
+import './chunks/db-DioOKqjp.js';
+import './chunks/firebase-omMfH1CX.js';
 
 class Exporter {
     constructor() {
@@ -862,6 +862,18 @@ class Demographics {
         this.title = title;
         this.labels = labels;
         this.data = data;
+
+        eventBus.on("playback.timeupdate", (e) => {
+            const v1 = demographics.current[this.labels[0]];
+            const v2 = demographics.current[this.labels[1]];
+            const tot = v1 + v2;
+
+            if (tot === 0) return;
+            this.data[0] = Math.floor((v1 / tot) * 100);
+            this.data[1] = Math.floor((v2 / tot) * 100);
+
+            this.update();
+        });
     }
 
     createElement(options = {}) {
@@ -880,10 +892,16 @@ class Demographics {
         return this.canvas;
     }
 
+    update() {
+        this.chart.data.datasets[0].data = [this.data[0]];
+        this.chart.data.datasets[1].data = [this.data[1]];
+        this.chart.update();
+    }
+
     init() {
         const ctx = this.canvas.getContext("2d");
 
-        var demoChart = new Chart(ctx, {
+        this.chart = new Chart(ctx, {
             type: "bar",
             data: {
                 labels: [this.title],
@@ -925,146 +943,12 @@ class Demographics {
                 },
             },
         });
-        demoChart.update();
+        this.chart.update();
     }
 }
 
-const genderDemo = new Demographics("Gender", ["male", "female"], [60, 40]);
-const ageDemo = new Demographics("Age", ["adult", "child"], [80, 20]);
-
-class MomentFinder {
-    constructor() {
-        this.moments = null;
-
-        eventBus.addEventListener("summarizer.ready", () => {
-            this.find();
-        });
-
-        eventBus.addEventListener("playback.cameraChanged", () => {
-            this.find();
-        });
-    }
-
-    get() {
-        return this.moments;
-    }
-
-    isSame(s1, s2) {
-        const buffer = 180;
-        return (
-            (s2.startTime >= s1.startTime - buffer &&
-                s2.startTime <= s1.endTime + buffer) ||
-            (s2.endTime >= s1.startTime - buffer &&
-                s2.endTime <= s1.endTime + buffer)
-        );
-    }
-
-    find() {
-        let summary = summarizer.getCurrent();
-        let sorted = [...summary];
-        let moments = [];
-
-        // Sort by score and limit to top 100
-        sorted.sort((a, b) => b.score - a.score);
-        sorted.splice(100, sorted.length - 100);
-
-        // Top score is our first moment
-        moments.push(sorted.shift());
-
-        while (moments.length < 10 && sorted.length > 0) {
-            let moment = sorted.shift();
-
-            // Find any same moment and merge them, or add a new one
-            let merge = moments.find((a) => this.isSame(a, moment));
-            if (merge) {
-                merge.startTime = Math.min(moment.startTime, merge.startTime);
-                merge.endTime = Math.max(moment.endTime, merge.endTime);
-            } else {
-                console.log("Adding..", moment);
-                moments.push(moment);
-            }
-        }
-
-        // Sort moments by time and add time label
-        moments.sort((a, b) => a.startTime - b.startTime);
-        moments.forEach((a) => (a.label = timeUtil.format(a.startTime)));
-
-        this.moments = moments;
-
-        eventBus.fire("momentFinder.changed");
-
-        return moments;
-    }
-}
-
-const momentFinder = new MomentFinder();
-
-class MomentList {
-    constructor() {
-        this.count = 10;
-        this.container = null;
-
-        eventBus.addEventListener("momentFinder.changed", () => {
-            this.update();
-        });
-    }
-
-    createElement(options = {}) {
-        const { div } = van.tags;
-
-        let merged = { ...options };
-        this.container = div(merged);
-
-        for (let i = 0; i < this.count; i++) {
-            let moment = div(
-                {
-                    id: `report-moment-${i + 1}`,
-                    class: "mb-2 w-full h-auto aspect-square relative text-black bg-white text-center flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition-colors",
-                    onclick: () => {
-                        this.seekTo(i + 1);
-                    },
-                },
-                div({ class: "text-2xl mb-1" }, "▶"),
-                div({ class: "text-sm" }, "0")
-            );
-            van.add(this.container, moment);
-        }
-
-        return this.container;
-    }
-
-    update() {
-        let moments = momentFinder.get();
-
-        for (let i = 0; i < this.count; i++) {
-            const moment = moments[i];
-            const momentDiv = document.getElementById(`report-moment-${i + 1}`);
-
-            if (!momentDiv) continue;
-
-            if (moment) {
-                momentDiv.querySelector(
-                    "div.text-sm"
-                ).textContent = `${moment.label}`;
-                momentDiv.style.display = "block";
-            } else {
-                momentDiv.style.display = "none";
-            }
-        }
-    }
-
-    seekTo(number) {
-        let moments = momentFinder.get();
-        const moment = moments[number - 1];
-        if (moment) {
-            eventBus.fire("ui.requestTimeSeek", {
-                seconds: moment.startTime - 15,
-            });
-        }
-    }
-}
-
-new MomentList();
+const genderDemo = new Demographics("Gender", ["male", "female"], [0, 0]);
+const ageDemo = new Demographics("Age Group", ["adult", "child"], [0, 0]);
 
 class LinkedPlayer {
     constructor() {
@@ -7656,7 +7540,6 @@ class Reports {
             )
         );
 
-        console.log(this.hierarchy);
         document.getElementById("report-event-select").value = this.hierarchy;
         this.addPlayer();
         this.addHeatmapListeners();
