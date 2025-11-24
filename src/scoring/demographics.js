@@ -1,9 +1,40 @@
 import { chunksData } from "../data/chunk.js";
+import { eventBus } from "../eventbus.js";
 
 class Demographics {
     constructor() {
         this.data = null;
         this.summary = null;
+        this.current = {
+            male: 0,
+            female: 0,
+            adult: 0,
+            child: 0,
+            person: 0,
+        };
+
+        eventBus.on("playback.timeupdate", (e) => {
+            const second = Math.floor(e.detail.currentTime);
+            if (this.summary && second in this.summary) {
+                const entry = this.summary[second];
+
+                if (entry.person) this.current.person = entry.person;
+                if (entry.adult) {
+                    this.current.adult = entry.adult;
+
+                    // Child detection is currently not populating correctly
+                    if (this.current.person) {
+                        this.current.child = Math.max(
+                            this.current.person - this.current.adult,
+                            0
+                        );
+                    }
+                }
+
+                if (entry.male) this.current.male = entry.male;
+                if (entry.female) this.current.female = entry.female;
+            }
+        });
     }
 
     async loadFromCurrentChunk(timeOffset = 0) {
@@ -34,7 +65,11 @@ class Demographics {
             result[time][entry.detection] = entry.count;
         }
 
-        this.summary = Object.values(result).sort((a, b) => a.time - b.time);
+        let sorted = Object.values(result).sort((a, b) => a.time - b.time);
+        this.summary = {};
+        for (const entry of sorted) {
+            this.summary[Math.floor(entry.time)] = entry;
+        }
 
         return this.summary;
     }

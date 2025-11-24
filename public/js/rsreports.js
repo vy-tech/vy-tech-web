@@ -1,8 +1,8 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
-import { H as Hierarchy, a as activeBoxManager, g as geomUtil, s as scoring, p as profilesData } from './chunks/annotations-CjuI03Gp.js';
-import { s as summarizer } from './chunks/summarizer-DAYvNABx.js';
-import { a as annotations, p as profiles } from './chunks/annotations-DFaGLr7F.js';
+import { H as Hierarchy, a as activeBoxManager, g as geomUtil, s as scoring, d as demographics, p as profilesData } from './chunks/annotations-CaRC9wHN.js';
+import { s as summarizer } from './chunks/summarizer-MIkqdznQ.js';
+import { a as annotations, p as profiles } from './chunks/annotations-CiiN6vxH.js';
 import { e as events } from './chunks/events-CWvLqZgA.js';
 import { t as timeUtil } from './chunks/events-2u8ONcFD.js';
 import './chunks/db-DioOKqjp.js';
@@ -862,6 +862,18 @@ class Demographics {
         this.title = title;
         this.labels = labels;
         this.data = data;
+
+        eventBus.on("playback.timeupdate", (e) => {
+            const v1 = demographics.current[this.labels[0]];
+            const v2 = demographics.current[this.labels[1]];
+            const tot = v1 + v2;
+
+            if (tot === 0) return;
+            this.data[0] = Math.floor((v1 / tot) * 100);
+            this.data[1] = Math.floor((v2 / tot) * 100);
+
+            this.update();
+        });
     }
 
     createElement(options = {}) {
@@ -880,10 +892,16 @@ class Demographics {
         return this.canvas;
     }
 
+    update() {
+        this.chart.data.datasets[0].data = [this.data[0]];
+        this.chart.data.datasets[1].data = [this.data[1]];
+        this.chart.update();
+    }
+
     init() {
         const ctx = this.canvas.getContext("2d");
 
-        var demoChart = new Chart(ctx, {
+        this.chart = new Chart(ctx, {
             type: "bar",
             data: {
                 labels: [this.title],
@@ -925,12 +943,12 @@ class Demographics {
                 },
             },
         });
-        demoChart.update();
+        this.chart.update();
     }
 }
 
-const genderDemo = new Demographics("Gender", ["male", "female"], [60, 40]);
-const ageDemo = new Demographics("Age", ["adult", "child"], [80, 20]);
+const genderDemo = new Demographics("Gender", ["male", "female"], [0, 0]);
+const ageDemo = new Demographics("Age Group", ["adult", "child"], [0, 0]);
 
 class LinkedPlayer {
     constructor() {

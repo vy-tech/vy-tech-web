@@ -1,6 +1,6 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { p as profiles, a as annotations } from './chunks/annotations-DFaGLr7F.js';
-import { S as Score, H as Hierarchy } from './chunks/annotations-CjuI03Gp.js';
+import { p as profiles, a as annotations } from './chunks/annotations-CiiN6vxH.js';
+import { S as Score, H as Hierarchy } from './chunks/annotations-CaRC9wHN.js';
 import { e as events } from './chunks/events-CWvLqZgA.js';
 import { d as database } from './chunks/db-DioOKqjp.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
