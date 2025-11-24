@@ -4,9 +4,9 @@ import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
 import { g as getAuth, a as auth } from './chunks/rsauth-BulgeIDL.js';
 import './chunks/index.esm2017-D8q59gHf.js';
 import { g as getApp } from './chunks/firebase-omMfH1CX.js';
-import { E as EventsData } from './chunks/events-2u8ONcFD.js';
+import { E as EventsData } from './chunks/events-DstJobaY.js';
 import { H as Hierarchy, A as AnnotationsData, b as progress } from './chunks/annotations-CaRC9wHN.js';
-import { S as Summarizer } from './chunks/summarizer-MIkqdznQ.js';
+import { S as Summarizer } from './chunks/summarizer-D_Ftb4nx.js';
 
 /**
  * marked v16.4.1 - a markdown parser
@@ -462,6 +462,74 @@ class AnnotationsTool {
     }
 }
 
+class WeatherTool {
+    constructor() {}
+
+    get name() {
+        return "get_weather";
+    }
+    get description() {
+        return "Get the hourly historical weather for the location and day of an event.";
+    }
+    get parameters() {
+        return {
+            type: "object",
+            properties: {
+                hierarchy: {
+                    type: "string",
+                    description:
+                        'The hierarchy identifier ("location:date" eg:"raimondi:20250711") for the event to get weather for',
+                },
+            },
+            required: ["hierarchy"],
+        };
+    }
+
+    get supportsCursors() {
+        return false;
+    }
+
+    async getAuthHeaders(auth) {
+        const user = auth.currentUser;
+        if (!user) {
+            throw new Error("User not authenticated");
+        }
+
+        const idToken = await user.getIdToken(true);
+        return {
+            Authorization: `Bearer ${idToken}`,
+            "Content-Type": "application/json",
+        };
+    }
+
+    async invoke(args = {}, auth = null) {
+        if (!args.hierarchy) {
+            throw new Error("Hierarchy argument is required");
+        }
+        if (!auth) {
+            throw new Error(
+                "Authentication is required to use the Weather tool"
+            );
+        }
+        const authHeaders = await this.getAuthHeaders(auth);
+
+        // Post the request to our chat backend
+        const response = await fetch(`/api/chat/tool/weather`, {
+            method: "POST",
+            headers: {
+                ...authHeaders,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                hierarchy: args.hierarchy,
+            }),
+        });
+
+        const data = await response.json();
+        return data;
+    }
+}
+
 class ToolBox {
     constructor() {
         this.toolsList = [
@@ -471,12 +539,18 @@ class ToolBox {
             new SummarySecondsTool(),
             new SummaryMinutesTool(),
             new AnnotationsTool(),
+            new WeatherTool(),
         ];
         this.toolsLookup = {};
         this.toolsList.forEach((tool) => {
             this.toolsLookup[tool.name] = tool;
         });
         this.cursors = {};
+        this.auth = null;
+    }
+
+    setAuth(auth) {
+        this.auth = auth;
     }
 
     listAvailable() {
@@ -519,7 +593,7 @@ class ToolBox {
                 const cursorData = this.getCursor(args.cursor);
                 return cursorData;
             } else {
-                return await tool.invoke(args);
+                return await tool.invoke(args, this.auth);
             }
         }
     }
@@ -671,10 +745,13 @@ if (typeof window !== "undefined") {
     window._vy_toolBox = toolBox;
 }
 
+const EXPIRE_TIME = 5 * 60 * 1000; // 5 minutes
+
 class WebHooksData {
     constructor() {
         this.pending = {};
         this.cancelListener = null;
+        this.expireTimer = null;
     }
 
     async restore(uid) {
@@ -683,11 +760,16 @@ class WebHooksData {
             return;
         }
         for (const row of rows) {
-            this.pending[row.key] = true;
+            this.pending[row.key] = row.updated.toMillis();
         }
     }
 
-    async listen(callback) {
+    async listen(callback, expireCallback = null) {
+        if (!callback)
+            throw new Error(
+                "Callback function is required for listening to webhooks."
+            );
+
         this.cancelListener = await database.listen(
             "webhooks",
             async (webhooks) => {
@@ -700,12 +782,41 @@ class WebHooksData {
                 }
             }
         );
+
+        if (expireCallback) {
+            this.expireTimer = setInterval(async () => {
+                await this.expire(expireCallback);
+            }, EXPIRE_TIME / 10);
+
+            // Initial expire check after 1 second
+            setTimeout(async () => {
+                await this.expire(expireCallback);
+            }, 1000);
+        }
+    }
+
+    async expire(callback) {
+        const now = new Date().getTime();
+        for (const key in this.pending) {
+            if (now - this.pending[key] > EXPIRE_TIME) {
+                delete this.pending[key];
+                await database.deleteAll("webhooks", { key: key });
+                if (callback) {
+                    callback(key);
+                }
+            }
+        }
     }
 
     stopListening() {
         if (this.cancelListener) {
             this.cancelListener();
             this.cancelListener = null;
+        }
+
+        if (this.expireTimer) {
+            clearInterval(this.expireTimer);
+            this.expireTimer = null;
         }
     }
 
@@ -716,7 +827,7 @@ class WebHooksData {
             uid: uid,
         });
 
-        this.pending[key] = true;
+        this.pending[key] = new Date().getTime();
 
         return result;
     }
@@ -741,13 +852,15 @@ class ChatClient {
         this.conversation = null;
         this.messages = null;
         this.webhooks = new WebHooksData();
-        this.webhooks.listen((event) => {
-            this.handleWebhook(event);
-        });
+        this.webhooks.listen(
+            (e) => this.handleWebhook(e),
+            (key) => this.handleWebhookExpire(key)
+        );
 
         getApp().then((app) => {
             console.log("Initializing ChatClient Auth...");
             this.auth = getAuth(app);
+            toolBox.setAuth(this.auth);
             this.auth.onAuthStateChanged((user) => {
                 if (user) {
                     console.log("Restoring webhooks for user:", user.uid);
@@ -846,6 +959,14 @@ class ChatClient {
         });
 
         if (!response.ok) {
+            let reason =
+                response.status === 404
+                    ? "Conversation not found. It may have been deleted or expired. Please start a new conversation."
+                    : "The message failed to send. The conversation may be stuck. Please try starting a new conversation.";
+
+            eventBus.fire("chat.responseFailed", {
+                reason: reason,
+            });
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
@@ -867,23 +988,66 @@ class ChatClient {
         const responseId = event.data.id;
         const response = await this.getResponseUntilCompleted(responseId);
 
+        if (response.status !== "completed") {
+            console.error("Response is not completed. Cannot process.");
+
+            eventBus.fire("chat.responseFailed", {
+                failure: `Response status is ${response.status} on webhook complete.`,
+                response: response,
+            });
+
+            return;
+        }
+
+        return await this.processResponse(response);
+    }
+
+    async processResponse(response) {
         const outputText = this.getTextFromResponse(response);
         const toolRequests = this.getToolRequestsFromResponse(response);
 
         if (outputText) {
             console.log("Received output text:", outputText);
-            this.addTextMessage(outputText);
+            this.addTextMessage(outputText, { responseId: response.id });
         }
 
         if (toolRequests.length > 0) {
-            this.addToolRequestMessage(toolRequests);
+            this.addToolRequestMessage(toolRequests, {
+                responseId: response.id,
+            });
 
             console.log("Invoking tools:", toolRequests);
             const toolResponses = await this.invokeTools(toolRequests);
             console.log("Received tool responses:", toolResponses);
 
-            this.addToolResponseMessage(toolResponses);
-            this.sendToolResponse(toolResponses);
+            let toolResponse = this.sendToolResponse(toolResponses);
+            this.addToolResponseMessage(toolResponses, {
+                responseId: toolResponse.id,
+            });
+        }
+    }
+
+    async handleWebhookExpire(key) {
+        console.log("Handling webhook expire for key:", key);
+
+        try {
+            const response = await this.getResponseUntilCompleted(key);
+            console.log("Fetched response for expired webhook:", response);
+
+            if (response.status !== "completed") {
+                console.error("Response is not completed. Cannot process.");
+
+                eventBus.fire("chat.responseFailed", {
+                    failure: `Response status is ${response.status} after webhook expired`,
+                    response: response,
+                });
+
+                return;
+            }
+
+            await this.processResponse(response);
+        } catch (error) {
+            console.error("Error getting response:", error);
         }
     }
 
@@ -895,14 +1059,24 @@ class ChatClient {
         const startTime = Date.now();
 
         while (true) {
-            const response = await this.getResponse(responseId);
-
-            if (response.status === "completed") {
-                return response;
-            }
             if (Date.now() - startTime > timeout) {
                 throw new Error("Timeout waiting for response to complete");
             }
+
+            try {
+                const response = await this.getResponse(responseId);
+
+                if (response.status === "completed") {
+                    return response;
+                } else {
+                    console.log(
+                        `Response ${responseId} not completed yet. Status: ${response.status}`
+                    );
+                }
+            } catch (error) {
+                console.error("Error fetching response:", error);
+            }
+
             await new Promise((resolve) => setTimeout(resolve, interval));
         }
     }
@@ -949,15 +1123,18 @@ class ChatClient {
         }));
     }
 
-    addTextMessage(text) {
-        this.messages.add({
+    addTextMessage(text, options = {}) {
+        let msg = {
             role: "assistant",
             type: "message",
             content: text,
-        });
+            ...options,
+        };
+
+        this.messages.add(msg);
     }
 
-    addToolRequestMessage(toolRequests) {
+    addToolRequestMessage(toolRequests, options = {}) {
         const msg = toolRequests.map(
             (toolRequest) => `  - ${toolRequest.name}(${toolRequest.args})`
         );
@@ -966,6 +1143,7 @@ class ChatClient {
             role: "assistant",
             type: "tool_request",
             content: ["Requesting tools:", "", ...msg].join("\n"),
+            ...options,
         });
     }
 
@@ -990,12 +1168,16 @@ class ChatClient {
 
 const chatClient = new ChatClient();
 
+if (typeof window !== "undefined") {
+    window._vy_chatClient = chatClient;
+}
+
 class Messages {
     constructor() {
         this.conversation = null;
         this.data = null;
         this.list = null;
-        this.busyIndicator = null;
+        this.indicator = null;
     }
 
     async init() {
@@ -1037,6 +1219,48 @@ class Messages {
                 conversation: e.detail.conversation,
             });
         });
+
+        eventBus.on("chat.responseFailed", (e) => {
+            console.log("Handling chat.responseFailed event:", e);
+            this.showIndicator(
+                e.detail.reason ||
+                    "We haven't received a response after a long delay. Please try sending another message.",
+                "error"
+            );
+        });
+    }
+
+    showIndicator(message, icon = null) {
+        const icons = {
+            warning: "⚠️",
+            info: "ℹ️",
+            error: "❌",
+        };
+
+        const indicatorText = document.getElementById("indicator-text");
+        const indicatorIcon = document.getElementById("indicator-icon");
+        const indicatorSpinner = document.getElementById("indicator-spinner");
+        indicatorText.innerText = message;
+
+        if (icon) {
+            if (icon === "loading") {
+                indicatorSpinner.classList.remove("hidden");
+                indicatorIcon.classList.add("hidden");
+            } else {
+                indicatorIcon.innerText = icons[icon] || icon;
+                indicatorSpinner.classList.add("hidden");
+                indicatorIcon.classList.remove("hidden");
+            }
+        } else {
+            indicatorSpinner.classList.add("hidden");
+            indicatorIcon.classList.add("hidden");
+        }
+
+        this.indicator.classList.remove("hidden");
+    }
+
+    hideIndicator() {
+        this.indicator.classList.add("hidden");
     }
 
     createElements(options = {}) {
@@ -1049,9 +1273,10 @@ class Messages {
         };
 
         this.list = ul(merged);
-        this.busyIndicator = div(
+
+        this.indicator = div(
             {
-                id: "busy-indicator",
+                id: "indicator",
                 class: "flex items-center justify-center mt-4 mb-2 hidden",
             },
             div(
@@ -1059,11 +1284,22 @@ class Messages {
                     class: "flex items-center space-x-2 bg-gray-100 dark:bg-gray-700 px-4 py-2 rounded-lg",
                 },
                 div({
-                    class: "w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin",
+                    id: "indicator-spinner",
+                    class: "w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin hidden",
                 }),
+                div(
+                    {
+                        id: "indicator-icon",
+                        class: "w-4 h-4 text-yellow-500 flex items-center justify-center hidden",
+                    },
+                    "⚠️"
+                ),
                 span(
-                    { class: "text-gray-700 dark:text-gray-300 font-medium" },
-                    "Thinking..."
+                    {
+                        id: "indicator-text",
+                        class: "text-gray-700 dark:text-gray-300 font-medium",
+                    },
+                    "..."
                 )
             )
         );
@@ -1071,7 +1307,7 @@ class Messages {
         const container = div(
             { class: "flex-1 overflow-auto mb-4" },
             this.list,
-            this.busyIndicator
+            this.indicator
         );
 
         return container;
@@ -1108,9 +1344,11 @@ class Messages {
     }
 
     async sendMessage(content, type = "message", options = {}) {
-        await this.addMessage(content, type, options);
+        let response = await chatClient.postMessage(content, type, options);
 
-        await chatClient.postMessage(content, type, options);
+        options.responseId = response.id;
+
+        await this.addMessage(content, type, options);
 
         eventBus.fire("ui.requestResponse", {
             conversation: this.conversation,
@@ -1184,13 +1422,41 @@ class Messages {
             van.add(this.list, messageElement);
         });
 
-        if (
-            messages.length > 0 &&
-            messages[messages.length - 1].role === "user"
-        ) {
-            this.busyIndicator.classList.remove("hidden");
-        } else {
-            this.busyIndicator.classList.add("hidden");
+        if (this.waitingTimer) {
+            clearInterval(this.waitingTimer);
+            this.waitingTimer = null;
+        }
+
+        this.hideIndicator();
+
+        if (messages.length > 0) {
+            const lastMessage = messages[messages.length - 1];
+            const lastRole = lastMessage.role;
+            const lastAge = lastMessage.updated
+                ? new Date().getTime() - lastMessage.updated.seconds * 1000
+                : 0;
+
+            console.log("Last message role and age:", lastRole, lastAge);
+
+            if (lastRole === "user" && lastAge > 5 * 60 * 1000) {
+                this.showIndicator(
+                    "We haven't received a response from your last message. Try sending another message to retry.",
+                    "warning"
+                );
+            } else if (lastRole === "user") {
+                this.showIndicator("Waiting for response...", "loading");
+                let startWaitTime =
+                    lastMessage.updated?.toMillis() || new Date().getTime();
+
+                this.waitingTimer = window.setInterval(() => {
+                    const age = (new Date().getTime() - startWaitTime) / 1000;
+
+                    this.showIndicator(
+                        `Still waiting for response... ${age.toFixed(0)}s`,
+                        "loading"
+                    );
+                }, 5000);
+            }
         }
 
         eventBus.fire("ui.updateMessages", { messages: messages });
@@ -1243,6 +1509,7 @@ class ConversationsData {
             name: question,
             question: question,
             conversation: conversation,
+            status: "active",
         };
 
         await database.set("conversations", conversationData);
@@ -1340,7 +1607,9 @@ class Conversations {
 
         console.log("Created new conversation:", data);
         this.current = data;
-        this.conversations.val.unshift(data);
+
+        // Cannot just unshift because van state arrays need to be replaced to trigger reactivity
+        this.conversations.val = [data, ...this.conversations.val];
 
         return data;
     }
@@ -1377,8 +1646,13 @@ class Conversations {
         const { closed, pct } = progress.show("Deleting conversation...");
 
         // Tell backend to finish the conversation
-        console.log(`Finishing conversation ${this.current.conversation}`);
-        await chatClient.finishConversation(this.current.conversation);
+        try {
+            console.log(`Finishing conversation ${this.current.conversation}`);
+            await chatClient.finishConversation(this.current.conversation);
+        } catch (e) {
+            console.warn("Failed to finish conversation:", e);
+        }
+
         pct.val = 20;
 
         console.log(`Deleting conversation ${this.current.id}`);

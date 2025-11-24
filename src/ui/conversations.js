@@ -77,7 +77,9 @@ class Conversations {
 
         console.log("Created new conversation:", data);
         this.current = data;
-        this.conversations.val.unshift(data);
+
+        // Cannot just unshift because van state arrays need to be replaced to trigger reactivity
+        this.conversations.val = [data, ...this.conversations.val];
 
         return data;
     }
@@ -114,8 +116,13 @@ class Conversations {
         const { closed, pct } = progress.show("Deleting conversation...");
 
         // Tell backend to finish the conversation
-        console.log(`Finishing conversation ${this.current.conversation}`);
-        await chatClient.finishConversation(this.current.conversation);
+        try {
+            console.log(`Finishing conversation ${this.current.conversation}`);
+            await chatClient.finishConversation(this.current.conversation);
+        } catch (e) {
+            console.warn("Failed to finish conversation:", e);
+        }
+
         pct.val = 20;
 
         console.log(`Deleting conversation ${this.current.id}`);

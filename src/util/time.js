@@ -145,17 +145,17 @@ class Time {
      * @param {string} timeZone - IANA timezone name (e.g. "America/New_York")
      * @returns {DateTime} Luxon DateTime object in UTC
      */
-    asUTC(dateObject, timeZone="America/Los_Angeles") {
+    asUTC(dateObject, timeZone = "America/Los_Angeles") {
         // Step 1: interpret the date’s *wall clock time* as if it were in `timeZone`
         const zoned = DateTime.fromObject(
             {
-            year: dateObject.getFullYear(),
-            month: dateObject.getMonth() + 1,
-            day: dateObject.getDate(),
-            hour: dateObject.getHours(),
-            minute: dateObject.getMinutes(),
-            second: dateObject.getSeconds(),
-            millisecond: dateObject.getMilliseconds()
+                year: dateObject.getFullYear(),
+                month: dateObject.getMonth() + 1,
+                day: dateObject.getDate(),
+                hour: dateObject.getHours(),
+                minute: dateObject.getMinutes(),
+                second: dateObject.getSeconds(),
+                millisecond: dateObject.getMilliseconds(),
             },
             { zone: timeZone }
         );
@@ -164,6 +164,14 @@ class Time {
         const result = zoned.toUTC();
 
         return result.toJSDate();
+    }
+
+    diffInSeconds(time1, time2) {
+        if (time1.toJSDate) time1 = time1.toJSDate();
+        if (time2.toJSDate) time2 = time2.toJSDate();
+
+        const diffMs = time2 - time1;
+        return diffMs / 1000;
     }
 }
 
