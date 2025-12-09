@@ -162,4 +162,9 @@ class Auth {
 }
 
 const auth = new Auth();
+
+if (typeof window !== "undefined") {
+    window._vy_auth = auth;
+}
+
 export { Auth, auth };

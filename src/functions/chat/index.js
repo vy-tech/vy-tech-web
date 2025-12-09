@@ -10,6 +10,8 @@ import OpenAI from "openai";
 import { WebHooksData } from "../../data/webhooks.js";
 import { Hierarchy } from "../../util/hierarchy.js";
 import { database } from "../../data/db.js";
+import { ConversationsData } from "../../data/conversations.js";
+import { MessagesData } from "../../data/messages.js";
 
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 const openaiWebhookSecret = defineSecret("OPENAI_WEBHOOK_SECRET");
@@ -283,6 +285,103 @@ chatApp.get("/response/:responseId", async (req, res) => {
             console.error("Error retrieving response:", error);
             res.status(400).json({ error: "Failed to retrieve response" });
         }
+    }
+});
+
+chatApp.post("/summarize/:conversationId", async (req, res) => {
+    const client = initializeOpenAI();
+    const conversationId = req.params.conversationId;
+
+    console.log(`Generating summary for conversation ${conversationId}`);
+
+    // Get existing conversation and messages
+    const conversationData = new ConversationsData();
+    let conversation = await conversationData.getByConversationId(
+        conversationId
+    );
+    if (!conversation) {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+    }
+
+    const messagesData = new MessagesData(conversationId);
+    const messages = await messagesData.getSince(conversation.summarized);
+
+    if (messages.length === 0) {
+        res.json({ summary: conversation.summary || "" });
+        return;
+    }
+
+    let newMessages = messagesData.asText(messages);
+
+    // Construct prompt for summarization
+    let msgs = [
+        {
+            role: "developer",
+            content:
+                "You are a system summarizer for Vy.\n" +
+                "Your job is to maintain a concise running summary and title of an analysis session.\n" +
+                "The summary should include:\n" +
+                "   * User's goals/questions so far\n" +
+                "   * Important events, decisions, and conclusions\n" +
+                "   * IDs of key data objects (e.g., result_ids, session_ids) if present\n" +
+                "The title should be a concise phrase summarizing the overall topic.\n" +
+                "Keep the summary under ~400 words and the title under ~10 words. Be specific but not verbose.\n",
+        },
+        {
+            role: "user",
+            content:
+                "Here is the existing summary of the conversation so far (may be empty):\n\n```" +
+                conversation.summary +
+                "```\n\n" +
+                "Here are the messages since that summary:\n\n```" +
+                newMessages +
+                "```\n\n" +
+                "Please produce an UPDATED summary and title that:\n" +
+                "  * Preserves important information from the previous summary\n" +
+                "  * Incorporates any new important information from the messages\n" +
+                "  * Drops details that no longer seem important" +
+                "Produce the UPDATED summary and title in the following JSON format:\n" +
+                '{ "title": "<new title>", "summary": "<new summary>" }',
+        },
+    ];
+
+    // Call the Responses API to generate the summary
+    try {
+        const args = {
+            model: "gpt-5-nano",
+            input: msgs,
+            background: false,
+            max_output_tokens: 1000,
+            reasoning: { effort: "minimal" },
+        };
+        const response = await client.responses.create(args);
+
+        const output = response.output_text;
+
+        if (!output || output.trim().length === 0) {
+            res.status(400).json({ error: "Empty summary generated" });
+            return;
+        }
+
+        console.log("Raw summary output:", output);
+
+        // Parse the output JSON
+        const summaryData = JSON.parse(output);
+        const summary = summaryData.summary || "";
+        const title = summaryData.title;
+
+        // Update conversation summary, title, and timestamp
+        await conversationData.update(conversation.id, {
+            summary: summary,
+            name: title,
+            summarized: new Date(),
+        });
+
+        res.json({ summary: summary });
+    } catch (error) {
+        console.error("Error generating summary:", error);
+        res.status(400).json({ error: "Failed to generate summary" });
     }
 });
 

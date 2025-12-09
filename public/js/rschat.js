@@ -1,7 +1,7 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
 import { d as database } from './chunks/db-DioOKqjp.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
-import { g as getAuth, a as auth } from './chunks/rsauth-BulgeIDL.js';
+import { g as getAuth, a as auth } from './chunks/rsauth-Cz-aoAXN.js';
 import './chunks/index.esm2017-D8q59gHf.js';
 import { g as getApp } from './chunks/firebase-omMfH1CX.js';
 import { E as EventsData } from './chunks/events-DstJobaY.js';
@@ -87,6 +87,27 @@ class MessagesData {
         this.lookup = {};
     }
 
+    async getAll() {
+        const results = await database.query("messages", {
+            conversation: this.conversation,
+        });
+
+        results.sort((a, b) => {
+            return a.created - b.created;
+        });
+
+        return results;
+    }
+
+    async getSince(timestamp) {
+        const results = await this.getAll();
+
+        if (timestamp)
+            return results.filter((msg) => msg.created.toMillis() > timestamp);
+
+        return results;
+    }
+
     static async updateResponse(response_id, updates) {
         const messages = await database.query("messages", {
             response_id: response_id,
@@ -151,6 +172,19 @@ class MessagesData {
         for (const message of messages) {
             await database.delete("messages", message.id);
         }
+    }
+
+    asText(messages) {
+        return messages
+            .map(
+                (msg) =>
+                    `${
+                        msg.type == "tool_response"
+                            ? "TOOL"
+                            : msg.role.toUpperCase()
+                    }: ${msg.content}`
+            )
+            .join("\n");
     }
 }
 
@@ -1164,6 +1198,45 @@ class ChatClient {
             output: toolResponses.output,
         });
     }
+
+    async summarize() {
+        if (!this.conversation) {
+            throw new Error(
+                "No active conversation. Start a conversation first."
+            );
+        }
+
+        // POST request to backend API
+        console.log(
+            "Requesting summarization of conversation:",
+            this.conversation
+        );
+
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(
+            `/api/chat/summarize/${this.conversation}`,
+            {
+                method: "POST",
+                headers: headers,
+            }
+        );
+
+        if (!response.ok) {
+            let reason =
+                response.status === 404
+                    ? "Conversation not found. It may have been deleted or expired. Please start a new conversation."
+                    : "The message failed to send. The conversation may be stuck. Please try starting a new conversation.";
+
+            eventBus.fire("chat.summarizeFailed", {
+                reason: reason,
+            });
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        return data;
+    }
 }
 
 const chatClient = new ChatClient();
@@ -1502,6 +1575,19 @@ class Messages {
 
 class ConversationsData {
     constructor() {}
+
+    async getById(id) {
+        return await database.get("conversations", id);
+    }
+
+    async getByConversationId(conversationId) {
+        const results = await database.query("conversations", {
+            conversation: conversationId,
+        });
+
+        if (results.length === 0) return null;
+        return results[0];
+    }
 
     async create(uid, question, conversation) {
         const conversationData = {

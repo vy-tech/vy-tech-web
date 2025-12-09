@@ -324,6 +324,45 @@ class ChatClient {
             output: toolResponses.output,
         });
     }
+
+    async summarize() {
+        if (!this.conversation) {
+            throw new Error(
+                "No active conversation. Start a conversation first."
+            );
+        }
+
+        // POST request to backend API
+        console.log(
+            "Requesting summarization of conversation:",
+            this.conversation
+        );
+
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(
+            `/api/chat/summarize/${this.conversation}`,
+            {
+                method: "POST",
+                headers: headers,
+            }
+        );
+
+        if (!response.ok) {
+            let reason =
+                response.status === 404
+                    ? "Conversation not found. It may have been deleted or expired. Please start a new conversation."
+                    : "The message failed to send. The conversation may be stuck. Please try starting a new conversation.";
+
+            eventBus.fire("chat.summarizeFailed", {
+                reason: reason,
+            });
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        return data;
+    }
 }
 
 const chatClient = new ChatClient();
