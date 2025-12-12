@@ -1,6 +1,6 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { p as profiles, a as annotations } from './chunks/annotations-DPky-jm0.js';
-import { S as Score, H as Hierarchy } from './chunks/annotations-CaRC9wHN.js';
+import { p as profiles, a as annotations } from './chunks/annotations-B4f19oau.js';
+import { S as Score, H as Hierarchy } from './chunks/annotations-CR72EW0w.js';
 import { e as events } from './chunks/events-Dyhr59ir.js';
 import { d as database } from './chunks/db-DioOKqjp.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
@@ -19690,6 +19690,9 @@ class Settings {
             suffix = "?alt=media&ext=.json";
         } else if (chunk.storage == "minio") {
             prefix = "https://storage.roarscore.ai/production/";
+        }
+        else if (chunk.storage == "seaweed") {
+            prefix = "https://s.vy.vision/";
         }
 
         return `${prefix}${path}${suffix}`;
