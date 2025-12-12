@@ -1001,6 +1001,9 @@ class Settings {
         } else if (chunk.storage == "minio") {
             prefix = "https://storage.roarscore.ai/production/";
         }
+        else if (chunk.storage == "seaweed") {
+            prefix = "https://s.vy.vision/";
+        }
 
         return `${prefix}${path}${suffix}`;
     }
