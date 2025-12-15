@@ -67,6 +67,12 @@ const STORAGE_URLS = {
         placeholder: "videos/playback-placeholder.mp4",
         encoded: false,
     },
+    seaweed: {
+        prefix: "https://s.vy.vision/",
+        suffix: "",
+        placeholder: "play/video-placeholder.mp4",
+        encoded: false,
+    }
 };
 
 const getVideoUrl = (storageType, path) => {

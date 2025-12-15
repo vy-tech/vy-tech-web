@@ -7,6 +7,9 @@ class Chunk {
         } else if (this.storage == "minio") {
             return `https://storage.roarscore.ai/production/${path}`;
         }
+        else if (this.storage == "seaweed") {
+            return `https://s.vy.vision/${path}`;
+        }
 
         return null;
     }
