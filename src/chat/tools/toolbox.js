@@ -59,25 +59,31 @@ class ToolBox {
             throw new Error(`Tool ${toolName} not found`);
         }
 
-        if (!args) {
+        // If no args then just invoke the tool
+        if (!args) 
             return await tool.invoke();
-        } else {
-            args = JSON.parse(args);
+        
+        args = JSON.parse(args);
 
-            if (args.cursor) {
-                const cursorData = this.getCursor(args.cursor);
-                return cursorData;
-            } else {
-                return await tool.invoke(args, this.auth);
-            }
-        }
+        // If a cursor is provided and we have the results
+        // already in memory, return them directly
+        if (this.hasCursor(args.cursor)) {
+            const cursorData = this.getCursor(args.cursor);
+            return cursorData;
+        } 
+
+        // Otherwise invoke the tool as normal
+        let result = await tool.invoke(args, this.auth);
+        return result;        
     }
 
     getMessageForResult(result, resultJSON) {
         if (Array.isArray(result)) {
             return `  - Returned ${result.length} rows.`;
-        } else if (result.next_cursor) {
-            return `  - Returned the next page of 50 results`;
+        } else if (result.from_cursor) {
+            return `  - Returned the next page of ${result.page_size || 50} results`;
+        } else if (result.total_rows) {
+            return `  - Returned ${result.rows.length} of ${result.total_rows} rows.`;
         } else if (result.keys && result.rows) {
             return `  - Returned ${result.rows.length} rows.`;
         } else if (typeof result === "object") {
@@ -119,28 +125,90 @@ class ToolBox {
         return { keys: keys, rows: rows };
     }
 
-    getCursorId() {
-        return Math.random().toString(36).substring(2, 10);
-    }
+    /**
+     * Generates a unique cursor ID encoding the page number and page size.
+     */
+    getCursorId(pageNumber = 1, pageSize = 50) {
+        let cursorId = [
+            Math.random().toString(36).substring(2, 10),
+            pageNumber.toString(36),
+            pageSize.toString(36),
+        ].join("-");
 
-    makeCursor(rows, pageSize = 50) {
-        let cursorId = this.getCursorId();
+        // If the cursorId already exists, try again
         while (this.cursors[cursorId]) {
-            cursorId = this.getCursorId();
+            return this.getCursorId(pageNumber, pageSize);
         }
 
-        const rowsToReturn = rows.rows.slice(0, pageSize);
-        const rowsRemaining = rows.rows.slice(pageSize);
-
-        this.cursors[cursorId] = {
-            keys: rows.keys,
-            rows: rowsRemaining,
-            pageSize: pageSize,
-        };
-
-        return { next_cursor: cursorId, keys: rows.keys, rows: rowsToReturn };
+        return cursorId;
     }
 
+    /**
+     * Returns the next cursor by decoding and incrementing the page number.
+     */
+    getNextCursorId(cursor, pageSize = 50) {
+        if (!cursor) 
+            return this.getCursorId(1, pageSize);
+
+        const parts = cursor.split("-");
+        const pageNumber = parseInt(parts[1], 36);
+        pageSize = parseInt(parts[2], 36);
+
+        return this.getCursorId(pageNumber + 1, pageSize);
+    }
+
+    /**
+     * Creates an in-memory cursor by returing a page of results
+     * and storing the remaining results for later retrieval.
+     */
+    makeCursor(tool, result, pageSize = 50) {
+        const args = (tool.args && JSON.parse(tool.args)) || {};
+        const nextCursorId = this.getNextCursorId(args.cursor, pageSize);
+
+        let startIndex = 0;
+        // If the tool args have a cursor but we didn't have that one stored
+        // then we start at the page indicated by the cursor
+        if (args.cursor && !result.fromCursor) {
+            const parts = args.cursor.split("-");
+            const pageNumber = parseInt(parts[1], 36);
+            pageSize = parseInt(parts[2], 36);
+
+            startIndex = pageNumber * pageSize;
+        }
+
+        const rowsToReturn = result.rows.slice(startIndex, startIndex + pageSize);
+        const rowsRemaining = result.rows.slice(startIndex + pageSize);
+        const totalRows = result.totalRows || result.rows.length;
+
+        this.cursors[nextCursorId] = {
+            fromCursor: nextCursorId,
+            keys: result.keys,
+            rows: rowsRemaining,
+            pageSize: pageSize,
+            totalRows: totalRows
+        };
+
+        const cursorResult = { 
+            next_cursor: nextCursorId, 
+            keys: result.keys, 
+            rows: rowsToReturn, 
+            total_rows: totalRows,
+            page_size: pageSize
+        };
+
+        if (result.fromCursor) {
+            cursorResult.from_cursor = result.fromCursor;
+        }
+        
+        return cursorResult;
+    }
+
+    /** Returns true if a cursor exists */
+    hasCursor(cursorId) {
+        return cursorId && cursorId in this.cursors;
+    }
+
+    /** Returns the cursor data and removes it from storage */
     getCursor(cursorId) {
         const result = this.cursors[cursorId];
         if (!result) {
@@ -152,24 +220,24 @@ class ToolBox {
     }
 
     addRowsResult(output, msgs, tool, result, maxSize) {
-        const rowsData = this.asRows(result);
-        const rowsJSON = JSON.stringify(rowsData);
-        const msg = this.getMessageForResult(rowsData, rowsJSON);
+        let rowsData = this.asRows(result);
+        let rowsJSON = JSON.stringify(rowsData);
 
+        // If the result is too large, create a cursor
+        if (rowsJSON.length > maxSize) {
+            rowsData = this.makeCursor(tool, rowsData);
+            rowsJSON = JSON.stringify(rowsData);
+        } 
+
+        // Create message for result
+        let msg = this.getMessageForResult(rowsData, rowsJSON);
         msgs.push(msg);
 
-        if (rowsJSON.length > maxSize) {
-            const cursorData = this.makeCursor(rowsData);
-            output.push({
-                call_id: tool.call_id,
-                output: JSON.stringify(cursorData),
-            });
-        } else {
-            output.push({
-                call_id: tool.call_id,
-                output: rowsJSON,
-            });
-        }
+        // Add to output
+        output.push({
+            call_id: tool.call_id,
+            output: rowsJSON,
+        });
     }
 
     addObjectResult(output, msgs, tool, result, maxSize) {
