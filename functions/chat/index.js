@@ -207,6 +207,7 @@ class Database {
     }
 
     async set(collectionName, docData) {
+        console.log("Setting", collectionName, docData);
         await this.ensureFirestore();
 
         if (!docData.id) {
@@ -222,6 +223,7 @@ class Database {
     }
 
     async get(collectionName, docId) {
+        console.log("Getting", collectionName, docId);
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
@@ -241,6 +243,7 @@ class Database {
     }
 
     async query(collectionName, filters = null, order = null) {
+        console.log("Querying", collectionName, filters, order);
         await this.ensureFirestore();
 
         let q = collection(this.db, collectionName);
@@ -284,6 +287,7 @@ class Database {
     }
 
     async delete(collectionName, docId) {
+        console.log("Deleting", collectionName, docId);
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
@@ -292,6 +296,7 @@ class Database {
     }
 
     async deleteAll(collectionName, filters = null) {
+        console.log("Deleting all from", collectionName, filters);
         await this.ensureFirestore();
 
         let rows = await this.query(collectionName, filters);
@@ -304,6 +309,7 @@ class Database {
     }
 
     async update(collectionName, docId, updates) {
+        console.log("Updating", collectionName, docId, updates);
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
@@ -320,6 +326,15 @@ class Database {
         newValue,
         updates = {}
     ) {
+        console.log(
+            "Atomic updating",
+            collectionName,
+            docId,
+            column,
+            oldValue,
+            newValue,
+            updates
+        );
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
@@ -355,6 +370,7 @@ class Database {
     }
 
     async listen(collectionName, callback, filters = null) {
+        console.log("Setting up listener for", collectionName, filters);
         await this.ensureFirestore();
 
         let q = collection(this.db, collectionName);
@@ -378,6 +394,7 @@ class Database {
         }
 
         return onSnapshot(q, (querySnapshot) => {
+            console.log("Listener triggered for", collectionName);
             const results = [];
 
             querySnapshot.docChanges().forEach((change) => {
@@ -564,6 +581,191 @@ class Hierarchy {
         return [this.location, this.date].join(separator);
     }
 }
+
+class ConversationsData {
+    constructor() {}
+
+    async getById(id) {
+        console.log("Getting conversation by ID:", id);
+        return await database.get("conversations", id);
+    }
+
+    async getByConversationId(conversationId) {
+        console.log("Getting conversation by conversation ID:", conversationId);
+        const results = await database.query("conversations", {
+            conversation: conversationId,
+        });
+
+        if (results.length === 0) return null;
+        return results[0];
+    }
+
+    async getByUserId(userId) {
+        console.log("Getting conversations for user ID:", userId);
+        return await database.query("conversations", { uid: userId });
+    }
+
+    async listenByUserId(userId, callback) {
+        console.log("Listening to conversations for user ID:", userId);
+        return await database.listen("conversations", callback, {
+            uid: userId,
+        });
+    }
+
+    async getAllConversations() {
+        console.log("Getting all conversations");
+        return await database.query("conversations");
+    }
+
+    async create(uid, question, conversation) {
+        const conversationData = {
+            uid: uid,
+            name: question,
+            question: question,
+            conversation: conversation,
+            status: "active",
+        };
+
+        await database.set("conversations", conversationData);
+
+        return conversationData;
+    }
+
+    async update(id, updates) {
+        return await database.update("conversations", id, updates);
+    }
+
+    async delete(id) {
+        return await database.delete("conversations", id);
+    }
+
+    async getByUid(uid) {
+        console.log("Getting conversations for UID:", uid);
+        const results = await database.query("conversations", { uid: uid });
+
+        results.sort((a, b) => {
+            return b.updated - a.updated;
+        });
+        console.log("Found conversations:", results);
+        return results;
+    }
+}
+
+class MessagesData {
+    constructor(conversation) {
+        this.conversation = conversation;
+        this.history = [];
+        this.lookup = {};
+    }
+
+    async getAll() {
+        const results = await database.query("messages", {
+            conversation: this.conversation,
+        });
+
+        results.sort((a, b) => {
+            return a.created - b.created;
+        });
+
+        return results;
+    }
+
+    async getSince(timestamp) {
+        const results = await this.getAll();
+
+        if (timestamp)
+            return results.filter((msg) => msg.created.toMillis() > timestamp);
+
+        return results;
+    }
+
+    async getRecent(limit = 10) {
+        const results = await this.getAll();
+        return results.slice(-limit);
+    }
+
+    static async updateResponse(response_id, updates) {
+        const messages = await database.query("messages", {
+            response_id: response_id,
+        });
+
+        if (messages.length === 0) {
+            throw new Error(
+                `No message found with response_id: ${response_id}`
+            );
+        }
+
+        const message = messages[0];
+        return await database.update("messages", message.id, updates);
+    }
+
+    receive(messages) {
+        const newMessages = [];
+
+        for (const message of messages) {
+            if (!this.lookup[message.id]) {
+                this.history.push(message);
+                this.lookup[message.id] = message;
+                newMessages.push(message);
+            }
+        }
+
+        if (newMessages.length > 0 && this.callback) {
+            newMessages.sort((a, b) => a.created - b.created);
+            this.callback(newMessages);
+        }
+    }
+
+    async listen(callback) {
+        this.callback = callback;
+        this.listener = await database.listen(
+            "messages",
+            (messages) => this.receive(messages),
+            {
+                conversation: this.conversation,
+            }
+        );
+    }
+
+    stopListening() {
+        if (this.listener) {
+            database.stop(this.listener);
+            this.listener = null;
+        }
+    }
+
+    async add(messageData) {
+        messageData.conversation = this.conversation;
+        return await database.set("messages", messageData);
+    }
+
+    async update(id, updates) {
+        return await database.update("messages", id, updates);
+    }
+
+    async deleteConversation(id) {
+        let messages = await database.query("messages", { conversation: id });
+        for (const message of messages) {
+            await database.delete("messages", message.id);
+        }
+    }
+
+    asText(messages) {
+        return messages
+            .map(
+                (msg) =>
+                    `${
+                        msg.type == "tool_response"
+                            ? "TOOL"
+                            : msg.role.toUpperCase()
+                    }: ${msg.content}`
+            )
+            .join("\n");
+    }
+}
+
+const MODEL = "gpt-5.2";
+const SUMMARIZATION_MODEL = "gpt-5-nano";
 
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 const openaiWebhookSecret = defineSecret("OPENAI_WEBHOOK_SECRET");
@@ -783,7 +985,7 @@ chatApp.post("/response", async (req, res) => {
 
         // TODO FIXME set up dev/prod split pmpt_68ff94173ef4819686db667303d9b8eb0be186025f5a95ae
         const args = {
-            model: "gpt-5",
+            model: MODEL,
             conversation: conversation,
             prompt: {
                 id: promptId,
@@ -837,6 +1039,193 @@ chatApp.get("/response/:responseId", async (req, res) => {
             console.error("Error retrieving response:", error);
             res.status(400).json({ error: "Failed to retrieve response" });
         }
+    }
+});
+
+chatApp.post("/restart/:conversationId", async (req, res) => {
+    const client = initializeOpenAI();
+    const cid = req.params.conversationId;
+
+    // Get the existing conversation
+    const convos = new ConversationsData();
+    let conversation = await convos.getByConversationId(cid);
+    if (!conversation) {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+    }
+
+    /// If the conversation has a summary get the last few messages
+    /// Otherwise get all the messages
+    const msgs = new MessagesData(cid);
+    let messages = conversation.summary
+        ? await msgs.getRecent(3)
+        : await msgs.getAll();
+
+    // Create a new conversation by calling the /start endpoint
+    console.log("Creating new conversation to restart from", cid);
+    const newConversation = await client.conversations.create();
+    console.log("Created new conversation:", newConversation);
+
+    // Create an input array to re-establish context in the new conversation
+    let input = [
+        {
+            role: "system",
+            content: `You are continuing a previous conversation named "${conversation.name}" that was abandoned or had an error.`,
+        },
+    ];
+    if (conversation.summary) {
+        input.push({
+            role: "system",
+            content:
+                "The following is a summary of your previous conversation:\n\n" +
+                conversation.summary,
+        });
+        input.push({
+            role: "system",
+            content:
+                "Here are the last few messages from that conversation to re-establish context:\n\n" +
+                msgs.asText(messages),
+        });
+    } else {
+        input.push({
+            role: "system",
+            content:
+                "Here are the previous messages from that conversation to re-establish context:\n\n" +
+                msgs.asText(messages),
+        });
+    }
+
+    // Add messages to the new conversation
+    const newMsgs = new MessagesData(newConversation.id);
+    for (const m of input) {
+        await newMsgs.add({
+            role: m.role,
+            content: m.content,
+            type: "message",
+        });
+    }
+
+    // Call the Responses API to create a response in the new conversation with the input array
+    const promptId = process.env.OPENAI_PROMPT_ID || openaiPromptId.value();
+    const promptVersion =
+        process.env.OPENAI_PROMPT_VERSION || openaiPromptVersion.value();
+
+    const args = {
+        model: MODEL,
+        conversation: newConversation.id,
+        prompt: {
+            id: promptId,
+            version: promptVersion,
+        },
+        input: input,
+        background: true,
+    };
+
+    console.log("Calling Response API with", args);
+    const response = await client.responses.create(args);
+    console.log("Response API returned", response);
+
+    // Return the new conversation ID and response
+    res.json({
+        conversation: newConversation,
+        response: response,
+    });
+});
+
+chatApp.post("/summarize/:conversationId", async (req, res) => {
+    const client = initializeOpenAI();
+    const conversationId = req.params.conversationId;
+
+    console.log(`Generating summary for conversation ${conversationId}`);
+
+    // Get existing conversation and messages
+    const conversationData = new ConversationsData();
+    let conversation = await conversationData.getByConversationId(
+        conversationId
+    );
+    if (!conversation) {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+    }
+
+    const messagesData = new MessagesData(conversationId);
+    const messages = await messagesData.getSince(conversation.summarized);
+
+    if (messages.length === 0) {
+        res.json({ summary: conversation.summary || "" });
+        return;
+    }
+
+    let newMessages = messagesData.asText(messages);
+
+    // Construct prompt for summarization
+    let msgs = [
+        {
+            role: "developer",
+            content:
+                "You are a system summarizer for Vy.\n" +
+                "Your job is to maintain a concise running summary and title of an analysis session.\n" +
+                "The summary should include:\n" +
+                "   * User's goals/questions so far\n" +
+                "   * Important events, decisions, and conclusions\n" +
+                "   * IDs of key data objects (e.g., result_ids, session_ids) if present\n" +
+                "The title should be a concise phrase summarizing the overall topic.\n" +
+                "Keep the summary under ~400 words and the title under ~10 words. Be specific but not verbose.\n",
+        },
+        {
+            role: "user",
+            content:
+                "Here is the existing summary of the conversation so far (may be empty):\n\n```" +
+                conversation.summary +
+                "```\n\n" +
+                "Here are the messages since that summary:\n\n```" +
+                newMessages +
+                "```\n\n" +
+                "Please produce an UPDATED summary and title that:\n" +
+                "  * Preserves important information from the previous summary\n" +
+                "  * Incorporates any new important information from the messages\n" +
+                "  * Drops details that no longer seem important" +
+                "Produce the UPDATED summary and title in the following JSON format:\n" +
+                '{ "title": "<new title>", "summary": "<new summary>" }',
+        },
+    ];
+
+    // Call the Responses API to generate the summary
+    try {
+        const args = {
+            model: SUMMARIZATION_MODEL,
+            input: msgs,
+            background: false,
+            max_output_tokens: 1000,
+            reasoning: { effort: "minimal" },
+        };
+        const response = await client.responses.create(args);
+
+        const output = response.output_text;
+
+        if (!output || output.trim().length === 0) {
+            res.status(400).json({ error: "Empty summary generated" });
+            return;
+        }
+
+        console.log("Raw summary output:", output);
+
+        // Parse the output JSON
+        const summaryData = JSON.parse(output);
+        const summary = summaryData.summary || "";
+        const title = summaryData.title;
+
+        // Update conversation summary, title, and timestamp
+        await conversationData.update(conversation.id, {
+            summary: summary,
+            name: title,
+            summarized: new Date(),
+        });
+
+        res.json({ summary: summary });
+    } catch (error) {
+        console.error("Error generating summary:", error);
+        res.status(400).json({ error: "Failed to generate summary" });
     }
 });
 

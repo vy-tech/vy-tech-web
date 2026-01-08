@@ -173,6 +173,37 @@ class Time {
         const diffMs = time2 - time1;
         return diffMs / 1000;
     }
+
+    // Add this helper function at the top of your class or as a utility function
+    formatTimeAgo(timestamp) {
+        // Handle Firestore timestamp object
+        const date = timestamp?.toDate
+            ? timestamp.toDate()
+            : new Date(timestamp);
+        const now = new Date();
+        const diffInSeconds = Math.floor((now - date) / 1000);
+
+        if (isNaN(diffInSeconds) || diffInSeconds < 0) {
+            return "Just now";
+        } else if (diffInSeconds < 60) {
+            return "Just now";
+        } else if (diffInSeconds < 3600) {
+            const minutes = Math.floor(diffInSeconds / 60);
+            return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+        } else if (diffInSeconds < 86400) {
+            const hours = Math.floor(diffInSeconds / 3600);
+            return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+        } else if (diffInSeconds < 604800) {
+            const days = Math.floor(diffInSeconds / 86400);
+            return `${days} day${days > 1 ? "s" : ""} ago`;
+        } else if (diffInSeconds < 2592000) {
+            const weeks = Math.floor(diffInSeconds / 604800);
+            return `${weeks} week${weeks > 1 ? "s" : ""} ago`;
+        } else {
+            const months = Math.floor(diffInSeconds / 2592000);
+            return `${months} month${months > 1 ? "s" : ""} ago`;
+        }
+    }
 }
 
 const timeUtil = new Time();

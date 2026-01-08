@@ -93,6 +93,7 @@ class Database {
     }
 
     async set(collectionName, docData) {
+        console.log("Setting", collectionName, docData);
         await this.ensureFirestore();
 
         if (!docData.id) {
@@ -108,6 +109,7 @@ class Database {
     }
 
     async get(collectionName, docId) {
+        console.log("Getting", collectionName, docId);
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
@@ -127,6 +129,7 @@ class Database {
     }
 
     async query(collectionName, filters = null, order = null) {
+        console.log("Querying", collectionName, filters, order);
         await this.ensureFirestore();
 
         let q = collection(this.db, collectionName);
@@ -170,6 +173,7 @@ class Database {
     }
 
     async delete(collectionName, docId) {
+        console.log("Deleting", collectionName, docId);
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
@@ -178,6 +182,7 @@ class Database {
     }
 
     async deleteAll(collectionName, filters = null) {
+        console.log("Deleting all from", collectionName, filters);
         await this.ensureFirestore();
 
         let rows = await this.query(collectionName, filters);
@@ -190,6 +195,7 @@ class Database {
     }
 
     async update(collectionName, docId, updates) {
+        console.log("Updating", collectionName, docId, updates);
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
@@ -206,6 +212,15 @@ class Database {
         newValue,
         updates = {}
     ) {
+        console.log(
+            "Atomic updating",
+            collectionName,
+            docId,
+            column,
+            oldValue,
+            newValue,
+            updates
+        );
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
@@ -241,6 +256,7 @@ class Database {
     }
 
     async listen(collectionName, callback, filters = null) {
+        console.log("Setting up listener for", collectionName, filters);
         await this.ensureFirestore();
 
         let q = collection(this.db, collectionName);
@@ -264,6 +280,7 @@ class Database {
         }
 
         return onSnapshot(q, (querySnapshot) => {
+            console.log("Listener triggered for", collectionName);
             const results = [];
 
             querySnapshot.docChanges().forEach((change) => {

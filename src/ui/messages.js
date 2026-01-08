@@ -168,7 +168,7 @@ class Messages {
 
     async addMessage(content, type = "message", options = {}) {
         console.log("Adding message:", content);
-        await this.data.add({
+        return await this.data.add({
             role: "user",
             type: type,
             content: content,
@@ -177,12 +177,11 @@ class Messages {
     }
 
     async sendMessage(content, type = "message", options = {}) {
+        let messageId = await this.addMessage(content, type, options);
         let response = await chatClient.postMessage(content, type, options);
 
-        options.responseId = response.id;
-
-        await this.addMessage(content, type, options);
-
+        console.log(messageId);
+        await this.data.update(messageId, { responseId: response.id });
         eventBus.fire("ui.requestResponse", {
             conversation: this.conversation,
             type: type,
@@ -202,11 +201,17 @@ class Messages {
     // }
 
     updateMessageContent(element, message) {
-        element.innerHTML = marked(message.content);
-        element.className =
-            message.role === "user"
-                ? "bg-blue-500 text-white p-2 rounded inline-block message-content"
-                : "bg-gray-300 text-black p-2 rounded inline-block message-content";
+        element.innerHTML = marked(message.content, { breaks: true });
+
+        if (message.role === "system") {
+            element.className =
+                "bg-gray-100 text-gray-700 p-3 rounded block max-w-5xl mx-auto italic text-sm font-mono message-content";
+        } else {
+            element.className =
+                message.role === "user"
+                    ? "bg-blue-500 text-white p-2 rounded inline-block message-content"
+                    : "bg-gray-300 text-black p-2 rounded inline-block message-content";
+        }
 
         if (message.type === "tool_request") {
             element.className += " italic text-sm font-mono ml-6 text-gray-600";
@@ -276,7 +281,7 @@ class Messages {
                     "We haven't received a response from your last message. Try sending another message to retry.",
                     "warning"
                 );
-            } else if (lastRole === "user") {
+            } else if (lastRole === "user" || lastRole === "system") {
                 this.showIndicator("Waiting for response...", "loading");
                 let startWaitTime =
                     lastMessage.updated?.toMillis() || new Date().getTime();
@@ -294,43 +299,6 @@ class Messages {
 
         eventBus.fire("ui.updateMessages", { messages: messages });
     }
-
-    // async handleToolRequests(messages) {
-    //     const toolRequests = messages.filter(
-    //         (msg) => msg.type === "tool_request" && msg.status === "requested"
-    //     );
-
-    //     if (toolRequests.length > 0) {
-    //         for (const msg of toolRequests) {
-    //             await this.handleToolRequest(msg);
-    //         }
-    //     }
-    // }
-
-    // getMessageForResult(result, resultJSON) {
-    //     if (Array.isArray(result)) {
-    //         return `Returned ${result.length} rows.`;
-    //     } else if (typeof result === "object") {
-    //         return `Returned ${resultJSON.length} bytes.`;
-    //     }
-    //     return `Returned value: ${result}`;
-    // }
-
-    // async handleToolRequest(msg) {
-    //     this.data.update(msg.id, { status: "processing" });
-    //     try {
-    //         const results = await chatClient.invokeTools(msg.tools);
-    //         const options = {
-    //             output: results.output,
-    //         };
-
-    //         await this.sendMessage(results.content, "tool_response", options);
-    //         this.data.update(msg.id, { status: "completed" });
-    //     } catch (error) {
-    //         console.error("Error handling tool request:", error);
-    //         this.data.update(msg.id, { status: "failed" });
-    //     }
-    // }
 }
 
 export default Messages;

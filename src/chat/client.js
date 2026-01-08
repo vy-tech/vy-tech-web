@@ -6,11 +6,14 @@ import { WebHooksData } from "../data/webhooks.js";
 import { MessagesData } from "../data/messages.js";
 import { eventBus } from "../eventbus.js";
 
+const SUMMARIZE_EVERY_MS = 1 * 60 * 1000;
+
 class ChatClient {
     constructor() {
         this.auth = null;
         this.conversation = null;
         this.messages = null;
+        this.lastSummarization = null;
         this.webhooks = new WebHooksData();
         this.webhooks.listen(
             (e) => this.handleWebhook(e),
@@ -20,13 +23,16 @@ class ChatClient {
         getApp().then((app) => {
             console.log("Initializing ChatClient Auth...");
             this.auth = getAuth(app);
+            console.log("Setting Auth in toolBox...");
             toolBox.setAuth(this.auth);
+            console.log("Setting up Auth state listener...");
             this.auth.onAuthStateChanged((user) => {
                 if (user) {
                     console.log("Restoring webhooks for user:", user.uid);
                     this.webhooks.restore(user.uid);
                 }
             });
+            console.log("ChatClient Auth initialized.");
         });
     }
 
@@ -64,6 +70,27 @@ class ChatClient {
         const data = await response.json();
         this.conversation = data.id;
         this.messages = new MessagesData(this.conversation);
+
+        return this.conversation;
+    }
+
+    async restartConversation(conversationId) {
+        console.log("Restarting conversation:", conversationId);
+
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`/api/chat/restart/${conversationId}`, {
+            method: "POST",
+            headers: headers,
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        this.conversation = data.conversation.id;
+        this.messages = new MessagesData(this.conversation);
+
+        await this.webhooks.create(data.response.id, this.auth.currentUser.uid);
 
         return this.conversation;
     }
@@ -169,6 +196,8 @@ class ChatClient {
         if (outputText) {
             console.log("Received output text:", outputText);
             this.addTextMessage(outputText, { responseId: response.id });
+
+            this.summarizeIfNeeded();
         }
 
         if (toolRequests.length > 0) {
@@ -323,6 +352,71 @@ class ChatClient {
         await this.postMessage(toolResponses.content, "tool_response", {
             output: toolResponses.output,
         });
+    }
+
+    summarizeIfNeeded() {
+        if (!this.lastSummarization) {
+            this.lastSummarization = Date.now();
+            return;
+        }
+
+        const now = Date.now();
+        const elapsed = now - this.lastSummarization;
+
+        if (elapsed > SUMMARIZE_EVERY_MS) {
+            console.log(
+                `${
+                    SUMMARIZE_EVERY_MS / 60000
+                } minutes elapsed since last summarization. Summarizing...`
+            );
+            this.summarize()
+                .then((data) => {
+                    console.log("Conversation summarized:", data);
+                    this.lastSummarization = Date.now();
+                })
+                .catch((error) => {
+                    console.error("Error summarizing conversation:", error);
+                });
+        }
+    }
+
+    async summarize() {
+        if (!this.conversation) {
+            throw new Error(
+                "No active conversation. Start a conversation first."
+            );
+        }
+
+        // POST request to backend API
+        console.log(
+            "Requesting summarization of conversation:",
+            this.conversation
+        );
+
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(
+            `/api/chat/summarize/${this.conversation}`,
+            {
+                method: "POST",
+                headers: headers,
+            }
+        );
+
+        if (!response.ok) {
+            let reason =
+                response.status === 404
+                    ? "Conversation not found. It may have been deleted or expired. Please start a new conversation."
+                    : "The message failed to send. The conversation may be stuck. Please try starting a new conversation.";
+
+            eventBus.fire("chat.summarizeFailed", {
+                reason: reason,
+            });
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        return data;
     }
 }
 

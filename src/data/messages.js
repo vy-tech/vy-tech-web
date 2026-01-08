@@ -7,6 +7,32 @@ class MessagesData {
         this.lookup = {};
     }
 
+    async getAll() {
+        const results = await database.query("messages", {
+            conversation: this.conversation,
+        });
+
+        results.sort((a, b) => {
+            return a.created - b.created;
+        });
+
+        return results;
+    }
+
+    async getSince(timestamp) {
+        const results = await this.getAll();
+
+        if (timestamp)
+            return results.filter((msg) => msg.created.toMillis() > timestamp);
+
+        return results;
+    }
+
+    async getRecent(limit = 10) {
+        const results = await this.getAll();
+        return results.slice(-limit);
+    }
+
     static async updateResponse(response_id, updates) {
         const messages = await database.query("messages", {
             response_id: response_id,
@@ -71,6 +97,19 @@ class MessagesData {
         for (const message of messages) {
             await database.delete("messages", message.id);
         }
+    }
+
+    asText(messages) {
+        return messages
+            .map(
+                (msg) =>
+                    `${
+                        msg.type == "tool_response"
+                            ? "TOOL"
+                            : msg.role.toUpperCase()
+                    }: ${msg.content}`
+            )
+            .join("\n");
     }
 }
 

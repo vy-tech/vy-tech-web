@@ -3,6 +3,48 @@ import commonjs from "@rollup/plugin-commonjs";
 import json from "@rollup/plugin-json";
 import { glob } from "glob";
 import path from "path";
+import { spawn } from "child_process";
+import { config } from "dotenv";
+
+// Load environment variables
+config();
+
+// Custom plugin to enable Cloudflare development mode
+const cloudflareDevMode = () => ({
+    name: "cloudflare-dev-mode",
+    buildStart() {
+        // Only run in development mode (when watching)
+        if (this.meta.watchMode) {
+            console.log("🔧 Enabling Cloudflare development mode...");
+
+            return new Promise((resolve, reject) => {
+                const child = spawn("node", ["scripts/enable-cf-dev-mode.js"], {
+                    stdio: "inherit",
+                    cwd: process.cwd(),
+                });
+
+                child.on("close", (code) => {
+                    if (code === 0) {
+                        resolve();
+                    } else {
+                        console.warn(
+                            "⚠️  Cloudflare development mode setup failed, but continuing build..."
+                        );
+                        resolve(); // Don't fail the build if CF setup fails
+                    }
+                });
+
+                child.on("error", (error) => {
+                    console.warn(
+                        "⚠️  Cloudflare development mode error:",
+                        error.message
+                    );
+                    resolve(); // Don't fail the build if CF setup fails
+                });
+            });
+        }
+    },
+});
 
 // Find all function entry points dynamically
 const functionEntries = glob
@@ -47,6 +89,7 @@ const clientConfig = {
         assetFileNames: "assets/[name]-[hash][extname]",
     },
     plugins: [
+        cloudflareDevMode(),
         resolve({
             browser: true,
             preferBuiltins: false,

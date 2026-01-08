@@ -10,6 +10,11 @@ import OpenAI from "openai";
 import { WebHooksData } from "../../data/webhooks.js";
 import { Hierarchy } from "../../util/hierarchy.js";
 import { database } from "../../data/db.js";
+import { ConversationsData } from "../../data/conversations.js";
+import { MessagesData } from "../../data/messages.js";
+
+const MODEL = "gpt-5.2";
+const SUMMARIZATION_MODEL = "gpt-5-nano";
 
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
 const openaiWebhookSecret = defineSecret("OPENAI_WEBHOOK_SECRET");
@@ -229,7 +234,7 @@ chatApp.post("/response", async (req, res) => {
 
         // TODO FIXME set up dev/prod split pmpt_68ff94173ef4819686db667303d9b8eb0be186025f5a95ae
         const args = {
-            model: "gpt-5",
+            model: MODEL,
             conversation: conversation,
             prompt: {
                 id: promptId,
@@ -283,6 +288,193 @@ chatApp.get("/response/:responseId", async (req, res) => {
             console.error("Error retrieving response:", error);
             res.status(400).json({ error: "Failed to retrieve response" });
         }
+    }
+});
+
+chatApp.post("/restart/:conversationId", async (req, res) => {
+    const client = initializeOpenAI();
+    const cid = req.params.conversationId;
+
+    // Get the existing conversation
+    const convos = new ConversationsData();
+    let conversation = await convos.getByConversationId(cid);
+    if (!conversation) {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+    }
+
+    /// If the conversation has a summary get the last few messages
+    /// Otherwise get all the messages
+    const msgs = new MessagesData(cid);
+    let messages = conversation.summary
+        ? await msgs.getRecent(3)
+        : await msgs.getAll();
+
+    // Create a new conversation by calling the /start endpoint
+    console.log("Creating new conversation to restart from", cid);
+    const newConversation = await client.conversations.create();
+    console.log("Created new conversation:", newConversation);
+
+    // Create an input array to re-establish context in the new conversation
+    let input = [
+        {
+            role: "system",
+            content: `You are continuing a previous conversation named "${conversation.name}" that was abandoned or had an error.`,
+        },
+    ];
+    if (conversation.summary) {
+        input.push({
+            role: "system",
+            content:
+                "The following is a summary of your previous conversation:\n\n" +
+                conversation.summary,
+        });
+        input.push({
+            role: "system",
+            content:
+                "Here are the last few messages from that conversation to re-establish context:\n\n" +
+                msgs.asText(messages),
+        });
+    } else {
+        input.push({
+            role: "system",
+            content:
+                "Here are the previous messages from that conversation to re-establish context:\n\n" +
+                msgs.asText(messages),
+        });
+    }
+
+    // Add messages to the new conversation
+    const newMsgs = new MessagesData(newConversation.id);
+    for (const m of input) {
+        await newMsgs.add({
+            role: m.role,
+            content: m.content,
+            type: "message",
+        });
+    }
+
+    // Call the Responses API to create a response in the new conversation with the input array
+    const promptId = process.env.OPENAI_PROMPT_ID || openaiPromptId.value();
+    const promptVersion =
+        process.env.OPENAI_PROMPT_VERSION || openaiPromptVersion.value();
+
+    const args = {
+        model: MODEL,
+        conversation: newConversation.id,
+        prompt: {
+            id: promptId,
+            version: promptVersion,
+        },
+        input: input,
+        background: true,
+    };
+
+    console.log("Calling Response API with", args);
+    const response = await client.responses.create(args);
+    console.log("Response API returned", response);
+
+    // Return the new conversation ID and response
+    res.json({
+        conversation: newConversation,
+        response: response,
+    });
+});
+
+chatApp.post("/summarize/:conversationId", async (req, res) => {
+    const client = initializeOpenAI();
+    const conversationId = req.params.conversationId;
+
+    console.log(`Generating summary for conversation ${conversationId}`);
+
+    // Get existing conversation and messages
+    const conversationData = new ConversationsData();
+    let conversation = await conversationData.getByConversationId(
+        conversationId
+    );
+    if (!conversation) {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+    }
+
+    const messagesData = new MessagesData(conversationId);
+    const messages = await messagesData.getSince(conversation.summarized);
+
+    if (messages.length === 0) {
+        res.json({ summary: conversation.summary || "" });
+        return;
+    }
+
+    let newMessages = messagesData.asText(messages);
+
+    // Construct prompt for summarization
+    let msgs = [
+        {
+            role: "developer",
+            content:
+                "You are a system summarizer for Vy.\n" +
+                "Your job is to maintain a concise running summary and title of an analysis session.\n" +
+                "The summary should include:\n" +
+                "   * User's goals/questions so far\n" +
+                "   * Important events, decisions, and conclusions\n" +
+                "   * IDs of key data objects (e.g., result_ids, session_ids) if present\n" +
+                "The title should be a concise phrase summarizing the overall topic.\n" +
+                "Keep the summary under ~400 words and the title under ~10 words. Be specific but not verbose.\n",
+        },
+        {
+            role: "user",
+            content:
+                "Here is the existing summary of the conversation so far (may be empty):\n\n```" +
+                conversation.summary +
+                "```\n\n" +
+                "Here are the messages since that summary:\n\n```" +
+                newMessages +
+                "```\n\n" +
+                "Please produce an UPDATED summary and title that:\n" +
+                "  * Preserves important information from the previous summary\n" +
+                "  * Incorporates any new important information from the messages\n" +
+                "  * Drops details that no longer seem important" +
+                "Produce the UPDATED summary and title in the following JSON format:\n" +
+                '{ "title": "<new title>", "summary": "<new summary>" }',
+        },
+    ];
+
+    // Call the Responses API to generate the summary
+    try {
+        const args = {
+            model: SUMMARIZATION_MODEL,
+            input: msgs,
+            background: false,
+            max_output_tokens: 1000,
+            reasoning: { effort: "minimal" },
+        };
+        const response = await client.responses.create(args);
+
+        const output = response.output_text;
+
+        if (!output || output.trim().length === 0) {
+            res.status(400).json({ error: "Empty summary generated" });
+            return;
+        }
+
+        console.log("Raw summary output:", output);
+
+        // Parse the output JSON
+        const summaryData = JSON.parse(output);
+        const summary = summaryData.summary || "";
+        const title = summaryData.title;
+
+        // Update conversation summary, title, and timestamp
+        await conversationData.update(conversation.id, {
+            summary: summary,
+            name: title,
+            summarized: new Date(),
+        });
+
+        res.json({ summary: summary });
+    } catch (error) {
+        console.error("Error generating summary:", error);
+        res.status(400).json({ error: "Failed to generate summary" });
     }
 });
 
