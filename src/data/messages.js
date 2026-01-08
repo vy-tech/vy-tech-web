@@ -28,6 +28,11 @@ class MessagesData {
         return results;
     }
 
+    async getRecent(limit = 10) {
+        const results = await this.getAll();
+        return results.slice(-limit);
+    }
+
     static async updateResponse(response_id, updates) {
         const messages = await database.query("messages", {
             response_id: response_id,

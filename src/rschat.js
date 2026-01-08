@@ -11,11 +11,13 @@ class Chat {
     }
 
     async init() {
+        console.log("Initializing Chat UI...");
         this.addElements();
         await this.messages.init();
         eventBus.on("ui.updateMessages", () => {
             this.scrollToBottom();
         });
+        console.log("rschat Init complete");
     }
 
     scrollToBottom() {
@@ -47,13 +49,18 @@ class Chat {
         van.add(
             parentElement,
             main(
-                { class: "w-full h-full flex flex-col items-center" },
+                { class: "w-full h-full flex" },
+                // Main chat area - takes full width on mobile, partial on desktop
                 div(
-                    { class: "w-full p-4 flex flex-col h-full" },
+                    { class: "flex-1 flex flex-col p-4" },
+                    // Mobile dropdown (hidden on lg+ screens)
                     div(
-                        { class: "flex space-x-4 flex-shrink-0 mb-4" },
+                        {
+                            class: "flex space-x-4 flex-shrink-0 mb-4 lg:hidden",
+                        },
                         this.conversations.createSelectorElement()
                     ),
+                    // Chat messages area
                     div(
                         {
                             id: "chat-window",
@@ -61,27 +68,83 @@ class Chat {
                         },
                         this.messages.createElements()
                     ),
+                    // Input area
                     div(
-                        { class: "flex mt-4 flex-shrink-0" },
-                        input({
-                            id: "chat-input",
-                            type: "text",
-                            class: "border p-2 w-full text-black rounded-l-lg",
-                            placeholder: "Type a message...",
-                            onkeydown: async (e) => {
-                                if (e.key === "Enter") {
-                                    await this.sendTextInput();
-                                }
-                            },
-                        }),
-                        button(
-                            {
-                                class: "bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-r-lg",
-                                onclick: async () => await this.sendTextInput(),
-                            },
-                            "Send"
+                        {
+                            class: "mt-4 flex-shrink-0 bg-white border rounded-lg p-3 shadow-sm",
+                        },
+                        // Top row - text input
+                        div(
+                            { class: "mb-3" },
+                            input({
+                                id: "chat-input",
+                                type: "text",
+                                class: "w-full text-black bg-transparent outline-none placeholder-gray-500",
+                                placeholder: "Type a message...",
+                                onkeydown: async (e) => {
+                                    if (e.key === "Enter") {
+                                        await this.sendTextInput();
+                                    }
+                                },
+                            })
+                        ),
+                        // Bottom row - buttons
+                        div(
+                            { class: "flex justify-between items-center" },
+                            // Left column - action buttons
+                            div(
+                                { class: "flex space-x-2" },
+                                button(
+                                    {
+                                        class: "text-gray-500 hover:text-gray-700 p-1 rounded",
+                                        title: "Attach file",
+                                        onclick: () => {
+                                            // TODO: Implement attach functionality
+                                            console.log("Attach clicked");
+                                        },
+                                    },
+                                    van.tags.i({ class: "las la-paperclip" })
+                                ),
+                                button(
+                                    {
+                                        class: "text-gray-500 hover:text-gray-700 p-1 rounded",
+                                        title: "Restart conversation",
+                                        onclick: () => {
+                                            console.log("Restart clicked");
+
+                                            if (
+                                                confirm(
+                                                    "This starts a new conversation that continues where this one left off.  " +
+                                                        "Use this if the current conversation is stuck." +
+                                                        "\n\n" +
+                                                        "Restart the conversation?"
+                                                )
+                                            ) {
+                                                eventBus.fire(
+                                                    "ui.requestRestartConversation"
+                                                );
+                                            }
+                                        },
+                                    },
+                                    van.tags.i({ class: "las la-redo-alt" })
+                                )
+                            ),
+                            // Right column - send button
+                            button(
+                                {
+                                    class: "bg-blue-500 hover:bg-blue-700 text-white font-medium py-1.5 px-4 rounded-md text-sm",
+                                    onclick: async () =>
+                                        await this.sendTextInput(),
+                                },
+                                "Send"
+                            )
                         )
                     )
+                ),
+                // Desktop sidebar (hidden on mobile, shown on lg+ screens)
+                div(
+                    { class: "hidden lg:flex" },
+                    this.conversations.createSidebarElement()
                 )
             )
         );

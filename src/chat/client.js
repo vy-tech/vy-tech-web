@@ -23,13 +23,16 @@ class ChatClient {
         getApp().then((app) => {
             console.log("Initializing ChatClient Auth...");
             this.auth = getAuth(app);
+            console.log("Setting Auth in toolBox...");
             toolBox.setAuth(this.auth);
+            console.log("Setting up Auth state listener...");
             this.auth.onAuthStateChanged((user) => {
                 if (user) {
                     console.log("Restoring webhooks for user:", user.uid);
                     this.webhooks.restore(user.uid);
                 }
             });
+            console.log("ChatClient Auth initialized.");
         });
     }
 
@@ -67,6 +70,27 @@ class ChatClient {
         const data = await response.json();
         this.conversation = data.id;
         this.messages = new MessagesData(this.conversation);
+
+        return this.conversation;
+    }
+
+    async restartConversation(conversationId) {
+        console.log("Restarting conversation:", conversationId);
+
+        const headers = await this.getAuthHeaders();
+        const response = await fetch(`/api/chat/restart/${conversationId}`, {
+            method: "POST",
+            headers: headers,
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        this.conversation = data.conversation.id;
+        this.messages = new MessagesData(this.conversation);
+
+        await this.webhooks.create(data.response.id, this.auth.currentUser.uid);
 
         return this.conversation;
     }

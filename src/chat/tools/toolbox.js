@@ -4,6 +4,8 @@ import { LocationsTool } from "./locations.js";
 import { SummarySecondsTool, SummaryMinutesTool } from "./summaries.js";
 import { AnnotationsTool } from "./annotations.js";
 import { WeatherTool } from "./weather.js";
+import { ConversationsTool } from "./conversations.js";
+import { MessagesTool } from "./messages.js";
 
 class ToolBox {
     constructor() {
@@ -15,6 +17,8 @@ class ToolBox {
             new SummaryMinutesTool(),
             new AnnotationsTool(),
             new WeatherTool(),
+            new ConversationsTool(),
+            new MessagesTool(),
         ];
         this.toolsLookup = {};
         this.toolsList.forEach((tool) => {
@@ -60,28 +64,29 @@ class ToolBox {
         }
 
         // If no args then just invoke the tool
-        if (!args) 
-            return await tool.invoke();
-        
-        args = JSON.parse(args);
+        if (!args) return await tool.invoke({}, this.auth);
+
+        args = typeof args === "object" ? args : JSON.parse(args);
 
         // If a cursor is provided and we have the results
         // already in memory, return them directly
         if (this.hasCursor(args.cursor)) {
             const cursorData = this.getCursor(args.cursor);
             return cursorData;
-        } 
+        }
 
         // Otherwise invoke the tool as normal
         let result = await tool.invoke(args, this.auth);
-        return result;        
+        return result;
     }
 
     getMessageForResult(result, resultJSON) {
         if (Array.isArray(result)) {
             return `  - Returned ${result.length} rows.`;
         } else if (result.from_cursor) {
-            return `  - Returned the next page of ${result.page_size || 50} results`;
+            return `  - Returned the next page of ${
+                result.page_size || 50
+            } results`;
         } else if (result.total_rows) {
             return `  - Returned ${result.rows.length} of ${result.total_rows} rows.`;
         } else if (result.keys && result.rows) {
@@ -147,8 +152,7 @@ class ToolBox {
      * Returns the next cursor by decoding and incrementing the page number.
      */
     getNextCursorId(cursor, pageSize = 50) {
-        if (!cursor) 
-            return this.getCursorId(1, pageSize);
+        if (!cursor) return this.getCursorId(1, pageSize);
 
         const parts = cursor.split("-");
         const pageNumber = parseInt(parts[1], 36);
@@ -176,7 +180,10 @@ class ToolBox {
             startIndex = pageNumber * pageSize;
         }
 
-        const rowsToReturn = result.rows.slice(startIndex, startIndex + pageSize);
+        const rowsToReturn = result.rows.slice(
+            startIndex,
+            startIndex + pageSize
+        );
         const rowsRemaining = result.rows.slice(startIndex + pageSize);
         const totalRows = result.totalRows || result.rows.length;
 
@@ -185,21 +192,21 @@ class ToolBox {
             keys: result.keys,
             rows: rowsRemaining,
             pageSize: pageSize,
-            totalRows: totalRows
+            totalRows: totalRows,
         };
 
-        const cursorResult = { 
-            next_cursor: nextCursorId, 
-            keys: result.keys, 
-            rows: rowsToReturn, 
+        const cursorResult = {
+            next_cursor: nextCursorId,
+            keys: result.keys,
+            rows: rowsToReturn,
             total_rows: totalRows,
-            page_size: pageSize
+            page_size: pageSize,
         };
 
         if (result.fromCursor) {
             cursorResult.from_cursor = result.fromCursor;
         }
-        
+
         return cursorResult;
     }
 
@@ -227,7 +234,7 @@ class ToolBox {
         if (rowsJSON.length > maxSize) {
             rowsData = this.makeCursor(tool, rowsData);
             rowsJSON = JSON.stringify(rowsData);
-        } 
+        }
 
         // Create message for result
         let msg = this.getMessageForResult(rowsData, rowsJSON);
