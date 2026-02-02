@@ -291,6 +291,50 @@ chatApp.get("/response/:responseId", async (req, res) => {
     }
 });
 
+// TODO FIXME: This doesn't work because the conversation on OpenAIs side and ours
+// are out of sync.
+// The createItems call will allow us to add the messsages back into the new conversation
+chatApp.post("/duplicate/:conversationId", async (req, res) => {
+    const client = initializeOpenAI();
+    const cid = req.params.conversationId;
+
+    // Get the existing conversation
+    console.log("Retrieving conversation to duplicate:", cid);
+    const convos = new ConversationsData();
+    let conversation = await convos.getByConversationId(cid);
+    if (!conversation) {
+        res.status(404).json({ error: "Conversation not found" });
+        return;
+    }
+
+    // Create a new conversation
+    console.log("Creating new conversation to duplicate from", cid);
+    const newConversation = await client.conversations.create();
+    console.log("Created new conversation:", newConversation);
+
+    // Create a new conversation entry in the database
+    await convos.create(
+        req.uid,
+        conversation.question || conversation.name || "Duplicated Conversation",
+        newConversation.id
+    );
+
+    // Get all messages from the existing conversation
+    const msgs = new MessagesData(cid);
+    const messages = await msgs.getAll();
+
+    // Add messages to the new conversation
+    const newMsgs = new MessagesData(newConversation.id);
+    for (const m of messages) {
+        m.conversation = newConversation.id;
+        await newMsgs.add(m);
+    }
+
+    res.json({
+        conversation: newConversation,
+    });
+});
+
 chatApp.post("/restart/:conversationId", async (req, res) => {
     const client = initializeOpenAI();
     const cid = req.params.conversationId;
@@ -389,9 +433,8 @@ chatApp.post("/summarize/:conversationId", async (req, res) => {
 
     // Get existing conversation and messages
     const conversationData = new ConversationsData();
-    let conversation = await conversationData.getByConversationId(
-        conversationId
-    );
+    let conversation =
+        await conversationData.getByConversationId(conversationId);
     if (!conversation) {
         res.status(404).json({ error: "Conversation not found" });
         return;
