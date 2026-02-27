@@ -13,7 +13,9 @@ let getFirestore,
     where,
     onSnapshot,
     serverTimestamp,
-    runTransaction;
+    runTransaction,
+    arrayUnion,
+    arrayRemove;
 
 async function initializeFirestore() {
     // Initialize Firebase functions based on environment
@@ -42,6 +44,8 @@ async function initializeFirestore() {
     onSnapshot = firebaseFunctions.onSnapshot;
     serverTimestamp = firebaseFunctions.serverTimestamp;
     runTransaction = firebaseFunctions.runTransaction;
+    arrayUnion = firebaseFunctions.arrayUnion;
+    arrayRemove = firebaseFunctions.arrayRemove;
 }
 
 async function ensureInitialized() {
@@ -199,8 +203,25 @@ class Database {
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
-        updates.updated = serverTimestamp();
-        await updateDoc(docRef, updates);
+
+        // Process special array operations
+        const processedUpdates = {};
+        for (const [key, value] of Object.entries(updates)) {
+            if (value && typeof value === "object" && !Array.isArray(value)) {
+                if (value.op === "arrayUnion") {
+                    processedUpdates[key] = arrayUnion(value.value);
+                } else if (value.op === "arrayRemove") {
+                    processedUpdates[key] = arrayRemove(value.value);
+                } else {
+                    processedUpdates[key] = value;
+                }
+            } else {
+                processedUpdates[key] = value;
+            }
+        }
+
+        processedUpdates.updated = serverTimestamp();
+        await updateDoc(docRef, processedUpdates);
         return true;
     }
 

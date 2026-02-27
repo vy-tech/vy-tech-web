@@ -1,9 +1,8 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { e as events } from './chunks/events-sdRw1Bkl.js';
+import { e as events } from './chunks/events-Dd6eR2Dd.js';
 import './chunks/eventbus-B9JUr222.js';
-import './chunks/events-0MH9oHuf.js';
-import './chunks/db-BBYvHzlP.js';
-import './chunks/firebase-omMfH1CX.js';
+import './chunks/events-DcYFQoSy.js';
+import './chunks/db-BZQDImdW.js';
 
 // packages/ag-grid-community/src/agStack/events/localEventService.ts
 var LocalEventService = class {
@@ -55498,6 +55497,7 @@ class Schedule {
         const { div, main } = van.tags;
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 

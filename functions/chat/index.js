@@ -1,5 +1,5 @@
 import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore as getFirestore$1, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore as getFirestore$1, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import express from 'express';
 import { onRequest } from 'firebase-functions/v2/https';
@@ -32,63 +32,58 @@ var credential = {
 	universe_domain: universe_domain
 };
 
-const app$1 = initializeApp({ 
+const app$1 = initializeApp({
     credential: cert(credential),
-    storageBucket: credential.project_id + '.firebasestorage.app'  // Updated Firebase storage bucket format
+    storageBucket: credential.project_id + ".firebasestorage.app", // Updated Firebase storage bucket format
 });
 const db = getFirestore$1(app$1);
 const storage = getStorage(app$1);
 
 let firebaseFunctions = {
-        getFirestore: () => db,
-        doc: (database, ...args) => db.doc(args.join("/")),
-        collection: (database, collectionPath) => db.collection(collectionPath),
-        setDoc: (docRef, data) => docRef.set(data),
-        getDoc: (docRef) => docRef.get(),
-        getDocs: (query) => query.get(),
-        deleteDoc: (docRef) => docRef.delete(),
-        updateDoc: (docRef, updates) => docRef.update(updates),
-        query: (collectionRef, ...constraints) => {
-            let q = collectionRef;
-            constraints.forEach((constraint) => {
-                if (constraint.type === "where") {
-                    q = q.where(
-                        constraint.field,
-                        constraint.op,
-                        constraint.value
-                    );
-                } else if (constraint.type === "orderBy") {
-                    q = q.orderBy(
-                        constraint.field,
-                        constraint.direction || "asc"
-                    );
-                }
-            });
-            return q;
-        },
-        where: (field, op, value) => ({ type: "where", field, op, value }),
-        orderBy: (field, direction) => ({ type: "orderBy", field, direction }),
-        onSnapshot: (query, callback) => query.onSnapshot(callback),
-        serverTimestamp: () => Timestamp.now(),
-        runTransaction: (database, updateFunction) =>
-            db.runTransaction(updateFunction),
-    };
+    getFirestore: () => db,
+    doc: (database, ...args) => db.doc(args.join("/")),
+    collection: (database, collectionPath) => db.collection(collectionPath),
+    setDoc: (docRef, data) => docRef.set(data),
+    getDoc: (docRef) => docRef.get(),
+    getDocs: (query) => query.get(),
+    deleteDoc: (docRef) => docRef.delete(),
+    updateDoc: (docRef, updates) => docRef.update(updates),
+    query: (collectionRef, ...constraints) => {
+        let q = collectionRef;
+        constraints.forEach((constraint) => {
+            if (constraint.type === "where") {
+                q = q.where(constraint.field, constraint.op, constraint.value);
+            } else if (constraint.type === "orderBy") {
+                q = q.orderBy(constraint.field, constraint.direction || "asc");
+            }
+        });
+        return q;
+    },
+    where: (field, op, value) => ({ type: "where", field, op, value }),
+    orderBy: (field, direction) => ({ type: "orderBy", field, direction }),
+    onSnapshot: (query, callback) => query.onSnapshot(callback),
+    serverTimestamp: () => Timestamp.now(),
+    runTransaction: (database, updateFunction) =>
+        db.runTransaction(updateFunction),
+    arrayRemove: FieldValue.arrayRemove,
+    arrayUnion: FieldValue.arrayUnion,
+};
 
 let storageFunctions = {
     getStorage: () => storage,
     ref: (storageInstance, path) => storage.bucket().file(path),
     uploadString: async (fileRef, data) => {
         // Admin SDK uses different method - save buffer to file
-        return await fileRef.save(Buffer.from(data, 'utf8'));
+        return await fileRef.save(Buffer.from(data, "utf8"));
     },
     getDownloadURL: async (fileRef) => {
         // Admin SDK uses different method to get download URL
         const [url] = await fileRef.getSignedUrl({
-            action: 'read',
-            expires: Date.now() + 1000 * 60 * 60 * 24 * 7 // 7 days
+            action: "read",
+            expires: Date.now() + 1000 * 60 * 60 * 24 * 7, // 7 days
         });
         return url;
-    }
+    },
 };
 
 global._vy_firebase_admin_sdk = true;
@@ -127,7 +122,9 @@ let getFirestore,
     where,
     onSnapshot,
     serverTimestamp,
-    runTransaction;
+    runTransaction,
+    arrayUnion,
+    arrayRemove;
 
 async function initializeFirestore() {
     // Initialize Firebase functions based on environment
@@ -156,6 +153,8 @@ async function initializeFirestore() {
     onSnapshot = firebaseFunctions.onSnapshot;
     serverTimestamp = firebaseFunctions.serverTimestamp;
     runTransaction = firebaseFunctions.runTransaction;
+    arrayUnion = firebaseFunctions.arrayUnion;
+    arrayRemove = firebaseFunctions.arrayRemove;
 }
 
 async function ensureInitialized() {
@@ -313,8 +312,25 @@ class Database {
         await this.ensureFirestore();
 
         const docRef = doc(this.db, collectionName, docId);
-        updates.updated = serverTimestamp();
-        await updateDoc(docRef, updates);
+
+        // Process special array operations
+        const processedUpdates = {};
+        for (const [key, value] of Object.entries(updates)) {
+            if (value && typeof value === "object" && !Array.isArray(value)) {
+                if (value.op === "arrayUnion") {
+                    processedUpdates[key] = arrayUnion(value.value);
+                } else if (value.op === "arrayRemove") {
+                    processedUpdates[key] = arrayRemove(value.value);
+                } else {
+                    processedUpdates[key] = value;
+                }
+            } else {
+                processedUpdates[key] = value;
+            }
+        }
+
+        processedUpdates.updated = serverTimestamp();
+        await updateDoc(docRef, processedUpdates);
         return true;
     }
 

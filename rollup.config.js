@@ -60,7 +60,7 @@ const clientConfig = {
     input: {
         rsauth: "src/rsauth.js",
         rsnav: "src/rsnav.js",
-        rsdashboard: "src/rsdashboard.js",
+        rshome: "src/rshome.js",
         rslocations: "src/rslocations.js",
         rsschedule: "src/rsschedule.js",
         rsreports: "src/rsreports.js",

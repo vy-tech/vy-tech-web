@@ -195,6 +195,7 @@ class Reports {
         const { div, main, video, canvas, button } = van.tags;
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 

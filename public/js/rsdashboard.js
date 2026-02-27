@@ -18,7 +18,10 @@ class Dashboard {
             parentElement,
             main(
                 { class: "w-[90%] p-4 overflow-auto" },
-                div({ class: "flex justify-center items-center" }, h1("Hello"))
+                div(
+                    { class: "flex justify-center items-center" },
+                    h1("Hello world")
+                )
             )
         );
     }

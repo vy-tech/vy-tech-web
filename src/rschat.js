@@ -43,6 +43,7 @@ class Chat {
         const { a, div, main, h1, input, button } = van.tags;
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 

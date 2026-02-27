@@ -201,6 +201,7 @@ class Locations {
         const { a, div, main, h1 } = van.tags;
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 

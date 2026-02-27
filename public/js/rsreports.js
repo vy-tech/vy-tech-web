@@ -1,12 +1,12 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
-import { H as Hierarchy, a as activeBoxManager, g as geomUtil, s as scoring, d as demographics, p as profilesData } from './chunks/annotations-BA4X7erX.js';
-import { s as summarizer } from './chunks/summarizer-4X4p5ndI.js';
-import { a as annotations, p as profiles } from './chunks/annotations-Dg2xcxh1.js';
-import { e as events } from './chunks/events-sdRw1Bkl.js';
-import { t as timeUtil } from './chunks/events-0MH9oHuf.js';
-import './chunks/db-BBYvHzlP.js';
-import './chunks/firebase-omMfH1CX.js';
+import { H as Hierarchy, a as activeBoxManager, g as geomUtil, s as scoring, d as demographics, p as profilesData } from './chunks/annotations-BrdKhlja.js';
+import { s as summarizer } from './chunks/summarizer-DAr5O4Ly.js';
+import { a as annotations, p as profiles } from './chunks/annotations-B6w99CxO.js';
+import { e as events } from './chunks/events-Dd6eR2Dd.js';
+import { t as timeUtil } from './chunks/events-DcYFQoSy.js';
+import './chunks/db-BZQDImdW.js';
+import './chunks/van-ui-CuITDDPw.js';
 
 class Exporter {
     constructor() {
@@ -7316,6 +7316,7 @@ class Reports {
         const { div, main, video, canvas, button } = van.tags;
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 

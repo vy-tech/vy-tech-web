@@ -14,6 +14,7 @@ class Schedule {
         const { div, main } = van.tags;
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 

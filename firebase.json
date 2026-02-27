@@ -3,7 +3,7 @@
         "public": "public",
         "rewrites": [
             {
-                "regex": "^/(user|users|dashboard|locations|schedule|settings|report|reports|profile|playlist|admin|chat)(?:/.*)?$",
+                "regex": "^/(user|users|home|dashboard|locations|schedule|settings|report|reports|profile|playlist|admin|chat)(?:/.*)?$",
                 "function": {
                     "functionId": "app",
                     "codebase": "default",
@@ -15,6 +15,14 @@
                 "function": {
                     "functionId": "chat",
                     "codebase": "chat",
+                    "region": "us-central1"
+                }
+            },
+            {
+                "regex": "^/api/org/.*$",
+                "function": {
+                    "functionId": "org",
+                    "codebase": "org",
                     "region": "us-central1"
                 }
             },
@@ -41,6 +49,17 @@
         {
             "source": "functions/chat",
             "codebase": "chat",
+            "ignore": [
+                "node_modules",
+                ".git",
+                "firebase-debug.log",
+                "firebase-debug.*.log",
+                "*.local"
+            ]
+        },
+        {
+            "source": "functions/org",
+            "codebase": "org",
             "ignore": [
                 "node_modules",
                 ".git",

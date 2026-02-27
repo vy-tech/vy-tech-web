@@ -38,6 +38,9 @@ WORKDIR /app/functions/app
 RUN npm install
 WORKDIR /app/functions/chat
 RUN npm install
+WORKDIR /app/functions/org
+RUN npm install
+
 
 WORKDIR /app
 ENTRYPOINT [ "/app/entrypoint.sh" ]

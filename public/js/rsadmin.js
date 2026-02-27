@@ -1,6 +1,5 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { d as database } from './chunks/db-BBYvHzlP.js';
-import './chunks/firebase-omMfH1CX.js';
+import { d as database } from './chunks/db-BZQDImdW.js';
 
 class Admin {
     constructor() {
@@ -23,6 +22,7 @@ class Admin {
         const { a, div, main, h1, canvas } = van.tags;
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 

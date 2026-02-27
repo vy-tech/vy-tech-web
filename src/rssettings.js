@@ -54,6 +54,7 @@ class Settings {
 
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 

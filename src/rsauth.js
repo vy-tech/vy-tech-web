@@ -10,6 +10,9 @@ import {
     signOut,
 } from "firebase/auth";
 
+import { UserProfilesData } from "./data/userProfiles.js";
+import { orgContext } from "./data/orgContext.js";
+
 class Auth {
     constructor() {
         this.auth = null;
@@ -47,12 +50,22 @@ class Auth {
                 // Redirect to the return URL if it exists
                 window.location.href = this.returnUrl;
             }
+
+            const userProfilesData = new UserProfilesData();
+            userProfilesData
+                .ensureProfile(user.uid, user.email, user.displayName)
+                .then(async (profile) => {
+                    await orgContext.init(user.uid);
+                    eventBus.fire("auth.profileReady", { profile });
+                });
         } else {
             // No user is signed in.
             this.user = null;
             if (this.isSignInEnabled) {
                 this.addSignInElements(document.body);
             }
+
+            eventBus.fire("auth.unauthenticated", {});
         }
     }
 

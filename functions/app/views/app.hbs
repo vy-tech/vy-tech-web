@@ -55,12 +55,12 @@
 
         <script type="text/javascript" src="https://www.youtube.com/iframe_api"></script>
 
-        <link rel="stylesheet" href="/css/app.css?v=2024090401" />
+        <link rel="stylesheet" href="/css/app.css" />
         <script type="module">
-            import { auth } from '/js/rsauth.js'; import { nav } from
-            '/js/rsnav.js'; import {
-            {{endpoint}}
-            } from '/js/rs{{endpoint}}.js?v=2025090401';
+            import { auth } from '/js/rsauth.js';
+            import { nav } from '/js/rsnav.js'; 
+            import { {{endpoint}} } from '/js/rs{{endpoint}}.js';
+
             {{endpoint}}.init();
         </script>
     </head>

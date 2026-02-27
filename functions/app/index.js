@@ -72,7 +72,7 @@ const STORAGE_URLS = {
         suffix: "",
         placeholder: "play/video-placeholder.mp4",
         encoded: false,
-    }
+    },
 };
 
 const getVideoUrl = (storageType, path) => {
@@ -183,8 +183,85 @@ app.get("/playlist/:location-:date-:camera-:quality.m3u8", async (req, res) => {
     res.send(playlistLines.join("\n"));
 });
 
+// Bluesky site news feed endpoint
+app.get("/bluesky/feed", async (req, res) => {
+    try {
+        // Check Firestore cache (bluesky_cache/site_news)
+        const cacheDoc = await db.collection("bluesky_cache").doc("site_news").get();
+
+        if (cacheDoc.exists) {
+            const cache = cacheDoc.data();
+            const now = new Date();
+
+            // Return if cache valid (expiresAt > now)
+            if (cache.expiresAt && cache.expiresAt.toDate() > now) {
+                console.log("Returning cached Bluesky feed");
+                return res.json({ posts: cache.posts, cached: true });
+            }
+        }
+
+        // Fetch fresh from Bluesky API
+        console.log("Fetching fresh Bluesky feed");
+        const blueskyUrl = "https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=vy-tech.bsky.social&limit=10";
+        const response = await fetch(blueskyUrl);
+
+        if (!response.ok) {
+            throw new Error(`Bluesky API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Transform posts
+        const posts = data.feed.map(item => ({
+            uri: item.post.uri,
+            text: item.post.record.text,
+            createdAt: item.post.record.createdAt,
+            author: {
+                handle: item.post.author.handle,
+                displayName: item.post.author.displayName || item.post.author.handle
+            }
+        }));
+
+        // Cache with 15-minute expiration
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + (15 * 60 * 1000));
+
+        await db.collection("bluesky_cache").doc("site_news").set({
+            posts,
+            fetchedAt: now,
+            expiresAt
+        });
+
+        res.json({ posts, cached: false });
+
+    } catch (error) {
+        console.error("Error fetching Bluesky feed:", error);
+
+        // Fallback: Return stale cache if available
+        try {
+            const cacheDoc = await db.collection("bluesky_cache").doc("site_news").get();
+            if (cacheDoc.exists) {
+                console.log("Returning stale cache due to error");
+                return res.json({
+                    posts: cacheDoc.data().posts,
+                    cached: true,
+                    stale: true
+                });
+            }
+        } catch (fallbackError) {
+            console.error("Fallback also failed:", fallbackError);
+        }
+
+        // Ultimate fallback
+        res.status(500).json({
+            error: "Failed to fetch site news",
+            posts: []
+        });
+    }
+});
+
 const appEndpoints = [
-    "dashboard",
+    "home",
     "locations",
     "schedule",
     "reports",

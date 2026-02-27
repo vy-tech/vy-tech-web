@@ -1,12 +1,13 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { d as database } from './chunks/db-BBYvHzlP.js';
+import { d as database, g as getApp } from './chunks/db-BZQDImdW.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
-import { g as getAuth, a as auth } from './chunks/rsauth-Cz-aoAXN.js';
+import { g as getAuth, a as auth } from './chunks/rsauth-CEYbFBMj.js';
 import './chunks/index.esm2017-D8q59gHf.js';
-import { g as getApp } from './chunks/firebase-omMfH1CX.js';
-import { E as EventsData, t as timeUtil } from './chunks/events-0MH9oHuf.js';
-import { H as Hierarchy, A as AnnotationsData, b as progress } from './chunks/annotations-BA4X7erX.js';
-import { S as Summarizer } from './chunks/summarizer-4X4p5ndI.js';
+import { E as EventsData, t as timeUtil } from './chunks/events-DcYFQoSy.js';
+import { H as Hierarchy, A as AnnotationsData, b as progress } from './chunks/annotations-BrdKhlja.js';
+import { S as Summarizer } from './chunks/summarizer-DAr5O4Ly.js';
+import './chunks/orgContext-D9qKktns.js';
+import './chunks/van-ui-CuITDDPw.js';
 
 /**
  * marked v16.4.1 - a markdown parser
@@ -4190,6 +4191,7 @@ class Chat {
         const { a, div, main, h1, input, button } = van.tags;
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 

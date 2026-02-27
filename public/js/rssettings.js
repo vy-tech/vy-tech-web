@@ -1,11 +1,11 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { p as profiles, a as annotations } from './chunks/annotations-Dg2xcxh1.js';
-import { S as Score, H as Hierarchy } from './chunks/annotations-BA4X7erX.js';
-import { e as events } from './chunks/events-sdRw1Bkl.js';
-import { d as database } from './chunks/db-BBYvHzlP.js';
+import { p as profiles, a as annotations } from './chunks/annotations-B6w99CxO.js';
+import { S as Score, H as Hierarchy } from './chunks/annotations-BrdKhlja.js';
+import { e as events } from './chunks/events-Dd6eR2Dd.js';
+import { d as database } from './chunks/db-BZQDImdW.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
-import './chunks/events-0MH9oHuf.js';
-import './chunks/firebase-omMfH1CX.js';
+import './chunks/van-ui-CuITDDPw.js';
+import './chunks/events-DcYFQoSy.js';
 
 /*!
  * @kurkle/color v0.3.4
@@ -18746,6 +18746,7 @@ class Settings {
 
         parentElement =
             parentElement ||
+            document.getElementById("main-content") ||
             document.getElementById("container") ||
             document.body;
 
