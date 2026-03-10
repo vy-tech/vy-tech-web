@@ -30,6 +30,8 @@ This web application is the primary way end users access the Vy platform. It is 
 - LLM driven chat interface to investigate data
 - Developer API access and documentation
 
+More documentation is available under the docs/ directory.
+
 ## Project implementation notes
 
 Dependencies:
