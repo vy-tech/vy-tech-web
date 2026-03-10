@@ -53,6 +53,12 @@ class AnnotationLog {
             this.annotations = await annotations.getByHierarchy(this.hierarchy);
             this.reinitializeContainers();
         });
+
+        eventBus.on("ui.hierarchyChanged", async (e) => {
+            this.hierarchy = e.detail.hierarchy;
+            this.annotations = await annotations.getByHierarchy(this.hierarchy);
+            this.reinitializeContainers();
+        });
     }
 
     createElement(options = {}) {
