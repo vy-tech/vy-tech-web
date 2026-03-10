@@ -251,6 +251,12 @@ class Summarizer {
     }
 
     async ensure(hierarchy, cameras = 5) {
+        if (!hierarchy) {
+            this.summaries = [];
+            eventBus.fire("summarizer.ready");
+            return this.summaries;
+        }
+
         const hier = new Hierarchy(hierarchy);
 
         console.log(`Ensuring summaries for ${hier.location}-${hier.date}...`);

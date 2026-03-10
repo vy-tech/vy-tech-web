@@ -12,6 +12,7 @@ import { events } from "./ui/events.js";
 import { annotations } from "./ui/annotations.js";
 import { exporter } from "./ui/exporter.js";
 
+import { Hierarchy } from "./util/hierarchy.js";
 import { timeUtil } from "./util/time.js";
 
 import { heatmap } from "./viz/heatmap.js";
@@ -23,15 +24,17 @@ import { genderDemo, ageDemo } from "./viz/demographics.js";
 //import { momentlist } from "./viz/momentlist.js";
 import { linkedPlayer } from "./viz/linkedPlayer.js";
 import { annotationLog } from "./viz/annotationlog.js";
-import { summaryEditor } from "./viz/summaryeditor.js";
+//import { summaryEditor } from "./viz/summaryeditor.js";
 
 class Reports {
     constructor() {
-        this.hierarchy = this.getHierarchyFromPath() || "raimondi-20250711-01";
+        this.hierarchy = this.getHierarchyFromPath() || null;
         this.currentCamera = 1;
         this.startTimeOffset = this.getTimeOffsetFromHash() || 0;
         this.profileId = "BkBUQq4GiSfuwHN7YrK3";
-        this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
+        this.playlistUrl = this.hierarchy
+            ? `/playlist/${this.hierarchy}-720p.m3u8`
+            : null;
 
         this.score = scoring;
 
@@ -40,6 +43,36 @@ class Reports {
 
         this.event = null;
         this.wallclockStartTimeUTC = null;
+    }
+
+    async changeHierarchy(hierarchy) {
+        console.log("Changing hierarchy to:", hierarchy);
+
+        this.player.pause();
+
+        // TODO FIXME This is super brittle please refactor
+        if (!hierarchy) {
+            this.hierarchy = null;
+            this.playlistUrl = null;
+            this.hls.loadSource("");
+            activeBoxManager.reset();
+            this.score.resetWindow();
+            events.current = null;
+        } else {
+            let h = new Hierarchy(hierarchy);
+            this.hierarchy = h.toString("-");
+            this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
+            this.startTimeOffset = 0;
+
+            h.camera = 1;
+            await events.getByHierarchy(h.toString(":"));
+            await summarizer.ensure(this.hierarchy);
+            this.changeCamera(1);
+        }
+
+        eventBus.fire("ui.hierarchyChanged", {
+            hierarchy: this.hierarchy,
+        });
     }
 
     // async loadTranscript() {
@@ -86,7 +119,7 @@ class Reports {
         profilesData.profile = profiles.profile;
 
         this.event = await events.getByHierarchy(
-            this.hierarchy.replaceAll("-", ":")
+            this.hierarchy?.replaceAll("-", ":")
         );
 
         this.addElements();
@@ -139,8 +172,9 @@ class Reports {
             const hierarchy = e.detail;
             console.log("Event selected:", hierarchy);
 
-            const pathname = `/reports/${hierarchy.replaceAll(":", "/")}`;
-            window.location.pathname = pathname;
+            this.changeHierarchy(hierarchy);
+            //const pathname = `/reports/${hierarchy.replaceAll(":", "/")}`;
+            //window.location.pathname = pathname;
         });
 
         eventBus.on("ui.requestEditMode", (e) => {
@@ -229,7 +263,7 @@ class Reports {
 
                         // Event selector
                         events.createSelectorElement(
-                            this.hierarchy.replaceAll("-", ":")
+                            this.hierarchy?.replaceAll("-", ":")
                         ),
 
                         // Video section
@@ -253,14 +287,14 @@ class Reports {
                                 class: "absolute bottom-0 left-0 w-full h-[30px]",
                             })
                         ),
-                        div(
-                            {
-                                id: "report-mode-edit",
-                                class: "hidden",
-                            },
+                        // div(
+                        //     {
+                        //         id: "report-mode-edit",
+                        //         class: "hidden",
+                        //     },
 
-                            summaryEditor.createElement()
-                        ),
+                        //     summaryEditor.createElement()
+                        // ),
                         div(
                             {
                                 id: "report-mode-view",
@@ -436,7 +470,8 @@ class Reports {
 
             this.hls = new Hls();
             this.hls.attachMedia(this.player.tech_.el_);
-            this.hls.loadSource(this.playlistUrl);
+
+            if (this.playlistUrl) this.hls.loadSource(this.playlistUrl);
 
             this.hls.on(Hls.Events.LEVEL_LOADED, async (event, data) => {
                 const fragments = data.details.fragments;

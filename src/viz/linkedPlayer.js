@@ -22,6 +22,12 @@ class LinkedPlayer {
         eventBus.addEventListener("playback.timeupdate", (e) => {
             this.sync(e.detail.currentTime);
         });
+
+        eventBus.addEventListener("ui.hierarchyChanged", (e) => {
+            console.log("Hierarchy changed, reinitializing linked player...");
+            this.container.innerHTML = "";
+            this.init();
+        });
     }
 
     createElement(options = {}) {
@@ -36,9 +42,10 @@ class LinkedPlayer {
 
     init() {
         const event = events.get();
-        const embedVideo = event.embed;
+        const embedVideo = event?.embed;
 
         if (!embedVideo) {
+            this.container.innerHTML = "";
             console.error("No embed available");
             return;
         }

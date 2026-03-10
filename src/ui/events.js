@@ -16,12 +16,17 @@ class Events extends EventsData {
     createOptionElement(eventData, selected) {
         const { option } = van.tags;
 
-        const displayDate = eventData.begin.toDate().toLocaleDateString();
-        const displayDescription = eventData.description.replace(
-            /\(Baseball\) /,
-            ""
-        );
-        const displayText = `${displayDate} - ${displayDescription}`;
+        let displayText = eventData.description;
+
+        if (eventData.begin) {
+            const displayDate = eventData.begin.toDate().toLocaleDateString();
+            const displayDescription = eventData.description.replace(
+                /\(Baseball\) /,
+                ""
+            );
+            displayText = `${displayDate} - ${displayDescription}`;
+        }
+
         return option(
             {
                 value: eventData.hierarchy,
@@ -42,19 +47,35 @@ class Events extends EventsData {
                 class: "w-full text-black p-1",
             });
 
+            van.add(
+                sel,
+                this.createOptionElement(
+                    {
+                        hierarchy: "",
+                        description: "(Select an Event)",
+                    },
+                    selected
+                )
+            );
             eventListState.val.forEach((eventData) =>
                 van.add(sel, this.createOptionElement(eventData, selected))
             );
 
             sel.addEventListener("change", (e) => {
+                const hierarchy = e.target.value == "" ? null : e.target.value;
                 eventBus.dispatchEvent(
                     new CustomEvent("ui.requestEvent", {
-                        detail: e.target.value,
+                        detail: hierarchy,
                     })
                 );
             });
 
             return sel;
+        });
+
+        eventBus.on("org.changed", () => {
+            this.setSelectorToAvailable(eventListState);
+            eventBus.fire("ui.requestEvent", null);
         });
 
         return container;
