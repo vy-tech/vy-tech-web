@@ -1,19 +1,28 @@
 ![][image1]
 
-**Machine intelligence is incomplete without understanding people.**
+**AI is incomplete without understanding.**
 
-**Vy is building the world's most comprehensive model for understanding human emotion and behavior from video.**
+**Vy is building the world's most comprehensive model for understanding human emotion & behavior from video.**
 
-| ![][image2] |  To make sure fans are having fun even when the home team isn’t winning.  The Oakland Ballers use Vy to measure and react to engagement.  Major League Baseball uses this data to understand how fans respond to new rules.  |
+**Foundation models, AI agents, and humanoid robots are moving into the real world — but they're blind to emotion, behavior, and intent. Vy helps them really see.**
+
+**Insight**  
+On-demand analysis of audience interaction  
+**Action**  
+Real-time response to behavior in any context  
+**Integrated**  
+Key component of understanding human behavior in AI ecosystems
+
+| ![][image2] |  Make sure fans are always engaged.  The Oakland Ballers use Vy to measure & react to fan engagement in real time. Major League Baseball uses this data to understand how fans actually respond to the game — and sponsors pay more when the data proves it works. Without Vy Understanding through attrition, lost sales, and guesswork With Vy Direct data-driven cause-and-effect — reactions tied to events as they happen   |
 | :---- | :---- |
 
-|  For ensuring a satisfying vacation. Hotels and restaurants are using Vy to watch for dissatisfied customers and deploying support to turn it around before the customers do.  | ![][image3] |
+|  Ensure a satisfying visit. Hotels and restaurants use Vy to watch for dissatisfied customers and muster support to turn attitudes back around before guests turn their backs.  Hotels are exploring how Vy helps detect line fatigue and alerts guest services before frustration sets in. Without Vy Reliance on unscalable notice and respond — hearing about problems after the fact With Vy Leverage behavior to trigger alerts and interact with apps and agents in real time   | ![][image3] |
 | :---- | ----: |
 
-| ![][image4] |  To keep people safe.  Property managers are using Vy to trigger alerts when people are feeling concerned about safety.  |
+| ![][image4] |  Keep people safe — and give AI a way to listen.   Property managers use Vy to trigger alerts when people feel unsafe. And as AI agents become embodied — in robots, kiosks, and physical spaces — Vy gives them a consistent way to read the room. Our OpenClaw skill uses Vy to enable non-verbal interaction and feedback between people and machines. Without Vy Agents employ one-off strategies for understanding users and behavior on video With Vy Consistent deep analysis of behavior to ensure positive interactions and informed responses   |
 | :---- | :---- |
 
-We help businesses react to the customers they see through tools, agents, and integrations.
+We help AI react appropriately to people they see through tools, agents, and integrations.
 
 Vy is made in NYC by people and robots
 

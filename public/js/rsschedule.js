@@ -1,6 +1,6 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
 import { e as events } from './chunks/events-B-e6WVlY.js';
-import './chunks/eventbus-B9JUr222.js';
+import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
 import './chunks/events-B3vAjkhd.js';
 import './chunks/db-BZQDImdW.js';
 import './chunks/orgContext-npeuc6rs.js';
@@ -55492,6 +55492,10 @@ class Schedule {
     init() {
         this.addElements();
         eventgrid.refresh();
+
+        eventBus.on("org.changed", () => {
+            eventgrid.refresh();
+        });
     }
 
     addElements(parentElement) {

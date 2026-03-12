@@ -1,6 +1,7 @@
 import van from "vanjs-core";
 
 import { eventgrid } from "./viz/eventgrid.js";
+import { eventBus } from "./eventbus.js";
 
 class Schedule {
     constructor() {}
@@ -8,6 +9,10 @@ class Schedule {
     init() {
         this.addElements();
         eventgrid.refresh();
+
+        eventBus.on("org.changed", () => {
+            eventgrid.refresh();
+        });
     }
 
     addElements(parentElement) {
