@@ -11,6 +11,28 @@ class EventsData {
         return this.current;
     }
 
+    getCurrentTitle() {
+        if (this.current) {
+            let displayText = this.current.description;
+
+            if (this.current.begin) {
+                const displayDate = this.current.begin
+                    .toDate()
+                    .toLocaleDateString();
+                const displayDescription = this.current.description.replace(
+                    /\(Baseball\) /,
+                    ""
+                );
+
+                displayText = `${displayDate} - ${displayDescription}`;
+            }
+
+            return displayText;
+        } else {
+            return "(No Event Selected)";
+        }
+    }
+
     async getByHierarchy(hierarchy) {
         if (hierarchy == null) {
             this.current = null;

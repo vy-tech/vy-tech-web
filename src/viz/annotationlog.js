@@ -1,8 +1,10 @@
 import van from "vanjs-core";
 
 import { eventBus } from "../eventbus.js";
+import { eventsData } from "../data/events.js";
 import { annotations } from "../ui/annotations.js";
 import { timeUtil } from "../util/time.js";
+import { Hierarchy } from "../util/hierarchy.js";
 
 class AnnotationLog {
     /**
@@ -35,7 +37,7 @@ class AnnotationLog {
         this.isProgrammaticScroll = false; // Flag to distinguish programmatic vs user scrolling
 
         eventBus.on("playback.ready", async (e) => {
-            this.hierarchy = e.detail.hierarchy;
+            this.hierarchy = new Hierarchy(e.detail.hierarchy);
             this.annotations = await annotations.getByHierarchy(this.hierarchy);
             this.createAnnotationElements();
         });
@@ -55,22 +57,54 @@ class AnnotationLog {
         });
 
         eventBus.on("ui.hierarchyChanged", async (e) => {
-            this.hierarchy = e.detail.hierarchy;
+            this.hierarchy = new Hierarchy(e.detail.hierarchy);
             this.annotations = await annotations.getByHierarchy(this.hierarchy);
             this.reinitializeContainers();
         });
     }
 
     createElement(options = {}) {
-        const { div } = van.tags;
+        const { div, a, i } = van.tags;
 
         let merged = {
             id: "report-annotation-log",
-            class: "w-full h-[95vh] flex flex-col",
+            class: "w-full h-[90vh] flex flex-col",
             ...options,
         };
 
         this.container = div(merged);
+
+        this.buttonContainer = div(
+            {
+                class: "flex-none h-[24px] flex justify-end mb-1",
+            },
+            a(
+                {
+                    href: "#",
+                    title: "Import Transcript",
+                    onclick: () => {
+                        console.log("Import Transcript");
+                        eventBus.fire("ui.importTranscript", {
+                            hierarchy: this.hierarchy.toString(":"),
+                            event: this.event,
+                        });
+                    },
+                },
+                i({ class: "las la-file-import mr-2" })
+            ),
+            a(
+                {
+                    href: "#",
+                    title: "Add Annotation",
+                    onclick: () => {
+                        eventBus.fire("ui.addAnnotation", {
+                            hierarchy: this.hierarchy.toString(":"),
+                        });
+                    },
+                },
+                i({ class: "las la-plus-circle mr-2" })
+            )
+        );
 
         // Create the three main containers with proper flex constraints
         this.topStickyContainer = div({
@@ -88,6 +122,7 @@ class AnnotationLog {
         // Add all containers to main container
         van.add(
             this.container,
+            this.buttonContainer,
             this.topStickyContainer,
             this.middleContainer,
             this.bottomStickyContainer
@@ -404,6 +439,8 @@ class AnnotationLog {
                     this.createAnnotationElement(annotation)
                 )
             );
+
+            eventBus.fire("ui.annotations.ready");
         } else {
             // No annotations available
             van.add(

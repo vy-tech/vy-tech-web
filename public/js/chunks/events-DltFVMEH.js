@@ -1,7 +1,6 @@
-import van from "vanjs-core";
-import { eventBus } from "../eventbus.js";
-import { EventsData } from "../data/events.js";
-import { Hierarchy } from "../util/hierarchy.js";
+import { v as van } from './van-t8DywzvC.js';
+import { e as eventBus } from './eventbus-B9JUr222.js';
+import { E as EventsData, H as Hierarchy } from './hierarchy-DQ6298PP.js';
 
 class Events extends EventsData {
     constructor() {
@@ -214,5 +213,6 @@ class Events extends EventsData {
 }
 
 const events = new Events();
-export default events;
-export { events };
+
+export { events as e };
+//# sourceMappingURL=events-DltFVMEH.js.map

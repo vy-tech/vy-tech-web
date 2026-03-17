@@ -13,6 +13,11 @@ service firebase.storage {
       allow read: if true;
       allow write: if false;
     }
+
+    match /scenes/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
     
     match /summaries/{allPaths=**} {
       allow read: if true;

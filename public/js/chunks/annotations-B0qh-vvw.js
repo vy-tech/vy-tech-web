@@ -1,12 +1,69 @@
-import van from "vanjs-core";
-import { Modal } from "vanjs-ui";
-import { database } from "../data/db.js";
-import { eventBus } from "../eventbus.js";
-import { timeUtil } from "../util/time.js";
-import { progress } from "./progress.js";
-import { Hierarchy } from "../util/hierarchy.js";
+import { v as van } from './van-t8DywzvC.js';
+import { e as eventBus } from './eventbus-B9JUr222.js';
+import { P as ProfilesData, A as AnnotationsData, b as progress } from './annotations-DPEzodei.js';
+import { M as Modal } from './van-ui-CuITDDPw.js';
+import { d as database } from './db-BZQDImdW.js';
+import { H as Hierarchy, t as timeUtil } from './hierarchy-XEzTDWBS.js';
 
-import { AnnotationsData } from "../data/annotations.js";
+class Profiles extends ProfilesData {
+    constructor() {
+        super();
+    }
+
+    async setSelectorToAll() {
+        const profiles = await this.getAll();
+        this.profileListState.val = profiles;
+    }
+
+    createOptionElement(profileData, selected) {
+        const { option } = van.tags;
+
+        const displayName = profileData.name || "Unnamed Profile";
+        const displayDescription = profileData.description
+            ? ` - ${profileData.description}`
+            : "";
+        const displayText = `${displayName}${displayDescription}`;
+
+        return option(
+            {
+                value: profileData.id,
+                selected: profileData.id == selected,
+            },
+            displayText
+        );
+    }
+
+    createSelectorElement(selected) {
+        const { div, select } = van.tags;
+        this.profileListState = van.state([]);
+        this.setSelectorToAll();
+
+        const container = div({ class: "vyprofiles-selector" }, () => {
+            const sel = select({
+                id: "profile-select",
+                class: "w-full text-black p-1",
+            });
+
+            this.profileListState.val.forEach((profileData) =>
+                van.add(sel, this.createOptionElement(profileData, selected))
+            );
+
+            sel.addEventListener("change", (e) => {
+                eventBus.dispatchEvent(
+                    new CustomEvent("ui.requestProfile", {
+                        detail: e.target.value,
+                    })
+                );
+            });
+
+            return sel;
+        });
+
+        return container;
+    }
+}
+
+const profiles = new Profiles();
 
 class Annotations extends AnnotationsData {
     constructor() {
@@ -592,7 +649,7 @@ class Annotations extends AnnotationsData {
                             {
                                 class: "text-lg font-semibold text-gray-900 mb-4 border-b pb-2",
                             },
-                            "Import Transcript"
+                            "Create Annotation"
                         ),
                         formEl
                     )
@@ -660,5 +717,6 @@ class Annotations extends AnnotationsData {
 }
 
 const annotations = new Annotations();
-export default annotations;
-export { annotations, Annotations };
+
+export { annotations as a, profiles as p };
+//# sourceMappingURL=annotations-B0qh-vvw.js.map

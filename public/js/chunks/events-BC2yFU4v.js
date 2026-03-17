@@ -1,7 +1,6 @@
-import van from "vanjs-core";
-import { eventBus } from "../eventbus.js";
-import { EventsData } from "../data/events.js";
-import { Hierarchy } from "../util/hierarchy.js";
+import { v as van } from './van-t8DywzvC.js';
+import { e as eventBus } from './eventbus-B9JUr222.js';
+import { E as EventsData, H as Hierarchy } from './hierarchy-XEzTDWBS.js';
 
 class Events extends EventsData {
     constructor() {
@@ -84,13 +83,6 @@ class Events extends EventsData {
                 ? Math.floor((selHierarchy.date % 10000) / 100)
                 : null;
             const locations = [...grouped.keys()];
-
-            if (locations.length === 0) {
-                return div(
-                    { class: "p-4 text-gray-500" },
-                    "No available events for the current organization."
-                );
-            }
 
             return div(
                 ...locations.map((loc) => {
@@ -214,5 +206,6 @@ class Events extends EventsData {
 }
 
 const events = new Events();
-export default events;
-export { events };
+
+export { events as e };
+//# sourceMappingURL=events-BC2yFU4v.js.map

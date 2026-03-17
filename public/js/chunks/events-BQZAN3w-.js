@@ -1,7 +1,6 @@
-import van from "vanjs-core";
-import { eventBus } from "../eventbus.js";
-import { EventsData } from "../data/events.js";
-import { Hierarchy } from "../util/hierarchy.js";
+import { v as van } from './van-t8DywzvC.js';
+import { e as eventBus } from './eventbus-B9JUr222.js';
+import { E as EventsData } from './events-B3vAjkhd.js';
 
 class Events extends EventsData {
     constructor() {
@@ -46,13 +45,9 @@ class Events extends EventsData {
         const groupEvents = (events) => {
             const grouped = new Map(); // location -> Map(year -> Map(monthName -> events[]))
             for (const evt of events) {
-                const h = new Hierarchy(evt.hierarchy);
-                const loc = h.location || "Unknown";
-                const date = h.date || 19700101;
-
-                const year = Math.floor(date / 10000);
-                const month = Math.floor((date % 10000) / 100);
-
+                const loc = evt.hierarchy.split(/[:\-]/)[0] || "Unknown";
+                const year = evt.begin ? evt.begin.year : 0;
+                const month = evt.begin ? evt.begin.monthLong : "Unknown";
                 if (!grouped.has(loc)) grouped.set(loc, new Map());
                 const byYear = grouped.get(loc);
                 if (!byYear.has(year)) byYear.set(year, new Map());
@@ -75,55 +70,29 @@ class Events extends EventsData {
         const container = div({ class: "vyevents-nav" }, () => {
             const grouped = groupEvents(eventListState.val);
             const sel = selectedState.val;
-            const selHierarchy = new Hierarchy(sel);
-            const selLocation = selHierarchy.location;
-            const selYear = selHierarchy.date
-                ? Math.floor(selHierarchy.date / 10000)
-                : null;
-            const selMonth = selHierarchy.date
-                ? Math.floor((selHierarchy.date % 10000) / 100)
-                : null;
             const locations = [...grouped.keys()];
-
-            if (locations.length === 0) {
-                return div(
-                    { class: "p-4 text-gray-500" },
-                    "No available events for the current organization."
-                );
-            }
 
             return div(
                 ...locations.map((loc) => {
                     const byYear = grouped.get(loc);
                     const years = [...byYear.keys()].sort((a, b) => b - a);
                     return details(
-                        { open: locations.length === 1 || loc === selLocation },
+                        { open: locations.length === 1 },
                         summary(
-                            {
-                                class: "cursor-pointer font-semibold p-1 select-none",
-                            },
+                            { class: "cursor-pointer font-semibold p-1 select-none" },
                             loc
                         ),
                         ...years.map((year) => {
                             const byMonth = byYear.get(year);
                             return details(
-                                {
-                                    open:
-                                        years.length === 1 || year === selYear,
-                                },
                                 summary(
-                                    {
-                                        class: "cursor-pointer ml-2 p-1 select-none",
-                                    },
+                                    { class: "cursor-pointer ml-2 p-1 select-none" },
                                     String(year)
                                 ),
                                 ...[...byMonth.keys()].map((month) =>
                                     details(
-                                        { open: month === selMonth },
                                         summary(
-                                            {
-                                                class: "cursor-pointer ml-4 p-1 select-none",
-                                            },
+                                            { class: "cursor-pointer ml-4 p-1 select-none" },
                                             month
                                         ),
                                         ul(
@@ -131,17 +100,13 @@ class Events extends EventsData {
                                             ...byMonth.get(month).map((evt) =>
                                                 li(
                                                     {
-                                                        class: `cursor-pointer p-1 rounded hover:bg-blue-600${evt.hierarchy === sel ? " font-bold bg-blue-500" : ""}`,
+                                                        class: `cursor-pointer p-1 rounded hover:bg-blue-100${evt.hierarchy === sel ? " font-bold bg-blue-50" : ""}`,
                                                         onclick: () => {
-                                                            selectedState.val =
-                                                                evt.hierarchy;
+                                                            selectedState.val = evt.hierarchy;
                                                             eventBus.dispatchEvent(
-                                                                new CustomEvent(
-                                                                    "ui.requestEvent",
-                                                                    {
-                                                                        detail: evt.hierarchy,
-                                                                    }
-                                                                )
+                                                                new CustomEvent("ui.requestEvent", {
+                                                                    detail: evt.hierarchy,
+                                                                })
                                                             );
                                                         },
                                                     },
@@ -214,5 +179,6 @@ class Events extends EventsData {
 }
 
 const events = new Events();
-export default events;
-export { events };
+
+export { events as e };
+//# sourceMappingURL=events-BQZAN3w-.js.map

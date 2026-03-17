@@ -2,7 +2,7 @@ import { r as rsv } from './chunks/rsvan-C-KzMu00.js';
 import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
 import { U as UserProfilesData, a as auth } from './chunks/rsauth-BAxlu-zX.js';
 import { O as OrganizationsData, o as orgContext } from './chunks/orgContext-npeuc6rs.js';
-import { M as Modal } from './chunks/van-ui-CuITDDPw.js';
+import { M as Modal } from './chunks/van-ui-YSP0ZuSh.js';
 import { v as van } from './chunks/van-t8DywzvC.js';
 import './chunks/db-BZQDImdW.js';
 import './chunks/index.esm2017-D8q59gHf.js';
