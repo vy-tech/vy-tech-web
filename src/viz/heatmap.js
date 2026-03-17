@@ -9,6 +9,10 @@ class Heatmap {
         eventBus.addEventListener("playback.timeupdate", (e) => {
             this.paint();
         });
+
+        eventBus.addEventListener("ui.hierarchyChanged", (e) => {
+            this.paint();
+        });
     }
 
     createElement(options = {}) {

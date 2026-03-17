@@ -45,6 +45,16 @@ class OrgContext {
         });
     }
 
+    getCurrentOrg() {
+        let orgId = this.currentOrgId.val;
+
+        if (!orgId) {
+            orgId = localStorage.getItem(STORAGE_KEY);
+        }
+
+        return orgId;
+    }
+
     async setCurrentOrg(orgId, fireEvent = true) {
         const org = this.userOrgs.val.find((o) => o.id === orgId);
         if (!org) {
@@ -55,6 +65,7 @@ class OrgContext {
         this.currentOrgId.val = orgId;
         this.currentOrg.val = org;
         localStorage.setItem(STORAGE_KEY, orgId);
+        console.log("Set current organization to:", orgId);
 
         if (fireEvent) {
             eventBus.fire("org.changed", {

@@ -27,6 +27,10 @@ class SummaryGraph {
         eventBus.addEventListener("playback.cameraChanged", (e) => {
             this.isStale = true;
         });
+
+        eventBus.addEventListener("ui.hierarchyChanged", (e) => {
+            this.resetData();
+        });
     }
 
     createElement(options = {}) {
@@ -45,6 +49,24 @@ class SummaryGraph {
         this.init();
 
         return this.canvas;
+    }
+
+    resetData() {
+        const labels = [];
+        const peopleData = [];
+        const scoreData = [];
+
+        for (let i = 0; i < 100; i++) {
+            labels.push(`${i + 1}%`);
+            peopleData.push(0);
+            scoreData.push(0);
+        }
+
+        // Update the chart data
+        this.chart.data.labels = labels;
+        this.chart.data.datasets[0].data = peopleData;
+        this.chart.data.datasets[1].data = scoreData;
+        this.chart.update();
     }
 
     init() {
@@ -140,6 +162,7 @@ class SummaryGraph {
 
     paint() {
         let summary = summarizer.getCurrent();
+        if (!summary) return;
         if (!this.chart) return;
 
         // // Only paint it when the summary changes..

@@ -34,6 +34,14 @@ class Ekg {
         eventBus.addEventListener("playback.timeseek", () => {
             this.timeSeries.clear();
         });
+
+        eventBus.addEventListener("ui.hierarchyChanged", (e) => {
+            this.score = 0;
+            this.sumScore = 0;
+            this.timeSeries.clear();
+            this.paint();
+            this.smoothie.stop();
+        });
     }
 
     createElement(options = {}) {

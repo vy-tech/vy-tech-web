@@ -1,4 +1,5 @@
 import van from "vanjs-core";
+import { Tabs } from "vanjs-ui";
 
 import { eventBus } from "./eventbus.js";
 
@@ -12,6 +13,7 @@ import { events } from "./ui/events.js";
 import { annotations } from "./ui/annotations.js";
 import { exporter } from "./ui/exporter.js";
 
+import { Hierarchy } from "./util/hierarchy.js";
 import { timeUtil } from "./util/time.js";
 
 import { heatmap } from "./viz/heatmap.js";
@@ -23,15 +25,17 @@ import { genderDemo, ageDemo } from "./viz/demographics.js";
 //import { momentlist } from "./viz/momentlist.js";
 import { linkedPlayer } from "./viz/linkedPlayer.js";
 import { annotationLog } from "./viz/annotationlog.js";
-import { summaryEditor } from "./viz/summaryeditor.js";
+//import { summaryEditor } from "./viz/summaryeditor.js";
 
 class Reports {
     constructor() {
-        this.hierarchy = this.getHierarchyFromPath() || "raimondi-20250711-01";
+        this.hierarchy = this.getHierarchyFromPath() || null;
         this.currentCamera = 1;
         this.startTimeOffset = this.getTimeOffsetFromHash() || 0;
         this.profileId = "BkBUQq4GiSfuwHN7YrK3";
-        this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
+        this.playlistUrl = this.hierarchy
+            ? `/playlist/${this.hierarchy.toString("-")}-720p.m3u8`
+            : null;
 
         this.score = scoring;
 
@@ -42,41 +46,38 @@ class Reports {
         this.wallclockStartTimeUTC = null;
     }
 
-    // async loadTranscript() {
-    //     const [token, date] = this.hierarchy.split("-");
+    async changeHierarchy(hierarchy) {
+        console.log("Changing hierarchy to:", hierarchy);
 
-    //     const url = `https://storage.roarscore.ai/production/play/${token}/${date}/transcript-${token}-${date}.txt`;
+        this.player.pause();
 
-    //     try {
-    //         let response = await fetch(url);
+        // TODO FIXME This is super brittle please refactor
+        if (!hierarchy) {
+            this.hierarchy = null;
+            this.playlistUrl = null;
+            this.hls.loadSource("");
+            activeBoxManager.reset();
+            this.score.resetWindow();
+            this.event = events.current = null;
+        } else {
+            this.hierarchy = new Hierarchy(hierarchy);
+            this.playlistUrl = `/playlist/${this.hierarchy.toString("-")}-720p.m3u8`;
+            this.startTimeOffset = 0;
 
-    //         if (response.ok) {
-    //             let lines = await response.text();
-    //             lines = lines.split(/\s*[\r\n]+\s*/);
+            this.hierarchy.camera = 1;
+            this.event = await events.getByHierarchy(
+                this.hierarchy.toString(":")
+            );
+            await summarizer.ensure(this.hierarchy.toString("-"));
+            this.changeCamera(1);
+        }
 
-    //             let offset = 0;
-    //             let result = [];
-    //             if (/^[\+\-]/.test(lines[0])) {
-    //                 let line = lines.shift();
-    //                 offset = timeUtil.toSeconds(line.substr(1), true);
-    //                 if (line[0] == "-") offset = -offset;
-    //             }
+        this.updateReportTitle();
 
-    //             while (lines.length) {
-    //                 let t = lines.shift();
-    //                 let msg = lines.shift();
-    //                 t = timeUtil.toSeconds(t, true) + offset;
-    //                 result.push({ time: t, msg: msg });
-    //             }
-
-    //             return result;
-    //         }
-    //     } catch (e) {
-    //         console.log(`While fetching transcript: ${e}`);
-    //     }
-
-    //     return [];
-    // }
+        eventBus.fire("ui.hierarchyChanged", {
+            hierarchy: this.hierarchy,
+        });
+    }
 
     async init() {
         this.initListeners();
@@ -85,33 +86,39 @@ class Reports {
         // This is kind of hacky, todo fixme
         profilesData.profile = profiles.profile;
 
-        this.event = await events.getByHierarchy(
-            this.hierarchy.replaceAll("-", ":")
-        );
+        this.event = await events.getByHierarchy(this.hierarchy?.toString(":"));
 
         this.addElements();
 
-        await summarizer.ensure(this.hierarchy);
-
-        //momentlist.update();
-
-        //this.transcript = await this.loadTranscript();
+        await summarizer.ensure(this.hierarchy?.toString("-"));
 
         eventBus.fire("playback.ready", {
-            hierarchy: this.hierarchy,
+            hierarchy: this.hierarchy?.toString("-"),
         });
+
+        this.updateReportTitle();
+    }
+
+    updateReportTitle() {
+        if (this.event) {
+            document.title = `Vy - ${events.getCurrentTitle()}`;
+            document.getElementById("report-title").innerText =
+                events.getCurrentTitle();
+        } else {
+            document.title = "Vy - No Event Selected";
+            document.getElementById("report-title").innerText =
+                "No Event Selected";
+        }
     }
 
     changeCamera(camera) {
         console.log("Camera change requested:", camera);
 
         this.currentCamera = camera;
-        let newHierarchy = this.hierarchy.split("-").slice(0, 2).join("-");
-        newHierarchy += `-${camera.toString().padStart(2, "0")}`;
-        this.hierarchy = newHierarchy;
+        this.hierarchy.camera = camera;
         this.startTimeOffset = this.player.currentTime();
         console.log("Time offset set to:", this.startTimeOffset);
-        this.playlistUrl = `/playlist/${this.hierarchy}-720p.m3u8`;
+        this.playlistUrl = `/playlist/${this.hierarchy.toString("-")}-720p.m3u8`;
         activeBoxManager.reset();
         this.score.resetWindow();
         this.hls.loadSource(this.playlistUrl);
@@ -119,7 +126,7 @@ class Reports {
 
         eventBus.fire("playback.cameraChanged", {
             camera: camera,
-            hierarchy: this.hierarchy,
+            hierarchy: this.hierarchy.toString("-"),
         });
     }
 
@@ -139,8 +146,7 @@ class Reports {
             const hierarchy = e.detail;
             console.log("Event selected:", hierarchy);
 
-            const pathname = `/reports/${hierarchy.replaceAll(":", "/")}`;
-            window.location.pathname = pathname;
+            this.changeHierarchy(hierarchy);
         });
 
         eventBus.on("ui.requestEditMode", (e) => {
@@ -156,6 +162,10 @@ class Reports {
             editContainer.classList.add("hidden");
             viewContainer.classList.remove("hidden");
         });
+
+        eventBus.on("ui.annotations.ready", (e) => {
+            this.activeNavTab.val = "Annotations";
+        });
     }
 
     getHierarchyFromPath() {
@@ -164,7 +174,9 @@ class Reports {
          */
         const path = window.location.pathname;
         const parts = path.split("/");
-        return parts.length > 4 ? parts.slice(2, 5).join("-") : null; // returns the hierarchy if present, otherwise null
+        const hstr = parts.length > 4 ? parts.slice(2, 5).join(":") : null; // returns the hierarchy if present, otherwise null
+
+        return hstr ? new Hierarchy(hstr) : null;
     }
 
     getTimeOffsetFromHash() {
@@ -191,8 +203,185 @@ class Reports {
         return 0;
     }
 
-    addElements(parentElement) {
+    getLeftColumnElements() {
+        const { div } = van.tags;
+
+        this.activeNavTab = van.state("Events");
+
+        return div(
+            {
+                id: "report-left",
+                class: "w-full md:w-auto md:flex-grow min-w-[250px] max-w-[350px]",
+            },
+
+            Tabs(
+                {
+                    tabButtonRowClass: "flex",
+                    tabButtonRowStyleOverrides: { "background-color": "none" },
+                    tabButtonClass:
+                        "px-3 py-1.5 text-sm font-medium text-white rounded hover:bg-blue-600",
+                    tabButtonStyleOverrides: {
+                        "border-style": "none none none none",
+                    },
+                    tabButtonActiveColor: "rgb(59, 130, 246)",
+                    tabButtonHoverColor: "rgb(29, 78, 216)",
+                    tabContentClass: "mt-2",
+                    activeTab: this.activeNavTab,
+                },
+                {
+                    Events: events.createNavigationElement(
+                        this.hierarchy?.toString(":")
+                    ),
+                    Videos: div(),
+                    Annotations: annotationLog.createElement(),
+                }
+            )
+        );
+    }
+
+    getCenterColumnElements() {
         const { div, main, video, canvas, button } = van.tags;
+
+        // Video plus bottom metadata
+        return div(
+            {
+                id: "report-center",
+                class: "w-full max-w-4xl flex flex-col",
+            },
+
+            div({ id: "report-title" }, "No Event Selected"),
+
+            // Video section
+            div(
+                { class: "relative w-full pt-[62.8125%] mt-4" },
+                video({
+                    id: "report-video",
+                    class: "absolute top-0 left-0 w-full h-auto aspect-video video-js video-js-default-skin",
+
+                    controls: true,
+                    muted: true,
+                }),
+
+                // HEATMAP
+                heatmap.createElement({
+                    class: "absolute top-0 left-0 w-full h-auto aspect-video z-10",
+                }),
+
+                div({
+                    id: "video-controls",
+                    class: "absolute bottom-0 left-0 w-full h-[30px]",
+                })
+            ),
+            div(
+                {
+                    id: "report-mode-view",
+                    class: "text-sm text-gray-700",
+                },
+
+                div({
+                    id: "report-box-debug",
+                    class: "hidden text-sm text-gray-700 bg-white p-2 border",
+                }),
+
+                div({ class: "" }, summaryGraph.createElement()),
+
+                div(
+                    {
+                        class: "w-full h-auto aspect-[calc(16/2.5)] mt-2",
+                    },
+                    div(
+                        {
+                            class: "w-[50%] h-auto aspect-[calc(8/2.5)] inline-block",
+                        },
+
+                        genderDemo.createElement({
+                            id: "report-viz-demo-gender ",
+                        })
+                    ),
+
+                    div(
+                        {
+                            class: "w-[50%] h-auto aspect-[calc(8/2.5)] inline-block",
+                        },
+
+                        ageDemo.createElement({
+                            id: "report-viz-demo-age",
+                        })
+                    )
+                )
+            )
+
+            /*
+            div(
+                {
+                    class: "text-sm text-gray-700",
+                },
+
+
+                button(
+                    {
+                        type: "button",
+                        class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
+                        onclick: () => {
+                            eventBus.fire("ui.requestExport");
+                        },
+                    },
+                    "Export as CSV"
+                )
+            )
+            */
+        );
+    }
+
+    getRightColumnElements() {
+        const { div, main, video, canvas, button } = van.tags;
+
+        return div(
+            {
+                id: "report-right",
+                class: "w-full md:w-auto md:flex-grow min-w-[250px] max-w-[350px]",
+            },
+
+            // Camera map section
+            div(
+                {
+                    class: "w-full h-auto aspect-[2] relative bg-white",
+                },
+
+                // CAMERA MAP
+                cameramap.createElement()
+            ),
+            // EKG section
+            div(
+                {
+                    class: "w-full h-auto aspect-[2] mt-4 relative",
+                },
+
+                ekg.createElement()
+            ),
+
+            // Spider chart section
+            div(
+                {
+                    class: "w-full h-auto aspect-square mt-4 relative bg-white",
+                },
+
+                spider.createElement()
+            ),
+
+            // Linked player
+            div(
+                {
+                    id: "report-embed",
+                    class: "w-full h-auto aspect-video mt-4 relative",
+                },
+                linkedPlayer.createElement()
+            )
+        );
+    }
+
+    addElements(parentElement) {
+        const { div, main } = van.tags;
         parentElement =
             parentElement ||
             document.getElementById("main-content") ||
@@ -202,225 +391,22 @@ class Reports {
         van.add(
             parentElement,
             main(
-                { class: "w-[90%] p-4 overflow-auto" },
+                { class: "w-full p-4 overflow-auto" },
                 div(
                     {
                         id: "report-container",
                         class: "flex flex-col md:flex-row gap-4 items-start",
                     },
 
-                    // Left column
-                    div(
-                        {
-                            id: "report-left",
-                            class: "w-full md:w-auto md:flex-grow min-w-[150px] max-w-[250px]",
-                        },
+                    this.getLeftColumnElements(),
 
-                        annotationLog.createElement()
-                        //momentlist.createElement()
-                    ),
+                    this.getCenterColumnElements(),
 
-                    // Video plus bottom metadata
-                    div(
-                        {
-                            id: "report-center",
-                            class: "w-full max-w-4xl flex flex-col",
-                        },
-
-                        // Event selector
-                        events.createSelectorElement(
-                            this.hierarchy.replaceAll("-", ":")
-                        ),
-
-                        // Video section
-                        div(
-                            { class: "relative w-full pt-[62.8125%] mt-4" },
-                            video({
-                                id: "report-video",
-                                class: "absolute top-0 left-0 w-full h-auto aspect-video video-js video-js-default-skin",
-
-                                controls: true,
-                                muted: true,
-                            }),
-
-                            // HEATMAP
-                            heatmap.createElement({
-                                class: "absolute top-0 left-0 w-full h-auto aspect-video z-10",
-                            }),
-
-                            div({
-                                id: "video-controls",
-                                class: "absolute bottom-0 left-0 w-full h-[30px]",
-                            })
-                        ),
-                        div(
-                            {
-                                id: "report-mode-edit",
-                                class: "hidden",
-                            },
-
-                            summaryEditor.createElement()
-                        ),
-                        div(
-                            {
-                                id: "report-mode-view",
-                                class: "text-sm text-gray-700",
-                            },
-
-                            div({
-                                id: "report-box-debug",
-                                class: "hidden text-sm text-gray-700 bg-white p-2 border",
-                            }),
-
-                            div({ class: "" }, summaryGraph.createElement()),
-
-                            div(
-                                {
-                                    class: "w-full h-auto aspect-[calc(16/2.5)] mt-2",
-                                },
-                                div(
-                                    {
-                                        class: "w-[50%] h-auto aspect-[calc(8/2.5)] inline-block",
-                                    },
-
-                                    genderDemo.createElement({
-                                        id: "report-viz-demo-gender ",
-                                    })
-                                ),
-
-                                div(
-                                    {
-                                        class: "w-[50%] h-auto aspect-[calc(8/2.5)] inline-block",
-                                    },
-
-                                    ageDemo.createElement({
-                                        id: "report-viz-demo-age",
-                                    })
-                                )
-                            )
-                        ),
-
-                        div(
-                            {
-                                class: "text-sm text-gray-700",
-                            },
-                            button(
-                                {
-                                    type: "button",
-                                    class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600",
-                                    onclick: () => {
-                                        eventBus.fire(
-                                            "ui.requestSummaryRebuild",
-                                            {
-                                                hierarchy: this.hierarchy,
-                                            }
-                                        );
-                                    },
-                                },
-                                "Rebuild Summary"
-                            ),
-
-                            button(
-                                {
-                                    type: "button",
-                                    class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
-                                    onclick: () => {
-                                        console.log("Add annotation");
-                                        eventBus.fire("ui.addAnnotation", {
-                                            hierarchy: this.hierarchy,
-                                        });
-                                    },
-                                },
-                                "Add Annotation"
-                            ),
-
-                            button(
-                                {
-                                    type: "button",
-                                    class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
-                                    onclick: () => {
-                                        console.log("Import Transcript");
-                                        eventBus.fire("ui.importTranscript", {
-                                            hierarchy: this.hierarchy,
-                                            event: this.event,
-                                        });
-                                    },
-                                },
-                                "Import Transcript"
-                            ),
-
-                            button(
-                                {
-                                    type: "button",
-                                    class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
-                                    onclick: () => {
-                                        eventBus.fire("ui.requestExport");
-                                    },
-                                },
-                                "Export as CSV"
-                            )
-
-                            // button(
-                            //     {
-                            //         type: "button",
-                            //         class: "mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600 ml-4",
-                            //         onclick: () => {
-                            //             eventBus.fire("ui.requestEditMode");
-                            //         },
-                            //     },
-                            //     "Edit Summary"
-                            // )
-                        )
-                    ),
-
-                    // Right column
-                    div(
-                        {
-                            id: "report-right",
-                            class: "w-full md:w-auto md:flex-grow min-w-[250px] max-w-[350px]",
-                        },
-
-                        // Camera map section
-                        div(
-                            {
-                                class: "w-full h-auto aspect-[2] relative bg-white",
-                            },
-
-                            // CAMERA MAP
-                            cameramap.createElement()
-                        ),
-                        // EKG section
-                        div(
-                            {
-                                class: "w-full h-auto aspect-[2] mt-4 relative",
-                            },
-
-                            ekg.createElement()
-                        ),
-
-                        // Spider chart section
-                        div(
-                            {
-                                class: "w-full h-auto aspect-square mt-4 relative bg-white",
-                            },
-
-                            spider.createElement()
-                        ),
-
-                        // Linked player
-                        div(
-                            {
-                                id: "report-embed",
-                                class: "w-full h-auto aspect-video mt-4 relative",
-                            },
-                            linkedPlayer.createElement()
-                        )
-                    )
+                    this.getRightColumnElements()
                 )
             )
         );
 
-        document.getElementById("report-event-select").value = this.hierarchy;
         this.addPlayer();
         this.addHeatmapListeners();
         this.addCameraMapListeners();
@@ -436,7 +422,8 @@ class Reports {
 
             this.hls = new Hls();
             this.hls.attachMedia(this.player.tech_.el_);
-            this.hls.loadSource(this.playlistUrl);
+
+            if (this.playlistUrl) this.hls.loadSource(this.playlistUrl);
 
             this.hls.on(Hls.Events.LEVEL_LOADED, async (event, data) => {
                 const fragments = data.details.fragments;

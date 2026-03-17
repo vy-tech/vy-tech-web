@@ -592,7 +592,7 @@ class Annotations extends AnnotationsData {
                             {
                                 class: "text-lg font-semibold text-gray-900 mb-4 border-b pb-2",
                             },
-                            "Create Annotation"
+                            "Import Transcript"
                         ),
                         formEl
                     )

@@ -1,0 +1,184 @@
+import { v as van } from './van-t8DywzvC.js';
+import { e as eventBus } from './eventbus-B9JUr222.js';
+import { E as EventsData } from './events-B3vAjkhd.js';
+
+class Events extends EventsData {
+    constructor() {
+        super();
+    }
+
+    setSelectorToAvailable(state) {
+        this.getAvailable().then((events) => {
+            state.val = events;
+        });
+    }
+
+    createOptionElement(eventData, selected) {
+        const { option } = van.tags;
+
+        let displayText = eventData.description;
+
+        if (eventData.begin) {
+            const displayDate = eventData.begin.toDate().toLocaleDateString();
+            const displayDescription = eventData.description.replace(
+                /\(Baseball\) /,
+                ""
+            );
+            displayText = `${displayDate} - ${displayDescription}`;
+        }
+
+        return option(
+            {
+                value: eventData.hierarchy,
+                selected: eventData.hierarchy == selected,
+            },
+            displayText
+        );
+    }
+
+    createNavigationElement(selected) {
+        const { div, details, summary, ul, li } = van.tags;
+        const eventListState = van.state([]);
+        const selectedState = van.state(selected || null);
+        this.setSelectorToAvailable(eventListState);
+
+        const groupEvents = (events) => {
+            const grouped = new Map(); // location -> Map(year -> Map(monthName -> events[]))
+            for (const evt of events) {
+                const loc = evt.hierarchy.split(/[:\-]/)[0] || "Unknown";
+                const year = evt.begin ? evt.begin.year : 0;
+                const month = evt.begin ? evt.begin.monthLong : "Unknown";
+                if (!grouped.has(loc)) grouped.set(loc, new Map());
+                const byYear = grouped.get(loc);
+                if (!byYear.has(year)) byYear.set(year, new Map());
+                const byMonth = byYear.get(year);
+                if (!byMonth.has(month)) byMonth.set(month, []);
+                byMonth.get(month).push(evt);
+            }
+            return grouped;
+        };
+
+        const leafLabel = (evt) => {
+            if (evt.begin) {
+                const date = evt.begin.toDate().toLocaleDateString();
+                const desc = evt.description.replace(/\(Baseball\) /, "");
+                return `${date} - ${desc}`;
+            }
+            return evt.description;
+        };
+
+        const container = div({ class: "vyevents-nav" }, () => {
+            const grouped = groupEvents(eventListState.val);
+            const sel = selectedState.val;
+            const locations = [...grouped.keys()];
+
+            return div(
+                ...locations.map((loc) => {
+                    const byYear = grouped.get(loc);
+                    const years = [...byYear.keys()].sort((a, b) => b - a);
+                    return details(
+                        { open: locations.length === 1 },
+                        summary(
+                            { class: "cursor-pointer font-semibold p-1 select-none" },
+                            loc
+                        ),
+                        ...years.map((year) => {
+                            const byMonth = byYear.get(year);
+                            return details(
+                                summary(
+                                    { class: "cursor-pointer ml-2 p-1 select-none" },
+                                    String(year)
+                                ),
+                                ...[...byMonth.keys()].map((month) =>
+                                    details(
+                                        summary(
+                                            { class: "cursor-pointer ml-4 p-1 select-none" },
+                                            month
+                                        ),
+                                        ul(
+                                            { class: "ml-6 list-none" },
+                                            ...byMonth.get(month).map((evt) =>
+                                                li(
+                                                    {
+                                                        class: `cursor-pointer p-1 rounded hover:bg-blue-100${evt.hierarchy === sel ? " font-bold bg-blue-50" : ""}`,
+                                                        onclick: () => {
+                                                            selectedState.val = evt.hierarchy;
+                                                            eventBus.dispatchEvent(
+                                                                new CustomEvent("ui.requestEvent", {
+                                                                    detail: evt.hierarchy,
+                                                                })
+                                                            );
+                                                        },
+                                                    },
+                                                    leafLabel(evt)
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            );
+                        })
+                    );
+                })
+            );
+        });
+
+        eventBus.on("org.changed", () => {
+            selectedState.val = null;
+            this.setSelectorToAvailable(eventListState);
+            eventBus.fire("ui.requestEvent", null);
+        });
+
+        return container;
+    }
+
+    createSelectorElement(selected) {
+        const { div, select } = van.tags;
+        const eventListState = van.state([]);
+        this.setSelectorToAvailable(eventListState);
+
+        const container = div({ class: "vyevents-selector" }, () => {
+            const sel = select({
+                id: "report-event-select",
+                class: "w-full text-black p-1",
+            });
+
+            van.add(
+                sel,
+                this.createOptionElement(
+                    {
+                        hierarchy: "",
+                        description: "(Select an Event)",
+                    },
+                    selected
+                )
+            );
+            eventListState.val.forEach((eventData) =>
+                van.add(sel, this.createOptionElement(eventData, selected))
+            );
+
+            sel.addEventListener("change", (e) => {
+                const hierarchy = e.target.value == "" ? null : e.target.value;
+                eventBus.dispatchEvent(
+                    new CustomEvent("ui.requestEvent", {
+                        detail: hierarchy,
+                    })
+                );
+            });
+
+            return sel;
+        });
+
+        eventBus.on("org.changed", () => {
+            this.setSelectorToAvailable(eventListState);
+            eventBus.fire("ui.requestEvent", null);
+        });
+
+        return container;
+    }
+}
+
+const events = new Events();
+
+export { events as e };
+//# sourceMappingURL=events-BQZAN3w-.js.map

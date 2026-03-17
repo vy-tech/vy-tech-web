@@ -1,8 +1,9 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { e as events } from './chunks/events-Dd6eR2Dd.js';
-import './chunks/eventbus-B9JUr222.js';
-import './chunks/events-DcYFQoSy.js';
+import { e as events } from './chunks/events-DltFVMEH.js';
+import { e as eventBus } from './chunks/eventbus-B9JUr222.js';
+import './chunks/hierarchy-DQ6298PP.js';
 import './chunks/db-BZQDImdW.js';
+import './chunks/orgContext-npeuc6rs.js';
 
 // packages/ag-grid-community/src/agStack/events/localEventService.ts
 var LocalEventService = class {
@@ -55491,6 +55492,10 @@ class Schedule {
     init() {
         this.addElements();
         eventgrid.refresh();
+
+        eventBus.on("org.changed", () => {
+            eventgrid.refresh();
+        });
     }
 
     addElements(parentElement) {
