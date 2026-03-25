@@ -545,6 +545,11 @@ chatApp.post("/tool/weather", async (req, res) => {
         return;
     }
 
+    if (!hierarchy.date) {
+        res.status(400).json({ error: "Hierarchy must include a date" });
+        return;
+    }
+
     const eventData = rows[0];
 
     // Change YYYYMMDD to YYYY-MM-DD

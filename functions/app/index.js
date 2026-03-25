@@ -13,6 +13,8 @@ import { join } from "path";
 // Firebase imports
 import { db, auth, functions } from "./lib/firebase.js";
 
+import { Hierarchy } from "./lib/hierarchy.js";
+
 // Express imports
 import express from "express";
 import bodyParser from "body-parser";
@@ -120,25 +122,28 @@ const cleanupChunks = (chunks) => {
     return chunks;
 };
 
-app.get("/playlist/:location-:date-:camera-:quality.m3u8", async (req, res) => {
-    const { location, date, camera, quality } = req.params;
-    if (!location || !date || !camera || !quality) {
+app.get("/playlist/:hierarchy-:quality.m3u8", async (req, res) => {
+    const { hierarchy, quality } = req.params;
+    
+    if (!hierarchy || !quality) {
         return res
             .status(400)
             .send(
-                "Missing 'location', 'date', 'camera', or 'quality' query parameter."
+                "Missing 'hierarchy', or 'quality' query parameter."
             );
     }
 
-    const hierarchy = `${location}:${date}:${camera}`;
+    const hier = new Hierarchy(hierarchy);
+    console.log(hier.toString());
+
     const colRef = db.collection("chunks");
-    const query = colRef.where("hierarchy", "==", hierarchy);
+    const query = colRef.where("hierarchy", "==", hier.toString());
     const snapshot = await query.get();
     if (snapshot.empty) {
         return res
             .status(404)
             .send(
-                "No video segments found for this location, date, and camera."
+                "No video segments found for this identifier."
             );
     }
 

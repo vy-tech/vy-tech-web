@@ -24,7 +24,9 @@ class Auth {
 
     async init() {
         this.auth = getAuth(await getApp());
-        this.auth.onAuthStateChanged((user) => this.handleAuthState(user));
+        this.auth.onAuthStateChanged(async (user) =>
+            this.handleAuthState(user)
+        );
     }
 
     enableSignIn() {
@@ -39,11 +41,11 @@ class Auth {
         }
     }
 
-    handleAuthState(user) {
+    async handleAuthState(user) {
         this.hideBusyIndicator();
+
         if (user) {
             this.user = user;
-
             eventBus.fire("auth.ready", { user: this.user });
 
             if (this.returnUrl) {
@@ -51,13 +53,19 @@ class Auth {
                 window.location.href = this.returnUrl;
             }
 
+            // Get orgIds and poid from custom claims
+            const idTokenResult = await user.getIdTokenResult();
+            this.user.orgIds = idTokenResult.claims.orgIds || [];
+            this.user.poid = idTokenResult.claims.poid || null;
+            await orgContext.init(user);
+
             const userProfilesData = new UserProfilesData();
-            userProfilesData
-                .ensureProfile(user.uid, user.email, user.displayName)
-                .then(async (profile) => {
-                    await orgContext.init(user.uid);
-                    eventBus.fire("auth.profileReady", { profile });
-                });
+            const profile = await userProfilesData.ensureProfile(
+                user.uid,
+                user.email,
+                user.displayName
+            );
+            eventBus.fire("auth.profileReady", { profile });
         } else {
             // No user is signed in.
             this.user = null;

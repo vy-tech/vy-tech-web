@@ -6,7 +6,7 @@ class AnnotationsData {
 
     async getByHierarchy(hierarchy) {
         let hier = new Hierarchy(hierarchy);
-        let h = hier.toEventString();
+        let h = hier.toFileOrEventString();
 
         this.hierarchy = h;
         let annotations = await database.query(
@@ -38,7 +38,7 @@ class AnnotationsData {
         console.log("Creating annotation:", annotation);
 
         // Split hierarchy on - or :, take first two parts, and rejoin with :
-        annotation.hierarchy = new Hierarchy(hierarchy).toEventString();
+        annotation.hierarchy = new Hierarchy(hierarchy).toFileOrEventString();
 
         await database.set("annotations", annotation);
 

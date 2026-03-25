@@ -40,6 +40,8 @@ WORKDIR /app/functions/chat
 RUN npm install
 WORKDIR /app/functions/org
 RUN npm install
+WORKDIR /app/functions/file
+RUN npm install
 
 
 WORKDIR /app

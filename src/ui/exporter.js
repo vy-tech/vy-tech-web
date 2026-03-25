@@ -147,7 +147,7 @@ class Exporter {
 
     getFilename() {
         let h = this.hierarchy;
-        return `export-${h.location}-${h.date}.csv`;
+        return `export-${h.location || h.org}-${h.date || h.file}.csv`;
     }
 
     async export() {

@@ -1,5 +1,5 @@
 import { database } from "../data/db.js";
-import { storage } from "../data/storage.js";
+import { firebaseStorage } from "../data/storage.js";
 import { progress } from "../ui/progress.js";
 import { eventBus } from "../eventbus.js";
 import { Score } from "./scoring.js";
@@ -120,16 +120,16 @@ class Summarizer {
     //     }
     // }
 
-    getUrl(token, date, camera) {
-        const urlPrefix = "https://storage.roarscore.ai/production/play/";
-        // Make sure camera is zero padded two digits
-        camera = parseInt(camera).toString().padStart(2, "0");
+    // getUrl(token, date, camera) {
+    //     const urlPrefix = "https://storage.roarscore.ai/production/play/";
+    //     // Make sure camera is zero padded two digits
+    //     camera = parseInt(camera).toString().padStart(2, "0");
 
-        return (
-            `${urlPrefix}${token}/${date}/${camera}/` +
-            `summary-${token}-${date}-${camera}.json`
-        );
-    }
+    //     return (
+    //         `${urlPrefix}${token}/${date}/${camera}/` +
+    //         `summary-${token}-${date}-${camera}.json`
+    //     );
+    // }
 
     async loadFromUrl(url) {
         //console.log(`Loading summary ${url}..`);
@@ -148,27 +148,27 @@ class Summarizer {
         return rows;
     }
 
-    async loadAllFromUrl(hierarchy, cameras = 5) {
-        console.log(`Loading summaries for ${hierarchy}...`);
-        this.summaries = [];
+    // async loadAllFromUrl(hierarchy, cameras = 5) {
+    //     console.log(`Loading summaries for ${hierarchy}...`);
+    //     this.summaries = [];
 
-        const [token, date] = hierarchy.split("-");
-        for (let camera = 1; camera <= cameras; camera++) {
-            const url = this.getSummaryUrl(token, date, camera);
-            this.summaries.push(await this.loadSummary(url));
-        }
-    }
+    //     const [token, date] = hierarchy.split("-");
+    //     for (let camera = 1; camera <= cameras; camera++) {
+    //         const url = this.getSummaryUrl(token, date, camera);
+    //         this.summaries.push(await this.loadSummary(url));
+    //     }
+    // }
 
     async loadFromStorage(hierarchy) {
-        let [token, date, camera] = hierarchy.split("-");
-        let path = `summaries/${token}/${date}/summary-${token}-${date}-${camera}.json`;
+        let h = new Hierarchy(hierarchy);
+        let path = `summaries/${h.toFileOrEventString("/")}/summary-${h.toString("-")}.json`;
 
         try {
             // let storage = getStorage(app);
             // let storageRef = ref(storage, path);
             // let url = await getDownloadURL(storageRef);
             //console.log(`Loading summary from storage: ${hierarchy}...`);
-            let url = await storage.getDownloadUrl(path);
+            let url = await firebaseStorage.getDownloadUrl(path);
 
             return await this.loadFromUrl(url);
         } catch (error) {
@@ -178,8 +178,8 @@ class Summarizer {
     }
 
     async saveToStorage(hierarchy, summary) {
-        let [token, date, camera] = hierarchy.split("-");
-        let path = `summaries/${token}/${date}/summary-${token}-${date}-${camera}.json`;
+        let h = new Hierarchy(hierarchy);
+        let path = `summaries/${h.toFileOrEventString("/")}/summary-${h.toString("-")}.json`;
 
         console.log(`Saving summary to storage: ${path}...`);
 
@@ -187,7 +187,7 @@ class Summarizer {
         // let storageRef = ref(storage, path);
         // await uploadString(storageRef, JSON.stringify(summary));
 
-        await storage.uploadString(path, JSON.stringify(summary));
+        await firebaseStorage.uploadString(path, JSON.stringify(summary));
 
         console.log(`Saved summary to storage.`);
     }

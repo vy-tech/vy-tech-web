@@ -16,13 +16,15 @@ class OrgContext {
         this.userId = null;
     }
 
-    async init(userId) {
-        this.userId = userId;
+    async init(user) {
+        console.log("init org context with user:", user);
+        this.userId = user.uid;
+
         this.isLoading.val = true;
 
-        const personalOrg = await this.orgsData.ensurePersonalOrg(userId);
+        const personalOrg = await this.orgsData.ensurePersonalOrg(user);
 
-        const orgs = await this.orgsData.getByUser(userId);
+        const orgs = await this.orgsData.getByUser(this.userId);
         this.userOrgs.val = this.sortOrgs(orgs || []);
 
         const storedOrgId = localStorage.getItem(STORAGE_KEY);
@@ -45,7 +47,7 @@ class OrgContext {
         });
     }
 
-    getCurrentOrg() {
+    getCurrentOrgId() {
         let orgId = this.currentOrgId.val;
 
         if (!orgId) {
@@ -53,6 +55,10 @@ class OrgContext {
         }
 
         return orgId;
+    }
+
+    getCurrentOrg() {
+        return this.currentOrg.val;
     }
 
     async setCurrentOrg(orgId, fireEvent = true) {
@@ -99,6 +105,10 @@ class OrgContext {
 
     getPersonalOrg() {
         return this.userOrgs.val.find((o) => o.isPersonal);
+    }
+
+    isInOrg(orgId) {
+        return this.userOrgs.val.some((o) => o.id === orgId);
     }
 }
 
