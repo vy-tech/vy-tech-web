@@ -7,6 +7,7 @@ service cloud.firestore {
     	return request.auth != null && ((
         request.auth.token.orgIds != null &&
         oid in request.auth.token.orgIds) ||
+        // Remove me after deployment
         oid == ("personal_" + request.auth.uid));
     }
   
@@ -77,8 +78,10 @@ service cloud.firestore {
 
     match /organizations/{orgId} {
       // Only members can read
-      allow read: if request.auth != null
-        && resource.data.members.hasAny([request.auth.uid]);
+      allow read: if request.auth != null 
+        && (resource.data.members.hasAny([request.auth.uid])
+        || resource.data.owners.hasAny([request.auth.uid])
+        || resource.data.uid == request.auth.uid);
 
       // Authenticated users can create if they set themselves as owner and member
       allow create: if request.auth != null

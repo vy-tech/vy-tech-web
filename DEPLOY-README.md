@@ -1,3 +1,6 @@
 # 2026-03-23
 
-* After deployment remove all organizations that are prefixed with "personal_"
+## Post Deploy
+
+- Remove all organizations that are prefixed with "personal\_"
+- Remove "personal\_" from rules
