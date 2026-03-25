@@ -2,77 +2,30 @@ import "../firebase-shim.js";
 
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
-import { getAuth } from "firebase-admin/auth";
+
+import { requireAuth, getAuth } from "../common.js";
 
 import { OrganizationsData } from "../../data/organizations.js";
-
-// Helper to sync a user's org memberships to their custom claims
-async function syncUserOrgClaims(userId) {
-    const orgsData = new OrganizationsData();
-    const orgs = await orgsData.getByUser(userId);
-    const orgIds = orgs.map((org) => org.id);
-
-    await getAuth().setCustomUserClaims(userId, { orgIds });
-    console.log(`Updated claims for user ${userId}: orgIds = [${orgIds.join(", ")}]`);
-    return orgIds;
-}
-
-const isAuthenticated = async (req) => {
-    try {
-        // Get the Authorization header
-        const authHeader = req.headers.authorization;
-
-        if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            return {
-                authenticated: false,
-                error: "No valid authorization header",
-            };
-        }
-
-        // Extract the ID token
-        const idToken = authHeader.split("Bearer ")[1];
-
-        // Verify the ID token
-        const decodedToken = await getAuth().verifyIdToken(idToken);
-
-        return {
-            authenticated: true,
-            uid: decodedToken.uid,
-            user: decodedToken,
-        };
-    } catch (error) {
-        console.error("Authentication error:", error);
-        return {
-            authenticated: false,
-            error: "Invalid token",
-        };
-    }
-};
-
-// Authentication middleware
-const requireAuth = async (req, res, next) => {
-    const authResult = await isAuthenticated(req);
-
-    if (!authResult.authenticated) {
-        console.warn("Unauthorized access attempt");
-        return res.status(401).json({
-            error: "Unauthorized",
-            message: authResult.error,
-        });
-    }
-
-    // Add user info to request object for use in route handlers
-    req.user = authResult.user;
-    req.uid = authResult.uid;
-
-    next();
-};
 
 // Express app for development
 const orgApp = express();
 
 orgApp.use(express.json());
 orgApp.use(requireAuth);
+
+// Helper to sync a user's org memberships to their custom claims
+async function syncUserOrgClaims(userId) {
+    const orgsData = new OrganizationsData();
+    const orgs = await orgsData.getByUser(userId);
+    const orgIds = orgs.map((org) => org.id);
+    const poid = orgs.find((org) => org.isPersonal)?.id || null;
+
+    await getAuth().setCustomUserClaims(userId, { orgIds, poid });
+    console.log(
+        `Updated claims for user ${userId}: orgIds = [${orgIds.join(", ")}] poid = ${poid}`
+    );
+    return orgIds;
+}
 
 // Accept an invite token and join organization
 orgApp.post("/accept/:token", async (req, res) => {
@@ -207,6 +160,44 @@ orgApp.delete("/:orgId", async (req, res) => {
             message: "Failed to delete organization",
         });
     }
+});
+
+orgApp.post("/create/personal", async (req, res) => {
+    try {
+        const orgsData = new OrganizationsData();
+        const user = await getAuth().getUser(req.uid);
+        const token = await orgsData.ensureUniqueToken(user.email);
+
+        const org = {
+            name: user.displayName || user.email,
+            isPersonal: true,
+            uid: req.uid,
+            owners: [req.uid],
+            members: [req.uid],
+            invites: [],
+            token: token,
+        };
+        org.id = await orgsData.create(org.name, req.uid, org);
+
+        await syncUserOrgClaims(req.uid);
+
+        return res.status(201).json({
+            success: true,
+            message: "Personal organization created",
+            organization: org,
+        });
+    } catch (error) {
+        console.error("Error creating personal organization:", error);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to create personal organization",
+        });
+    }
+});
+
+orgApp.post("/sync", async (req, res) => {
+    await syncUserOrgClaims(req.uid);
+    return res.status(200).json({ ok: "ok" });
 });
 
 const functionApp = express();

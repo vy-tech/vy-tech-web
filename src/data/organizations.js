@@ -1,5 +1,7 @@
 import { database } from "./db.js";
 
+import { apiUtil } from "../util/apiUtil.js";
+
 /**
  * OrganizationsData class manages organization-related data operations.
  *
@@ -42,12 +44,13 @@ class OrganizationsData {
     // CRUD Methods
     // =========================================================================
 
-    async create(name, ownerUserId) {
+    async create(name, ownerUserId, orgData) {
         const org = {
             name,
             owners: [ownerUserId],
             members: [ownerUserId],
             invites: [],
+            ...orgData,
         };
         const id = await database.set(COLLECTION, org);
         return id;
@@ -75,30 +78,69 @@ class OrganizationsData {
         return await database.delete(COLLECTION, id);
     }
 
-    async ensurePersonalOrg(userId, displayName) {
-        const id = `personal_${userId}`;
-        const orgName = displayName ? `${displayName}'s Personal` : "Personal";
+    tokenize(name) {
+        // Simple tokenization: lowercase, trim, replace non-words with underscores,
+        // collapse underscores
+        return name
+            .toLowerCase()
+            .trim()
+            .replace(/\W+/g, "_")
+            .replace(/_+/g, "_");
+    }
+
+    async ensureUniqueToken(name) {
+        // Ensures that the token generated from the organization name is unique
+        // by appending a random suffix if necessary.
+
+        const baseToken = this.tokenize(name);
+        let token = baseToken;
+        while (true) {
+            const existingOrgs = await database.query(COLLECTION, {
+                token: token,
+            });
+            if (!existingOrgs || existingOrgs.length === 0) {
+                break;
+            }
+            const suffix = Math.floor(Math.random() * 900 + 100); // random 3-digit number
+            token = `${baseToken}_${suffix}`;
+        }
+
+        return token;
+    }
+
+    async ensurePersonalOrg(user) {
+        const userId = user.uid;
+        const poid = user.poid;
         let existing = null;
+
         try {
-            existing = await database.get(COLLECTION, id);
+            if (poid) {
+                existing = await database.get(COLLECTION, poid);
+            } else {
+                existing = await database.query(COLLECTION, { uid: userId });
+            }
         } catch (error) {
             console.error("Error checking for personal organization:", error);
         }
 
-        if (existing) {
+        if (existing instanceof Array) {
+            if (existing.length > 0) {
+                // If we didn't have a poid re-sync
+                apiUtil.call("/api/org/sync", {}, "POST"); // Fire and forget
+
+                return existing[0];
+            }
+        } else if (existing) {
             return existing;
         }
 
-        const org = {
-            id: id,
-            name: orgName,
-            isPersonal: true,
-            owners: [userId],
-            members: [userId],
-            invites: [],
-        };
-        await database.set(COLLECTION, org);
-        return await this.getById(org.id);
+        const result = await apiUtil.call(
+            "/api/org/create/personal",
+            {},
+            "POST"
+        );
+
+        return result.organization;
     }
 
     // =========================================================================

@@ -27,6 +27,8 @@ import { linkedPlayer } from "./viz/linkedPlayer.js";
 import { annotationLog } from "./viz/annotationlog.js";
 //import { summaryEditor } from "./viz/summaryeditor.js";
 
+import { videoFiles } from "./ui/videofiles.js";
+
 class Reports {
     constructor() {
         this.hierarchy = this.getHierarchyFromPath() || null;
@@ -174,7 +176,7 @@ class Reports {
          */
         const path = window.location.pathname;
         const parts = path.split("/");
-        const hstr = parts.length > 4 ? parts.slice(2, 5).join(":") : null; // returns the hierarchy if present, otherwise null
+        const hstr = parts.length > 4 ? parts.slice(2).join(":") : null; // returns the hierarchy if present, otherwise null
 
         return hstr ? new Hierarchy(hstr) : null;
     }
@@ -232,7 +234,7 @@ class Reports {
                     Events: events.createNavigationElement(
                         this.hierarchy?.toString(":")
                     ),
-                    Videos: div(),
+                    Videos: videoFiles.createNavigationElement(),
                     Annotations: annotationLog.createElement(),
                 }
             )

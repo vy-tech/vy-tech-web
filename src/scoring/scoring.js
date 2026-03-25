@@ -3,6 +3,7 @@ import { profilesData } from "../data/profiles.js";
 import { eventBus } from "../eventbus.js";
 import { chunksData } from "../data/chunk.js";
 import { demographics } from "./demographics.js";
+import { Hierarchy } from "../util/hierarchy.js";
 
 // const Box = Object.freeze({
 //     X: 0,
@@ -915,7 +916,8 @@ class Score {
 
     getFragments(hierarchy) {
         return new Promise((resolve, reject) => {
-            let playlistUrl = `/playlist/${hierarchy}-720p.m3u8`;
+            let h = new Hierarchy(hierarchy);
+            let playlistUrl = `/playlist/${h.toString("-")}-720p.m3u8`;
             console.log(`Getting fragments from ${playlistUrl}...`);
             let hls = new Hls();
             hls.on(Hls.Events.LEVEL_LOADED, (event, data) => {

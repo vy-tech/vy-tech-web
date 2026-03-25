@@ -96,13 +96,16 @@ class Database {
         return timeStampChars.concat(randChars).join("");
     }
 
-    async set(collectionName, docData) {
+    async set(collectionName, docData, isNew=false) {
         console.log("Setting", collectionName, docData);
         await this.ensureFirestore();
 
+        if (!docData.id || isNew) {
+            docData.created = serverTimestamp();
+        }
+        
         if (!docData.id) {
             docData.id = this.pushid();
-            docData.created = serverTimestamp();
         }
 
         docData.updated = serverTimestamp();
@@ -349,4 +352,4 @@ if (typeof window !== "undefined") {
 }
 
 export default database;
-export { database, Database, changeDatabase };
+export { database, Database, changeDatabase, serverTimestamp };

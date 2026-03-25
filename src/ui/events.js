@@ -38,7 +38,7 @@ class Events extends EventsData {
     }
 
     createNavigationElement(selected) {
-        const { div, details, summary, ul, li } = van.tags;
+        const { div, details, summary, ul, li, i } = van.tags;
         const eventListState = van.state([]);
         const selectedState = van.state(selected || null);
         this.setSelectorToAvailable(eventListState);
@@ -145,6 +145,9 @@ class Events extends EventsData {
                                                             );
                                                         },
                                                     },
+                                                    i({
+                                                        class: `las la-calendar-day mr-2 flex-shrink-0`,
+                                                    }),
                                                     leafLabel(evt)
                                                 )
                                             )

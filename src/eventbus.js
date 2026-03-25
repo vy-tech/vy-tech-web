@@ -13,5 +13,8 @@ class EventBus extends EventTarget {
 }
 
 const eventBus = new EventBus();
-window.eventBus = eventBus;
+if (typeof window !== "undefined") {
+    window._vy_eventBus = eventBus;
+}
+
 export { EventBus, eventBus };

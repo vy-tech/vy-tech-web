@@ -114,6 +114,10 @@ const functionsConfigs = Object.entries(functionEntries).map(
             // External OpenAI SDK
             if (id === "openai" || id.startsWith("openai/")) return true;
 
+            // External S3 SDKs
+            if (id === "@aws-sdk/client-s3") return true;
+            if (id === "@aws-sdk/s3-request-presigner") return true;
+
             // External shims and configs
             if (id === "firebase/app") return true;
             if (id === "../firebase-config.js") return true;

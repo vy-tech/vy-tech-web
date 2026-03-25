@@ -1,6 +1,7 @@
 import { database } from "./db.js";
 import { timeUtil } from "../util/time.js";
 import { orgContext } from "./orgContext.js";
+import Hierarchy from "../util/hierarchy.js";
 
 class EventsData {
     constructor() {
@@ -39,13 +40,31 @@ class EventsData {
             return null;
         }
 
-        const events = await database.query("events", { hierarchy: hierarchy });
+        let h = new Hierarchy(hierarchy);
+
+        if (!h.date && !h.event) {
+            console.warn("Invalid hierarchy for event lookup:", hierarchy);
+            this.current = null;
+            return null;
+        }
+
+        let events = await database.query("events", {
+            hierarchy: h.toEventString(),
+        });
+
+        // Try falling back to camera 1 if no event found
+        if (events.length === 0) {
+            h.camera = 1;
+            events = await database.query("events", {
+                hierarchy: h.toString(),
+            });
+        }
 
         if (events && events.length > 0) {
             this.current = events[0];
             return this.current;
         } else {
-            console.warn("Event not found for hierarchy:", hierarchy);
+            console.warn("Event not found for hierarchy:", h.toEventString());
         }
 
         this.current = null;
@@ -53,7 +72,7 @@ class EventsData {
     }
 
     async getAvailable() {
-        let orgId = orgContext.getCurrentOrg();
+        let orgId = orgContext.getCurrentOrgId();
         console.log("Fetching events for org:", orgId);
         const events = await database.query(
             "events",
