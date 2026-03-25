@@ -1,3479 +1,7 @@
-import { initializeApp as initializeApp$1, cert } from 'firebase-admin/app';
-import { getFirestore as getFirestore$1, FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { getStorage } from 'firebase-admin/storage';
-import express from 'express';
-import { onRequest } from 'firebase-functions/v2/https';
-import { defineSecret } from 'firebase-functions/params';
-import { randomBytes, createHmac } from 'crypto';
-import { getAuth as getAuth$1 } from 'firebase-admin/auth';
-
-var type = "service_account";
-var project_id = "roarscore-1ddf5";
-var private_key_id = "12c960d1ee1a4fd84dabe4cb028d268ae638720f";
-var private_key = "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDQSHFP8U1zeCSV\n8DE9elkDubIbdxxGaGiuT182i8m1Ws0bj3T4ap1f9WbrEWMbTNBimmrhgRYiLPKZ\nyBo7kU2ZW7mWsV1YsjFD8waFSdUkUxbyq/ZXAkxHnWazwePaPHPus0xnIs7hU7sF\nmxBO3m01NmCanp3/W/LfUlnNLu4Dqhq3AqLHusYshAQmtd41xXacFXGvv5HaLu4G\nUNc3/fkQK3PMenBqA2R/BzCDH3bM7hUBk3PFLKiylfNQDtmAciIWtQm/AGC0YKia\ncuU54Zh9mfOVDi+ZPGirl9AE5zxgC9djyKt66KHrRvb32SE1JIhPf1NeqpATt2+N\n086wUzANAgMBAAECggEAAjCQyGdgChO8RrtEuUG9B9X+8lz5NiBI4XRCKv+jOj3f\nJCgI8celKeoZj+UZ5qKTGkZHU2GZCvjv///jjrbDWxZkyBnLQnB1JiK68dHJ5Nze\nw+Rc7aM/jA0ylDc4nwW9rkfCSN9Lz4Ci2bc8n6ek/Ec7EsUSIiokToa+HPMeW3l8\nfVeS9zTW+E4QbbDCLXFXz/gquPOpGSdIvVZBDIDkRu1uHbHJS8Y7SNitpdYuIv2A\nU5mRtpv3DeMJlP8DzALyEXZXIYwoJaavrGwQHdNwrPvFnFtd/hVGOLCHVgPn7mlM\nzXz3QZTcJGwM3GZu3zoj5tMvCccMOIfkk1S0VMSFnQKBgQDqE763BaqQM8wsLrYf\nDjkgRvcA+2NnuDUUxS/G4+DZP5WIYi9c+jQceHc1Eh/q6wDI/g2Sks3CmPwrFsnf\n1rDElGqTIff2URjx+jqjf4iAsv7oCW8XHpIgOV/oDUJDoeskx7rPBw/pMt/oLBc4\nJsrUK1YZcohLLk8y/h4nui+1bwKBgQDjykE0qfwU2X65OJRqvLgV8BBvi7fraMzu\nM8Fua+pNlT71xbtJ2MNeqVEBkQQD1K+AXXo+wwY5AubkE+Ryx5NDWUSramULtpHn\nQlCUQQPSJ1PbkTP1YslhWogm7eTmDBFibs+JBXPDBN722WVK5pb2SmY2OKRQMwT+\nDq07aEKMQwKBgHYBNEEyUxVVd5XCir/HPNdfz0Aoe6mbPO9WpUpgMUd0fZ7+2J/H\n5yN/O6F+nKaiiIfLQ+5joeV7mIzkdSsqIX1I0R2Rn18G7Ut3+b3ZGmi/VDCIKP//\nwm0KX6YtoP1VkKS/KBccmVHX+vch2ybMr64cltBHZBx6oSS05WDjxQ9zAoGBALV3\nHaUHueMeNR73HP0/JGONoHpMUxN9pKwqnPELlVeDCuoeQIqe3V0fA4J89TbcC4f2\nb/lpwh5O2oNd+YMazI09oz/vfVnscqVJpgnFFXcoj1x+e2cD8KvWxFpG8C/38y14\nW2qr5kG5MqpyG4ik1CSWtoCBdRzS2CpQpN6Lu2AjAoGBAJd6JhnPAwQYd1FKOnbm\nDVThBK+Jdy5K0Zbe24RjshIYvEeCY+DLH9IIg2TO4prs9m2uhN7EBdHKSMsofoyO\ncHSvEQk7DMzsK3fbS6uSVFjRSL+B6/rWfyQRerkJs3IJzZfqlzM1r9WeDzLoSZMy\n0YSVdoN/mUVLhSF/4BioRPsI\n-----END PRIVATE KEY-----\n";
-var client_email = "firebase-adminsdk-dm03y@roarscore-1ddf5.iam.gserviceaccount.com";
-var client_id = "100927211475441857111";
-var auth_uri = "https://accounts.google.com/o/oauth2/auth";
-var token_uri = "https://oauth2.googleapis.com/token";
-var auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs";
-var client_x509_cert_url = "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-dm03y%40roarscore-1ddf5.iam.gserviceaccount.com";
-var universe_domain = "googleapis.com";
-var credential = {
-	type: type,
-	project_id: project_id,
-	private_key_id: private_key_id,
-	private_key: private_key,
-	client_email: client_email,
-	client_id: client_id,
-	auth_uri: auth_uri,
-	token_uri: token_uri,
-	auth_provider_x509_cert_url: auth_provider_x509_cert_url,
-	client_x509_cert_url: client_x509_cert_url,
-	universe_domain: universe_domain
-};
-
-const app$1 = initializeApp$1({
-    credential: cert(credential),
-    storageBucket: credential.project_id + ".firebasestorage.app", // Updated Firebase storage bucket format
-});
-const db = getFirestore$1(app$1);
-const storage = getStorage(app$1);
-
-let firebaseFunctions = {
-    getFirestore: () => db,
-    doc: (database, ...args) => db.doc(args.join("/")),
-    collection: (database, collectionPath) => db.collection(collectionPath),
-    setDoc: (docRef, data) => docRef.set(data),
-    getDoc: (docRef) => docRef.get(),
-    getDocs: (query) => query.get(),
-    deleteDoc: (docRef) => docRef.delete(),
-    updateDoc: (docRef, updates) => docRef.update(updates),
-    query: (collectionRef, ...constraints) => {
-        let q = collectionRef;
-        constraints.forEach((constraint) => {
-            if (constraint.type === "where") {
-                q = q.where(constraint.field, constraint.op, constraint.value);
-            } else if (constraint.type === "orderBy") {
-                q = q.orderBy(constraint.field, constraint.direction || "asc");
-            }
-        });
-        return q;
-    },
-    where: (field, op, value) => ({ type: "where", field, op, value }),
-    orderBy: (field, direction) => ({ type: "orderBy", field, direction }),
-    onSnapshot: (query, callback) => query.onSnapshot(callback),
-    serverTimestamp: () => Timestamp.now(),
-    runTransaction: (database, updateFunction) =>
-        db.runTransaction(updateFunction),
-    arrayRemove: FieldValue.arrayRemove,
-    arrayUnion: FieldValue.arrayUnion,
-};
-
-let storageFunctions = {
-    getStorage: () => storage,
-    ref: (storageInstance, path) => storage.bucket().file(path),
-    uploadString: async (fileRef, data) => {
-        // Admin SDK uses different method - save buffer to file
-        return await fileRef.save(Buffer.from(data, "utf8"));
-    },
-    getDownloadURL: async (fileRef) => {
-        // Admin SDK uses different method to get download URL
-        const [url] = await fileRef.getSignedUrl({
-            action: "read",
-            expires: Date.now() + 1000 * 60 * 60 * 24 * 7, // 7 days
-        });
-        return url;
-    },
-};
-
-global._vy_firebase_admin_sdk = true;
-global._vy_firebase_app = app$1;
-global._vy_firebase_functions = firebaseFunctions;
-global._vy_storage_functions = storageFunctions;
-
-// Helper to check if request is authenticated
-const isAuthenticated = async (req) => {
-    try {
-        // Get the Authorization header
-        const authHeader = req.headers.authorization;
-
-        if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            return {
-                authenticated: false,
-                error: "No valid authorization header",
-            };
-        }
-
-        // Extract the ID token
-        const idToken = authHeader.split("Bearer ")[1];
-
-        // Verify the ID token
-        const decodedToken = await getAuth$1().verifyIdToken(idToken);
-
-        return {
-            authenticated: true,
-            uid: decodedToken.uid,
-            user: decodedToken,
-        };
-    } catch (error) {
-        console.error("Authentication error:", error);
-        return {
-            authenticated: false,
-            error: "Invalid token",
-        };
-    }
-};
-
-// Authentication middleware
-const requireAuth = async (req, res, next) => {
-    const authResult = await isAuthenticated(req);
-
-    if (!authResult.authenticated) {
-        console.warn("Unauthorized access attempt");
-        return res.status(401).json({
-            error: "Unauthorized",
-            message: authResult.error,
-        });
-    }
-
-    // Add user info to request object for use in route handlers
-    req.user = authResult.user;
-    req.uid = authResult.uid;
-
-    next();
-};
-
-let app;
-
-async function getApp$1() {
-    if (app) return app;
-
-    if (typeof global !== "undefined" && global._vy_firebase_admin_sdk) {
-        console.log("Using Firebase Admin SDK...");
-        app = global._vy_firebase_app;
-    } else {
-        console.log("Initializing Firebase Client App...");
-        const { initializeApp } = await import('firebase/app');
-        const { config } = await import('../../firebase-config.js');
-        app = initializeApp(config);
-    }
-
-    return app;
-}
-
-let getFirestore,
-    doc,
-    collection,
-    setDoc,
-    getDoc,
-    getDocs,
-    deleteDoc,
-    updateDoc,
-    query,
-    orderBy,
-    where,
-    onSnapshot,
-    serverTimestamp,
-    runTransaction,
-    arrayUnion,
-    arrayRemove;
-
-async function initializeFirestore() {
-    // Initialize Firebase functions based on environment
-    let firebaseFunctions;
-
-    if (typeof global !== "undefined" && global._vy_firebase_admin_sdk) {
-        console.log("Importing Admin Firestore SDK...");
-        firebaseFunctions = global._vy_firebase_functions;
-    } else {
-        console.log("Importing Client Firestore SDK...");
-        const firebaseModules = await import('firebase/firestore');
-        firebaseFunctions = firebaseModules;
-    }
-
-    getFirestore = firebaseFunctions.getFirestore;
-    doc = firebaseFunctions.doc;
-    collection = firebaseFunctions.collection;
-    setDoc = firebaseFunctions.setDoc;
-    getDoc = firebaseFunctions.getDoc;
-    getDocs = firebaseFunctions.getDocs;
-    deleteDoc = firebaseFunctions.deleteDoc;
-    updateDoc = firebaseFunctions.updateDoc;
-    query = firebaseFunctions.query;
-    orderBy = firebaseFunctions.orderBy;
-    where = firebaseFunctions.where;
-    onSnapshot = firebaseFunctions.onSnapshot;
-    serverTimestamp = firebaseFunctions.serverTimestamp;
-    runTransaction = firebaseFunctions.runTransaction;
-    arrayUnion = firebaseFunctions.arrayUnion;
-    arrayRemove = firebaseFunctions.arrayRemove;
-}
-
-async function ensureInitialized() {
-    if (!getFirestore) {
-        await initializeFirestore();
-    }
-}
-
-class Database {
-    constructor() {
-        this.db = null;
-    }
-
-    async ensureFirestore() {
-        if (!this.db) {
-            const app = await getApp$1();
-            await ensureInitialized();
-            this.db = getFirestore(app);
-        }
-
-        return this.db;
-    }
-
-    pushid(now = null) {
-        const pushChars =
-            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
-
-        // Date of original proof of concept video capture
-        const epoch = new Date(2024, 8, 14, 3, 27, 0).getTime(); // Month is 0-indexed in JS
-        now = now || Date.now(); // Current time in ms
-
-        // Encode timestamp into 8 characters
-        const timeStampChars = new Array(8);
-        let timestamp = now - epoch;
-        for (let i = 7; i >= 0; i--) {
-            timeStampChars[i] = pushChars[timestamp % pushChars.length];
-            timestamp = Math.floor(timestamp / pushChars.length);
-        }
-        if (timestamp !== 0) {
-            throw new Error("Timestamp didn't fully convert");
-        }
-
-        const lastRandChars = Array.from({ length: 12 }, () =>
-            Math.floor(Math.random() * pushChars.length)
-        );
-        const randChars = lastRandChars.map((i) => pushChars[i]);
-
-        return timeStampChars.concat(randChars).join("");
-    }
-
-    async set(collectionName, docData, isNew=false) {
-        console.log("Setting", collectionName, docData);
-        await this.ensureFirestore();
-
-        if (!docData.id || isNew) {
-            docData.created = serverTimestamp();
-        }
-        
-        if (!docData.id) {
-            docData.id = this.pushid();
-        }
-
-        docData.updated = serverTimestamp();
-        const docRef = doc(this.db, collectionName, docData.id);
-        await setDoc(docRef, docData);
-
-        return docData.id;
-    }
-
-    async get(collectionName, docId) {
-        console.log("Getting", collectionName, docId);
-        await this.ensureFirestore();
-
-        const docRef = doc(this.db, collectionName, docId);
-        const docSnap = await getDoc(docRef);
-
-        if (
-            !docSnap ||
-            (typeof docSnap.exists === "boolean" && !docSnap.exists) ||
-            (typeof docSnap.exists === "function" && !docSnap.exists())
-        ) {
-            return null;
-        }
-
-        const data = docSnap.data();
-        data.id = docSnap.id;
-        return data;
-    }
-
-    async query(collectionName, filters = null, order = null) {
-        console.log("Querying", collectionName, filters, order);
-        await this.ensureFirestore();
-
-        let q = collection(this.db, collectionName);
-
-        if (filters) {
-            for (const [key, value] of Object.entries(filters)) {
-                if (
-                    typeof value === "object" &&
-                    value !== null &&
-                    !Array.isArray(value)
-                ) {
-                    const op = value.op || "==";
-                    const val = value.value;
-                    q = query(q, where(key, op, val));
-                } else if (Array.isArray(value)) {
-                    q = query(q, where(key, "in", value));
-                } else {
-                    q = query(q, where(key, "==", value));
-                }
-            }
-
-            if (order) {
-                if (typeof order === "object") {
-                    q = query(q, orderBy(order.key, order.dir));
-                } else {
-                    q = query(q, orderBy(order));
-                }
-            }
-        }
-
-        const querySnapshot = await getDocs(q);
-        const results = [];
-
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            data.id = doc.id;
-            results.push(data);
-        });
-
-        return results;
-    }
-
-    async delete(collectionName, docId) {
-        console.log("Deleting", collectionName, docId);
-        await this.ensureFirestore();
-
-        const docRef = doc(this.db, collectionName, docId);
-        await deleteDoc(docRef);
-        return true;
-    }
-
-    async deleteAll(collectionName, filters = null) {
-        console.log("Deleting all from", collectionName, filters);
-        await this.ensureFirestore();
-
-        let rows = await this.query(collectionName, filters);
-        if (!rows || rows.length === 0) return true;
-
-        for (let row of rows) {
-            await this.delete(collectionName, row.id);
-        }
-        return true;
-    }
-
-    async update(collectionName, docId, updates) {
-        console.log("Updating", collectionName, docId, updates);
-        await this.ensureFirestore();
-
-        const docRef = doc(this.db, collectionName, docId);
-
-        // Process special array operations
-        const processedUpdates = {};
-        for (const [key, value] of Object.entries(updates)) {
-            if (value && typeof value === "object" && !Array.isArray(value)) {
-                if (value.op === "arrayUnion") {
-                    processedUpdates[key] = arrayUnion(value.value);
-                } else if (value.op === "arrayRemove") {
-                    processedUpdates[key] = arrayRemove(value.value);
-                } else {
-                    processedUpdates[key] = value;
-                }
-            } else {
-                processedUpdates[key] = value;
-            }
-        }
-
-        processedUpdates.updated = serverTimestamp();
-        await updateDoc(docRef, processedUpdates);
-        return true;
-    }
-
-    async atomicUpdate(
-        collectionName,
-        docId,
-        column,
-        oldValue,
-        newValue,
-        updates = {}
-    ) {
-        console.log(
-            "Atomic updating",
-            collectionName,
-            docId,
-            column,
-            oldValue,
-            newValue,
-            updates
-        );
-        await this.ensureFirestore();
-
-        const docRef = doc(this.db, collectionName, docId);
-
-        try {
-            const result = await runTransaction(
-                this.db,
-                async (transaction) => {
-                    const docSnap = await transaction.get(docRef);
-
-                    if (
-                        docSnap.exists() &&
-                        docSnap.data()[column] === oldValue
-                    ) {
-                        const updateData = {
-                            [column]: newValue,
-                            updated: serverTimestamp(),
-                            ...updates,
-                        };
-                        transaction.update(docRef, updateData);
-                        return true;
-                    }
-
-                    return false;
-                }
-            );
-
-            return result;
-        } catch (error) {
-            console.error("Transaction failed: ", error);
-            return false;
-        }
-    }
-
-    async listen(collectionName, callback, filters = null) {
-        console.log("Setting up listener for", collectionName, filters);
-        await this.ensureFirestore();
-
-        let q = collection(this.db, collectionName);
-
-        if (filters) {
-            for (const [key, value] of Object.entries(filters)) {
-                if (
-                    typeof value === "object" &&
-                    value !== null &&
-                    !Array.isArray(value)
-                ) {
-                    const op = value.op || "==";
-                    const val = value.value;
-                    q = query(q, where(key, op, val));
-                } else if (Array.isArray(value)) {
-                    q = query(q, where(key, "in", value));
-                } else {
-                    q = query(q, where(key, "==", value));
-                }
-            }
-        }
-
-        return onSnapshot(q, (querySnapshot) => {
-            console.log("Listener triggered for", collectionName);
-            const results = [];
-
-            querySnapshot.docChanges().forEach((change) => {
-                if (change.type === "added" || change.type === "modified") {
-                    const data = change.doc.data();
-                    data.id = change.doc.id;
-                    results.push(data);
-                }
-            });
-
-            if (results.length > 0) {
-                callback(results);
-            }
-        });
-    }
-
-    async watch(collectionName, docId, callback) {
-        await this.ensureFirestore();
-        const docRef = doc(this.db, collectionName, docId);
-
-        return onSnapshot(docRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                data.id = docSnap.id;
-                callback(data);
-            }
-        });
-    }
-
-    stop(listener) {
-        listener();
-    }
-}
-
-let database = new Database();
-
-// let firestore = getFirestore(app);
-
-if (typeof window !== "undefined") {
-    window._vy_database = database;
-}
-
-const getDefaultsFromPostinstall = () => (undefined);
-
-/**
- * @license
- * Copyright 2017 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-const stringToByteArray$1 = function (str) {
-    // TODO(user): Use native implementations if/when available
-    const out = [];
-    let p = 0;
-    for (let i = 0; i < str.length; i++) {
-        let c = str.charCodeAt(i);
-        if (c < 128) {
-            out[p++] = c;
-        }
-        else if (c < 2048) {
-            out[p++] = (c >> 6) | 192;
-            out[p++] = (c & 63) | 128;
-        }
-        else if ((c & 0xfc00) === 0xd800 &&
-            i + 1 < str.length &&
-            (str.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
-            // Surrogate Pair
-            c = 0x10000 + ((c & 0x03ff) << 10) + (str.charCodeAt(++i) & 0x03ff);
-            out[p++] = (c >> 18) | 240;
-            out[p++] = ((c >> 12) & 63) | 128;
-            out[p++] = ((c >> 6) & 63) | 128;
-            out[p++] = (c & 63) | 128;
-        }
-        else {
-            out[p++] = (c >> 12) | 224;
-            out[p++] = ((c >> 6) & 63) | 128;
-            out[p++] = (c & 63) | 128;
-        }
-    }
-    return out;
-};
-/**
- * Turns an array of numbers into the string given by the concatenation of the
- * characters to which the numbers correspond.
- * @param bytes Array of numbers representing characters.
- * @return Stringification of the array.
- */
-const byteArrayToString = function (bytes) {
-    // TODO(user): Use native implementations if/when available
-    const out = [];
-    let pos = 0, c = 0;
-    while (pos < bytes.length) {
-        const c1 = bytes[pos++];
-        if (c1 < 128) {
-            out[c++] = String.fromCharCode(c1);
-        }
-        else if (c1 > 191 && c1 < 224) {
-            const c2 = bytes[pos++];
-            out[c++] = String.fromCharCode(((c1 & 31) << 6) | (c2 & 63));
-        }
-        else if (c1 > 239 && c1 < 365) {
-            // Surrogate Pair
-            const c2 = bytes[pos++];
-            const c3 = bytes[pos++];
-            const c4 = bytes[pos++];
-            const u = (((c1 & 7) << 18) | ((c2 & 63) << 12) | ((c3 & 63) << 6) | (c4 & 63)) -
-                0x10000;
-            out[c++] = String.fromCharCode(0xd800 + (u >> 10));
-            out[c++] = String.fromCharCode(0xdc00 + (u & 1023));
-        }
-        else {
-            const c2 = bytes[pos++];
-            const c3 = bytes[pos++];
-            out[c++] = String.fromCharCode(((c1 & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
-        }
-    }
-    return out.join('');
-};
-// We define it as an object literal instead of a class because a class compiled down to es5 can't
-// be treeshaked. https://github.com/rollup/rollup/issues/1691
-// Static lookup maps, lazily populated by init_()
-// TODO(dlarocque): Define this as a class, since we no longer target ES5.
-const base64 = {
-    /**
-     * Maps bytes to characters.
-     */
-    byteToCharMap_: null,
-    /**
-     * Maps characters to bytes.
-     */
-    charToByteMap_: null,
-    /**
-     * Maps bytes to websafe characters.
-     * @private
-     */
-    byteToCharMapWebSafe_: null,
-    /**
-     * Maps websafe characters to bytes.
-     * @private
-     */
-    charToByteMapWebSafe_: null,
-    /**
-     * Our default alphabet, shared between
-     * ENCODED_VALS and ENCODED_VALS_WEBSAFE
-     */
-    ENCODED_VALS_BASE: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' + 'abcdefghijklmnopqrstuvwxyz' + '0123456789',
-    /**
-     * Our default alphabet. Value 64 (=) is special; it means "nothing."
-     */
-    get ENCODED_VALS() {
-        return this.ENCODED_VALS_BASE + '+/=';
-    },
-    /**
-     * Our websafe alphabet.
-     */
-    get ENCODED_VALS_WEBSAFE() {
-        return this.ENCODED_VALS_BASE + '-_.';
-    },
-    /**
-     * Whether this browser supports the atob and btoa functions. This extension
-     * started at Mozilla but is now implemented by many browsers. We use the
-     * ASSUME_* variables to avoid pulling in the full useragent detection library
-     * but still allowing the standard per-browser compilations.
-     *
-     */
-    HAS_NATIVE_SUPPORT: typeof atob === 'function',
-    /**
-     * Base64-encode an array of bytes.
-     *
-     * @param input An array of bytes (numbers with
-     *     value in [0, 255]) to encode.
-     * @param webSafe Boolean indicating we should use the
-     *     alternative alphabet.
-     * @return The base64 encoded string.
-     */
-    encodeByteArray(input, webSafe) {
-        if (!Array.isArray(input)) {
-            throw Error('encodeByteArray takes an array as a parameter');
-        }
-        this.init_();
-        const byteToCharMap = webSafe
-            ? this.byteToCharMapWebSafe_
-            : this.byteToCharMap_;
-        const output = [];
-        for (let i = 0; i < input.length; i += 3) {
-            const byte1 = input[i];
-            const haveByte2 = i + 1 < input.length;
-            const byte2 = haveByte2 ? input[i + 1] : 0;
-            const haveByte3 = i + 2 < input.length;
-            const byte3 = haveByte3 ? input[i + 2] : 0;
-            const outByte1 = byte1 >> 2;
-            const outByte2 = ((byte1 & 0x03) << 4) | (byte2 >> 4);
-            let outByte3 = ((byte2 & 0x0f) << 2) | (byte3 >> 6);
-            let outByte4 = byte3 & 0x3f;
-            if (!haveByte3) {
-                outByte4 = 64;
-                if (!haveByte2) {
-                    outByte3 = 64;
-                }
-            }
-            output.push(byteToCharMap[outByte1], byteToCharMap[outByte2], byteToCharMap[outByte3], byteToCharMap[outByte4]);
-        }
-        return output.join('');
-    },
-    /**
-     * Base64-encode a string.
-     *
-     * @param input A string to encode.
-     * @param webSafe If true, we should use the
-     *     alternative alphabet.
-     * @return The base64 encoded string.
-     */
-    encodeString(input, webSafe) {
-        // Shortcut for Mozilla browsers that implement
-        // a native base64 encoder in the form of "btoa/atob"
-        if (this.HAS_NATIVE_SUPPORT && !webSafe) {
-            return btoa(input);
-        }
-        return this.encodeByteArray(stringToByteArray$1(input), webSafe);
-    },
-    /**
-     * Base64-decode a string.
-     *
-     * @param input to decode.
-     * @param webSafe True if we should use the
-     *     alternative alphabet.
-     * @return string representing the decoded value.
-     */
-    decodeString(input, webSafe) {
-        // Shortcut for Mozilla browsers that implement
-        // a native base64 encoder in the form of "btoa/atob"
-        if (this.HAS_NATIVE_SUPPORT && !webSafe) {
-            return atob(input);
-        }
-        return byteArrayToString(this.decodeStringToByteArray(input, webSafe));
-    },
-    /**
-     * Base64-decode a string.
-     *
-     * In base-64 decoding, groups of four characters are converted into three
-     * bytes.  If the encoder did not apply padding, the input length may not
-     * be a multiple of 4.
-     *
-     * In this case, the last group will have fewer than 4 characters, and
-     * padding will be inferred.  If the group has one or two characters, it decodes
-     * to one byte.  If the group has three characters, it decodes to two bytes.
-     *
-     * @param input Input to decode.
-     * @param webSafe True if we should use the web-safe alphabet.
-     * @return bytes representing the decoded value.
-     */
-    decodeStringToByteArray(input, webSafe) {
-        this.init_();
-        const charToByteMap = webSafe
-            ? this.charToByteMapWebSafe_
-            : this.charToByteMap_;
-        const output = [];
-        for (let i = 0; i < input.length;) {
-            const byte1 = charToByteMap[input.charAt(i++)];
-            const haveByte2 = i < input.length;
-            const byte2 = haveByte2 ? charToByteMap[input.charAt(i)] : 0;
-            ++i;
-            const haveByte3 = i < input.length;
-            const byte3 = haveByte3 ? charToByteMap[input.charAt(i)] : 64;
-            ++i;
-            const haveByte4 = i < input.length;
-            const byte4 = haveByte4 ? charToByteMap[input.charAt(i)] : 64;
-            ++i;
-            if (byte1 == null || byte2 == null || byte3 == null || byte4 == null) {
-                throw new DecodeBase64StringError();
-            }
-            const outByte1 = (byte1 << 2) | (byte2 >> 4);
-            output.push(outByte1);
-            if (byte3 !== 64) {
-                const outByte2 = ((byte2 << 4) & 0xf0) | (byte3 >> 2);
-                output.push(outByte2);
-                if (byte4 !== 64) {
-                    const outByte3 = ((byte3 << 6) & 0xc0) | byte4;
-                    output.push(outByte3);
-                }
-            }
-        }
-        return output;
-    },
-    /**
-     * Lazy static initialization function. Called before
-     * accessing any of the static map variables.
-     * @private
-     */
-    init_() {
-        if (!this.byteToCharMap_) {
-            this.byteToCharMap_ = {};
-            this.charToByteMap_ = {};
-            this.byteToCharMapWebSafe_ = {};
-            this.charToByteMapWebSafe_ = {};
-            // We want quick mappings back and forth, so we precompute two maps.
-            for (let i = 0; i < this.ENCODED_VALS.length; i++) {
-                this.byteToCharMap_[i] = this.ENCODED_VALS.charAt(i);
-                this.charToByteMap_[this.byteToCharMap_[i]] = i;
-                this.byteToCharMapWebSafe_[i] = this.ENCODED_VALS_WEBSAFE.charAt(i);
-                this.charToByteMapWebSafe_[this.byteToCharMapWebSafe_[i]] = i;
-                // Be forgiving when decoding and correctly decode both encodings.
-                if (i >= this.ENCODED_VALS_BASE.length) {
-                    this.charToByteMap_[this.ENCODED_VALS_WEBSAFE.charAt(i)] = i;
-                    this.charToByteMapWebSafe_[this.ENCODED_VALS.charAt(i)] = i;
-                }
-            }
-        }
-    }
-};
-/**
- * An error encountered while decoding base64 string.
- */
-class DecodeBase64StringError extends Error {
-    constructor() {
-        super(...arguments);
-        this.name = 'DecodeBase64StringError';
-    }
-}
-/**
- * URL-safe base64 encoding
- */
-const base64Encode = function (str) {
-    const utf8Bytes = stringToByteArray$1(str);
-    return base64.encodeByteArray(utf8Bytes, true);
-};
-/**
- * URL-safe base64 encoding (without "." padding in the end).
- * e.g. Used in JSON Web Token (JWT) parts.
- */
-const base64urlEncodeWithoutPadding = function (str) {
-    // Use base64url encoding and remove padding in the end (dot characters).
-    return base64Encode(str).replace(/\./g, '');
-};
-/**
- * URL-safe base64 decoding
- *
- * NOTE: DO NOT use the global atob() function - it does NOT support the
- * base64Url variant encoding.
- *
- * @param str To be decoded
- * @return Decoded result, if possible
- */
-const base64Decode = function (str) {
-    try {
-        return base64.decodeString(str, true);
-    }
-    catch (e) {
-        console.error('base64Decode failed: ', e);
-    }
-    return null;
-};
-
-/**
- * @license
- * Copyright 2022 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Polyfill for `globalThis` object.
- * @returns the `globalThis` object for the given environment.
- * @public
- */
-function getGlobal() {
-    if (typeof self !== 'undefined') {
-        return self;
-    }
-    if (typeof window !== 'undefined') {
-        return window;
-    }
-    if (typeof global !== 'undefined') {
-        return global;
-    }
-    throw new Error('Unable to locate global object.');
-}
-
-/**
- * @license
- * Copyright 2022 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-const getDefaultsFromGlobal = () => getGlobal().__FIREBASE_DEFAULTS__;
-/**
- * Attempt to read defaults from a JSON string provided to
- * process(.)env(.)__FIREBASE_DEFAULTS__ or a JSON file whose path is in
- * process(.)env(.)__FIREBASE_DEFAULTS_PATH__
- * The dots are in parens because certain compilers (Vite?) cannot
- * handle seeing that variable in comments.
- * See https://github.com/firebase/firebase-js-sdk/issues/6838
- */
-const getDefaultsFromEnvVariable = () => {
-    if (typeof process === 'undefined' || typeof process.env === 'undefined') {
-        return;
-    }
-    const defaultsJsonString = process.env.__FIREBASE_DEFAULTS__;
-    if (defaultsJsonString) {
-        return JSON.parse(defaultsJsonString);
-    }
-};
-const getDefaultsFromCookie = () => {
-    if (typeof document === 'undefined') {
-        return;
-    }
-    let match;
-    try {
-        match = document.cookie.match(/__FIREBASE_DEFAULTS__=([^;]+)/);
-    }
-    catch (e) {
-        // Some environments such as Angular Universal SSR have a
-        // `document` object but error on accessing `document.cookie`.
-        return;
-    }
-    const decoded = match && base64Decode(match[1]);
-    return decoded && JSON.parse(decoded);
-};
-/**
- * Get the __FIREBASE_DEFAULTS__ object. It checks in order:
- * (1) if such an object exists as a property of `globalThis`
- * (2) if such an object was provided on a shell environment variable
- * (3) if such an object exists in a cookie
- * @public
- */
-const getDefaults = () => {
-    try {
-        return (getDefaultsFromPostinstall() ||
-            getDefaultsFromGlobal() ||
-            getDefaultsFromEnvVariable() ||
-            getDefaultsFromCookie());
-    }
-    catch (e) {
-        /**
-         * Catch-all for being unable to get __FIREBASE_DEFAULTS__ due
-         * to any environment case we have not accounted for. Log to
-         * info instead of swallowing so we can find these unknown cases
-         * and add paths for them if needed.
-         */
-        console.info(`Unable to get __FIREBASE_DEFAULTS__ due to: ${e}`);
-        return;
-    }
-};
-/**
- * Returns emulator host stored in the __FIREBASE_DEFAULTS__ object
- * for the given product.
- * @returns a URL host formatted like `127.0.0.1:9999` or `[::1]:4000` if available
- * @public
- */
-const getDefaultEmulatorHost = (productName) => { var _a, _b; return (_b = (_a = getDefaults()) === null || _a === void 0 ? void 0 : _a.emulatorHosts) === null || _b === void 0 ? void 0 : _b[productName]; };
-/**
- * Returns Firebase app config stored in the __FIREBASE_DEFAULTS__ object.
- * @public
- */
-const getDefaultAppConfig = () => { var _a; return (_a = getDefaults()) === null || _a === void 0 ? void 0 : _a.config; };
-/**
- * Returns an experimental setting on the __FIREBASE_DEFAULTS__ object (properties
- * prefixed by "_")
- * @public
- */
-const getExperimentalSetting = (name) => { var _a; return (_a = getDefaults()) === null || _a === void 0 ? void 0 : _a[`_${name}`]; };
-
-/**
- * @license
- * Copyright 2017 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-class Deferred {
-    constructor() {
-        this.reject = () => { };
-        this.resolve = () => { };
-        this.promise = new Promise((resolve, reject) => {
-            this.resolve = resolve;
-            this.reject = reject;
-        });
-    }
-    /**
-     * Our API internals are not promisified and cannot because our callback APIs have subtle expectations around
-     * invoking promises inline, which Promises are forbidden to do. This method accepts an optional node-style callback
-     * and returns a node-style callback which will resolve or reject the Deferred's promise.
-     */
-    wrapCallback(callback) {
-        return (error, value) => {
-            if (error) {
-                this.reject(error);
-            }
-            else {
-                this.resolve(value);
-            }
-            if (typeof callback === 'function') {
-                // Attaching noop handler just in case developer wasn't expecting
-                // promises
-                this.promise.catch(() => { });
-                // Some of our callbacks don't expect a value and our own tests
-                // assert that the parameter length is 1
-                if (callback.length === 1) {
-                    callback(error);
-                }
-                else {
-                    callback(error, value);
-                }
-            }
-        };
-    }
-}
-
-/**
- * @license
- * Copyright 2025 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Checks whether host is a cloud workstation or not.
- * @public
- */
-function isCloudWorkstation(url) {
-    // `isCloudWorkstation` is called without protocol in certain connect*Emulator functions
-    // In HTTP request builders, it's called with the protocol.
-    // If called with protocol prefix, it's a valid URL, so we extract the hostname
-    // If called without, we assume the string is the hostname.
-    try {
-        const host = url.startsWith('http://') || url.startsWith('https://')
-            ? new URL(url).hostname
-            : url;
-        return host.endsWith('.cloudworkstations.dev');
-    }
-    catch (_a) {
-        return false;
-    }
-}
-/**
- * Makes a fetch request to the given server.
- * Mostly used for forwarding cookies in Firebase Studio.
- * @public
- */
-async function pingServer(endpoint) {
-    const result = await fetch(endpoint, {
-        credentials: 'include'
-    });
-    return result.ok;
-}
-const emulatorStatus = {};
-// Checks whether any products are running on an emulator
-function getEmulatorSummary() {
-    const summary = {
-        prod: [],
-        emulator: []
-    };
-    for (const key of Object.keys(emulatorStatus)) {
-        if (emulatorStatus[key]) {
-            summary.emulator.push(key);
-        }
-        else {
-            summary.prod.push(key);
-        }
-    }
-    return summary;
-}
-function getOrCreateEl(id) {
-    let parentDiv = document.getElementById(id);
-    let created = false;
-    if (!parentDiv) {
-        parentDiv = document.createElement('div');
-        parentDiv.setAttribute('id', id);
-        created = true;
-    }
-    return { created, element: parentDiv };
-}
-let previouslyDismissed = false;
-/**
- * Updates Emulator Banner. Primarily used for Firebase Studio
- * @param name
- * @param isRunningEmulator
- * @public
- */
-function updateEmulatorBanner(name, isRunningEmulator) {
-    if (typeof window === 'undefined' ||
-        typeof document === 'undefined' ||
-        !isCloudWorkstation(window.location.host) ||
-        emulatorStatus[name] === isRunningEmulator ||
-        emulatorStatus[name] || // If already set to use emulator, can't go back to prod.
-        previouslyDismissed) {
-        return;
-    }
-    emulatorStatus[name] = isRunningEmulator;
-    function prefixedId(id) {
-        return `__firebase__banner__${id}`;
-    }
-    const bannerId = '__firebase__banner';
-    const summary = getEmulatorSummary();
-    const showError = summary.prod.length > 0;
-    function tearDown() {
-        const element = document.getElementById(bannerId);
-        if (element) {
-            element.remove();
-        }
-    }
-    function setupBannerStyles(bannerEl) {
-        bannerEl.style.display = 'flex';
-        bannerEl.style.background = '#7faaf0';
-        bannerEl.style.position = 'fixed';
-        bannerEl.style.bottom = '5px';
-        bannerEl.style.left = '5px';
-        bannerEl.style.padding = '.5em';
-        bannerEl.style.borderRadius = '5px';
-        bannerEl.style.alignItems = 'center';
-    }
-    function setupIconStyles(prependIcon, iconId) {
-        prependIcon.setAttribute('width', '24');
-        prependIcon.setAttribute('id', iconId);
-        prependIcon.setAttribute('height', '24');
-        prependIcon.setAttribute('viewBox', '0 0 24 24');
-        prependIcon.setAttribute('fill', 'none');
-        prependIcon.style.marginLeft = '-6px';
-    }
-    function setupCloseBtn() {
-        const closeBtn = document.createElement('span');
-        closeBtn.style.cursor = 'pointer';
-        closeBtn.style.marginLeft = '16px';
-        closeBtn.style.fontSize = '24px';
-        closeBtn.innerHTML = ' &times;';
-        closeBtn.onclick = () => {
-            previouslyDismissed = true;
-            tearDown();
-        };
-        return closeBtn;
-    }
-    function setupLinkStyles(learnMoreLink, learnMoreId) {
-        learnMoreLink.setAttribute('id', learnMoreId);
-        learnMoreLink.innerText = 'Learn more';
-        learnMoreLink.href =
-            'https://firebase.google.com/docs/studio/preview-apps#preview-backend';
-        learnMoreLink.setAttribute('target', '__blank');
-        learnMoreLink.style.paddingLeft = '5px';
-        learnMoreLink.style.textDecoration = 'underline';
-    }
-    function setupDom() {
-        const banner = getOrCreateEl(bannerId);
-        const firebaseTextId = prefixedId('text');
-        const firebaseText = document.getElementById(firebaseTextId) || document.createElement('span');
-        const learnMoreId = prefixedId('learnmore');
-        const learnMoreLink = document.getElementById(learnMoreId) ||
-            document.createElement('a');
-        const prependIconId = prefixedId('preprendIcon');
-        const prependIcon = document.getElementById(prependIconId) ||
-            document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        if (banner.created) {
-            // update styles
-            const bannerEl = banner.element;
-            setupBannerStyles(bannerEl);
-            setupLinkStyles(learnMoreLink, learnMoreId);
-            const closeBtn = setupCloseBtn();
-            setupIconStyles(prependIcon, prependIconId);
-            bannerEl.append(prependIcon, firebaseText, learnMoreLink, closeBtn);
-            document.body.appendChild(bannerEl);
-        }
-        if (showError) {
-            firebaseText.innerText = `Preview backend disconnected.`;
-            prependIcon.innerHTML = `<g clip-path="url(#clip0_6013_33858)">
-<path d="M4.8 17.6L12 5.6L19.2 17.6H4.8ZM6.91667 16.4H17.0833L12 7.93333L6.91667 16.4ZM12 15.6C12.1667 15.6 12.3056 15.5444 12.4167 15.4333C12.5389 15.3111 12.6 15.1667 12.6 15C12.6 14.8333 12.5389 14.6944 12.4167 14.5833C12.3056 14.4611 12.1667 14.4 12 14.4C11.8333 14.4 11.6889 14.4611 11.5667 14.5833C11.4556 14.6944 11.4 14.8333 11.4 15C11.4 15.1667 11.4556 15.3111 11.5667 15.4333C11.6889 15.5444 11.8333 15.6 12 15.6ZM11.4 13.6H12.6V10.4H11.4V13.6Z" fill="#212121"/>
-</g>
-<defs>
-<clipPath id="clip0_6013_33858">
-<rect width="24" height="24" fill="white"/>
-</clipPath>
-</defs>`;
-        }
-        else {
-            prependIcon.innerHTML = `<g clip-path="url(#clip0_6083_34804)">
-<path d="M11.4 15.2H12.6V11.2H11.4V15.2ZM12 10C12.1667 10 12.3056 9.94444 12.4167 9.83333C12.5389 9.71111 12.6 9.56667 12.6 9.4C12.6 9.23333 12.5389 9.09444 12.4167 8.98333C12.3056 8.86111 12.1667 8.8 12 8.8C11.8333 8.8 11.6889 8.86111 11.5667 8.98333C11.4556 9.09444 11.4 9.23333 11.4 9.4C11.4 9.56667 11.4556 9.71111 11.5667 9.83333C11.6889 9.94444 11.8333 10 12 10ZM12 18.4C11.1222 18.4 10.2944 18.2333 9.51667 17.9C8.73889 17.5667 8.05556 17.1111 7.46667 16.5333C6.88889 15.9444 6.43333 15.2611 6.1 14.4833C5.76667 13.7056 5.6 12.8778 5.6 12C5.6 11.1111 5.76667 10.2833 6.1 9.51667C6.43333 8.73889 6.88889 8.06111 7.46667 7.48333C8.05556 6.89444 8.73889 6.43333 9.51667 6.1C10.2944 5.76667 11.1222 5.6 12 5.6C12.8889 5.6 13.7167 5.76667 14.4833 6.1C15.2611 6.43333 15.9389 6.89444 16.5167 7.48333C17.1056 8.06111 17.5667 8.73889 17.9 9.51667C18.2333 10.2833 18.4 11.1111 18.4 12C18.4 12.8778 18.2333 13.7056 17.9 14.4833C17.5667 15.2611 17.1056 15.9444 16.5167 16.5333C15.9389 17.1111 15.2611 17.5667 14.4833 17.9C13.7167 18.2333 12.8889 18.4 12 18.4ZM12 17.2C13.4444 17.2 14.6722 16.6944 15.6833 15.6833C16.6944 14.6722 17.2 13.4444 17.2 12C17.2 10.5556 16.6944 9.32778 15.6833 8.31667C14.6722 7.30555 13.4444 6.8 12 6.8C10.5556 6.8 9.32778 7.30555 8.31667 8.31667C7.30556 9.32778 6.8 10.5556 6.8 12C6.8 13.4444 7.30556 14.6722 8.31667 15.6833C9.32778 16.6944 10.5556 17.2 12 17.2Z" fill="#212121"/>
-</g>
-<defs>
-<clipPath id="clip0_6083_34804">
-<rect width="24" height="24" fill="white"/>
-</clipPath>
-</defs>`;
-            firebaseText.innerText = 'Preview backend running in this workspace.';
-        }
-        firebaseText.setAttribute('id', firebaseTextId);
-    }
-    if (document.readyState === 'loading') {
-        window.addEventListener('DOMContentLoaded', setupDom);
-    }
-    else {
-        setupDom();
-    }
-}
-
-/**
- * @license
- * Copyright 2017 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Returns navigator.userAgent string or '' if it's not defined.
- * @return user agent string
- */
-function getUA() {
-    if (typeof navigator !== 'undefined' &&
-        typeof navigator['userAgent'] === 'string') {
-        return navigator['userAgent'];
-    }
-    else {
-        return '';
-    }
-}
-/**
- * Detect Cordova / PhoneGap / Ionic frameworks on a mobile device.
- *
- * Deliberately does not rely on checking `file://` URLs (as this fails PhoneGap
- * in the Ripple emulator) nor Cordova `onDeviceReady`, which would normally
- * wait for a callback.
- */
-function isMobileCordova() {
-    return (typeof window !== 'undefined' &&
-        // @ts-ignore Setting up an broadly applicable index signature for Window
-        // just to deal with this case would probably be a bad idea.
-        !!(window['cordova'] || window['phonegap'] || window['PhoneGap']) &&
-        /ios|iphone|ipod|ipad|android|blackberry|iemobile/i.test(getUA()));
-}
-/**
- * Detect Cloudflare Worker context.
- */
-function isCloudflareWorker() {
-    return (typeof navigator !== 'undefined' &&
-        navigator.userAgent === 'Cloudflare-Workers');
-}
-function isBrowserExtension() {
-    const runtime = typeof chrome === 'object'
-        ? chrome.runtime
-        : typeof browser === 'object'
-            ? browser.runtime
-            : undefined;
-    return typeof runtime === 'object' && runtime.id !== undefined;
-}
-/**
- * Detect React Native.
- *
- * @return true if ReactNative environment is detected.
- */
-function isReactNative() {
-    return (typeof navigator === 'object' && navigator['product'] === 'ReactNative');
-}
-/** Detects Internet Explorer. */
-function isIE() {
-    const ua = getUA();
-    return ua.indexOf('MSIE ') >= 0 || ua.indexOf('Trident/') >= 0;
-}
-/**
- * This method checks if indexedDB is supported by current browser/service worker context
- * @return true if indexedDB is supported by current browser/service worker context
- */
-function isIndexedDBAvailable() {
-    try {
-        return typeof indexedDB === 'object';
-    }
-    catch (e) {
-        return false;
-    }
-}
-/**
- * This method validates browser/sw context for indexedDB by opening a dummy indexedDB database and reject
- * if errors occur during the database open operation.
- *
- * @throws exception if current browser/sw context can't run idb.open (ex: Safari iframe, Firefox
- * private browsing)
- */
-function validateIndexedDBOpenable() {
-    return new Promise((resolve, reject) => {
-        try {
-            let preExist = true;
-            const DB_CHECK_NAME = 'validate-browser-context-for-indexeddb-analytics-module';
-            const request = self.indexedDB.open(DB_CHECK_NAME);
-            request.onsuccess = () => {
-                request.result.close();
-                // delete database only when it doesn't pre-exist
-                if (!preExist) {
-                    self.indexedDB.deleteDatabase(DB_CHECK_NAME);
-                }
-                resolve(true);
-            };
-            request.onupgradeneeded = () => {
-                preExist = false;
-            };
-            request.onerror = () => {
-                var _a;
-                reject(((_a = request.error) === null || _a === void 0 ? void 0 : _a.message) || '');
-            };
-        }
-        catch (error) {
-            reject(error);
-        }
-    });
-}
-
-/**
- * @license
- * Copyright 2017 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * @fileoverview Standardized Firebase Error.
- *
- * Usage:
- *
- *   // TypeScript string literals for type-safe codes
- *   type Err =
- *     'unknown' |
- *     'object-not-found'
- *     ;
- *
- *   // Closure enum for type-safe error codes
- *   // at-enum {string}
- *   var Err = {
- *     UNKNOWN: 'unknown',
- *     OBJECT_NOT_FOUND: 'object-not-found',
- *   }
- *
- *   let errors: Map<Err, string> = {
- *     'generic-error': "Unknown error",
- *     'file-not-found': "Could not find file: {$file}",
- *   };
- *
- *   // Type-safe function - must pass a valid error code as param.
- *   let error = new ErrorFactory<Err>('service', 'Service', errors);
- *
- *   ...
- *   throw error.create(Err.GENERIC);
- *   ...
- *   throw error.create(Err.FILE_NOT_FOUND, {'file': fileName});
- *   ...
- *   // Service: Could not file file: foo.txt (service/file-not-found).
- *
- *   catch (e) {
- *     assert(e.message === "Could not find file: foo.txt.");
- *     if ((e as FirebaseError)?.code === 'service/file-not-found') {
- *       console.log("Could not read file: " + e['file']);
- *     }
- *   }
- */
-const ERROR_NAME = 'FirebaseError';
-// Based on code from:
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error#Custom_Error_Types
-class FirebaseError extends Error {
-    constructor(
-    /** The error code for this error. */
-    code, message, 
-    /** Custom data for this error. */
-    customData) {
-        super(message);
-        this.code = code;
-        this.customData = customData;
-        /** The custom name for all FirebaseErrors. */
-        this.name = ERROR_NAME;
-        // Fix For ES5
-        // https://github.com/Microsoft/TypeScript-wiki/blob/master/Breaking-Changes.md#extending-built-ins-like-error-array-and-map-may-no-longer-work
-        // TODO(dlarocque): Replace this with `new.target`: https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-2.html#support-for-newtarget
-        //                   which we can now use since we no longer target ES5.
-        Object.setPrototypeOf(this, FirebaseError.prototype);
-        // Maintains proper stack trace for where our error was thrown.
-        // Only available on V8.
-        if (Error.captureStackTrace) {
-            Error.captureStackTrace(this, ErrorFactory.prototype.create);
-        }
-    }
-}
-class ErrorFactory {
-    constructor(service, serviceName, errors) {
-        this.service = service;
-        this.serviceName = serviceName;
-        this.errors = errors;
-    }
-    create(code, ...data) {
-        const customData = data[0] || {};
-        const fullCode = `${this.service}/${code}`;
-        const template = this.errors[code];
-        const message = template ? replaceTemplate(template, customData) : 'Error';
-        // Service Name: Error message (service/code).
-        const fullMessage = `${this.serviceName}: ${message} (${fullCode}).`;
-        const error = new FirebaseError(fullCode, fullMessage, customData);
-        return error;
-    }
-}
-function replaceTemplate(template, data) {
-    return template.replace(PATTERN, (_, key) => {
-        const value = data[key];
-        return value != null ? String(value) : `<${key}?>`;
-    });
-}
-const PATTERN = /\{\$([^}]+)}/g;
-function isEmpty(obj) {
-    for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            return false;
-        }
-    }
-    return true;
-}
-/**
- * Deep equal two objects. Support Arrays and Objects.
- */
-function deepEqual(a, b) {
-    if (a === b) {
-        return true;
-    }
-    const aKeys = Object.keys(a);
-    const bKeys = Object.keys(b);
-    for (const k of aKeys) {
-        if (!bKeys.includes(k)) {
-            return false;
-        }
-        const aProp = a[k];
-        const bProp = b[k];
-        if (isObject(aProp) && isObject(bProp)) {
-            if (!deepEqual(aProp, bProp)) {
-                return false;
-            }
-        }
-        else if (aProp !== bProp) {
-            return false;
-        }
-    }
-    for (const k of bKeys) {
-        if (!aKeys.includes(k)) {
-            return false;
-        }
-    }
-    return true;
-}
-function isObject(thing) {
-    return thing !== null && typeof thing === 'object';
-}
-
-/**
- * @license
- * Copyright 2017 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Returns a querystring-formatted string (e.g. &arg=val&arg2=val2) from a
- * params object (e.g. {arg: 'val', arg2: 'val2'})
- * Note: You must prepend it with ? when adding it to a URL.
- */
-function querystring(querystringParams) {
-    const params = [];
-    for (const [key, value] of Object.entries(querystringParams)) {
-        if (Array.isArray(value)) {
-            value.forEach(arrayVal => {
-                params.push(encodeURIComponent(key) + '=' + encodeURIComponent(arrayVal));
-            });
-        }
-        else {
-            params.push(encodeURIComponent(key) + '=' + encodeURIComponent(value));
-        }
-    }
-    return params.length ? '&' + params.join('&') : '';
-}
-
-/**
- * Helper to make a Subscribe function (just like Promise helps make a
- * Thenable).
- *
- * @param executor Function which can make calls to a single Observer
- *     as a proxy.
- * @param onNoObservers Callback when count of Observers goes to zero.
- */
-function createSubscribe(executor, onNoObservers) {
-    const proxy = new ObserverProxy(executor, onNoObservers);
-    return proxy.subscribe.bind(proxy);
-}
-/**
- * Implement fan-out for any number of Observers attached via a subscribe
- * function.
- */
-class ObserverProxy {
-    /**
-     * @param executor Function which can make calls to a single Observer
-     *     as a proxy.
-     * @param onNoObservers Callback when count of Observers goes to zero.
-     */
-    constructor(executor, onNoObservers) {
-        this.observers = [];
-        this.unsubscribes = [];
-        this.observerCount = 0;
-        // Micro-task scheduling by calling task.then().
-        this.task = Promise.resolve();
-        this.finalized = false;
-        this.onNoObservers = onNoObservers;
-        // Call the executor asynchronously so subscribers that are called
-        // synchronously after the creation of the subscribe function
-        // can still receive the very first value generated in the executor.
-        this.task
-            .then(() => {
-            executor(this);
-        })
-            .catch(e => {
-            this.error(e);
-        });
-    }
-    next(value) {
-        this.forEachObserver((observer) => {
-            observer.next(value);
-        });
-    }
-    error(error) {
-        this.forEachObserver((observer) => {
-            observer.error(error);
-        });
-        this.close(error);
-    }
-    complete() {
-        this.forEachObserver((observer) => {
-            observer.complete();
-        });
-        this.close();
-    }
-    /**
-     * Subscribe function that can be used to add an Observer to the fan-out list.
-     *
-     * - We require that no event is sent to a subscriber synchronously to their
-     *   call to subscribe().
-     */
-    subscribe(nextOrObserver, error, complete) {
-        let observer;
-        if (nextOrObserver === undefined &&
-            error === undefined &&
-            complete === undefined) {
-            throw new Error('Missing Observer.');
-        }
-        // Assemble an Observer object when passed as callback functions.
-        if (implementsAnyMethods(nextOrObserver, [
-            'next',
-            'error',
-            'complete'
-        ])) {
-            observer = nextOrObserver;
-        }
-        else {
-            observer = {
-                next: nextOrObserver,
-                error,
-                complete
-            };
-        }
-        if (observer.next === undefined) {
-            observer.next = noop;
-        }
-        if (observer.error === undefined) {
-            observer.error = noop;
-        }
-        if (observer.complete === undefined) {
-            observer.complete = noop;
-        }
-        const unsub = this.unsubscribeOne.bind(this, this.observers.length);
-        // Attempt to subscribe to a terminated Observable - we
-        // just respond to the Observer with the final error or complete
-        // event.
-        if (this.finalized) {
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            this.task.then(() => {
-                try {
-                    if (this.finalError) {
-                        observer.error(this.finalError);
-                    }
-                    else {
-                        observer.complete();
-                    }
-                }
-                catch (e) {
-                    // nothing
-                }
-                return;
-            });
-        }
-        this.observers.push(observer);
-        return unsub;
-    }
-    // Unsubscribe is synchronous - we guarantee that no events are sent to
-    // any unsubscribed Observer.
-    unsubscribeOne(i) {
-        if (this.observers === undefined || this.observers[i] === undefined) {
-            return;
-        }
-        delete this.observers[i];
-        this.observerCount -= 1;
-        if (this.observerCount === 0 && this.onNoObservers !== undefined) {
-            this.onNoObservers(this);
-        }
-    }
-    forEachObserver(fn) {
-        if (this.finalized) {
-            // Already closed by previous event....just eat the additional values.
-            return;
-        }
-        // Since sendOne calls asynchronously - there is no chance that
-        // this.observers will become undefined.
-        for (let i = 0; i < this.observers.length; i++) {
-            this.sendOne(i, fn);
-        }
-    }
-    // Call the Observer via one of it's callback function. We are careful to
-    // confirm that the observe has not been unsubscribed since this asynchronous
-    // function had been queued.
-    sendOne(i, fn) {
-        // Execute the callback asynchronously
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        this.task.then(() => {
-            if (this.observers !== undefined && this.observers[i] !== undefined) {
-                try {
-                    fn(this.observers[i]);
-                }
-                catch (e) {
-                    // Ignore exceptions raised in Observers or missing methods of an
-                    // Observer.
-                    // Log error to console. b/31404806
-                    if (typeof console !== 'undefined' && console.error) {
-                        console.error(e);
-                    }
-                }
-            }
-        });
-    }
-    close(err) {
-        if (this.finalized) {
-            return;
-        }
-        this.finalized = true;
-        if (err !== undefined) {
-            this.finalError = err;
-        }
-        // Proxy is no longer needed - garbage collect references
-        // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        this.task.then(() => {
-            this.observers = undefined;
-            this.onNoObservers = undefined;
-        });
-    }
-}
-/**
- * Return true if the object passed in implements any of the named methods.
- */
-function implementsAnyMethods(obj, methods) {
-    if (typeof obj !== 'object' || obj === null) {
-        return false;
-    }
-    for (const method of methods) {
-        if (method in obj && typeof obj[method] === 'function') {
-            return true;
-        }
-    }
-    return false;
-}
-function noop() {
-    // do nothing
-}
-
-/**
- * @license
- * Copyright 2021 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function getModularInstance(service) {
-    if (service && service._delegate) {
-        return service._delegate;
-    }
-    else {
-        return service;
-    }
-}
-
-/**
- * Component for service name T, e.g. `auth`, `auth-internal`
- */
-class Component {
-    /**
-     *
-     * @param name The public service name, e.g. app, auth, firestore, database
-     * @param instanceFactory Service factory responsible for creating the public interface
-     * @param type whether the service provided by the component is public or private
-     */
-    constructor(name, instanceFactory, type) {
-        this.name = name;
-        this.instanceFactory = instanceFactory;
-        this.type = type;
-        this.multipleInstances = false;
-        /**
-         * Properties to be added to the service namespace
-         */
-        this.serviceProps = {};
-        this.instantiationMode = "LAZY" /* InstantiationMode.LAZY */;
-        this.onInstanceCreated = null;
-    }
-    setInstantiationMode(mode) {
-        this.instantiationMode = mode;
-        return this;
-    }
-    setMultipleInstances(multipleInstances) {
-        this.multipleInstances = multipleInstances;
-        return this;
-    }
-    setServiceProps(props) {
-        this.serviceProps = props;
-        return this;
-    }
-    setInstanceCreatedCallback(callback) {
-        this.onInstanceCreated = callback;
-        return this;
-    }
-}
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-const DEFAULT_ENTRY_NAME$1 = '[DEFAULT]';
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * Provider for instance for service name T, e.g. 'auth', 'auth-internal'
- * NameServiceMapping[T] is an alias for the type of the instance
- */
-class Provider {
-    constructor(name, container) {
-        this.name = name;
-        this.container = container;
-        this.component = null;
-        this.instances = new Map();
-        this.instancesDeferred = new Map();
-        this.instancesOptions = new Map();
-        this.onInitCallbacks = new Map();
-    }
-    /**
-     * @param identifier A provider can provide multiple instances of a service
-     * if this.component.multipleInstances is true.
-     */
-    get(identifier) {
-        // if multipleInstances is not supported, use the default name
-        const normalizedIdentifier = this.normalizeInstanceIdentifier(identifier);
-        if (!this.instancesDeferred.has(normalizedIdentifier)) {
-            const deferred = new Deferred();
-            this.instancesDeferred.set(normalizedIdentifier, deferred);
-            if (this.isInitialized(normalizedIdentifier) ||
-                this.shouldAutoInitialize()) {
-                // initialize the service if it can be auto-initialized
-                try {
-                    const instance = this.getOrInitializeService({
-                        instanceIdentifier: normalizedIdentifier
-                    });
-                    if (instance) {
-                        deferred.resolve(instance);
-                    }
-                }
-                catch (e) {
-                    // when the instance factory throws an exception during get(), it should not cause
-                    // a fatal error. We just return the unresolved promise in this case.
-                }
-            }
-        }
-        return this.instancesDeferred.get(normalizedIdentifier).promise;
-    }
-    getImmediate(options) {
-        var _a;
-        // if multipleInstances is not supported, use the default name
-        const normalizedIdentifier = this.normalizeInstanceIdentifier(options === null || options === void 0 ? void 0 : options.identifier);
-        const optional = (_a = options === null || options === void 0 ? void 0 : options.optional) !== null && _a !== void 0 ? _a : false;
-        if (this.isInitialized(normalizedIdentifier) ||
-            this.shouldAutoInitialize()) {
-            try {
-                return this.getOrInitializeService({
-                    instanceIdentifier: normalizedIdentifier
-                });
-            }
-            catch (e) {
-                if (optional) {
-                    return null;
-                }
-                else {
-                    throw e;
-                }
-            }
-        }
-        else {
-            // In case a component is not initialized and should/cannot be auto-initialized at the moment, return null if the optional flag is set, or throw
-            if (optional) {
-                return null;
-            }
-            else {
-                throw Error(`Service ${this.name} is not available`);
-            }
-        }
-    }
-    getComponent() {
-        return this.component;
-    }
-    setComponent(component) {
-        if (component.name !== this.name) {
-            throw Error(`Mismatching Component ${component.name} for Provider ${this.name}.`);
-        }
-        if (this.component) {
-            throw Error(`Component for ${this.name} has already been provided`);
-        }
-        this.component = component;
-        // return early without attempting to initialize the component if the component requires explicit initialization (calling `Provider.initialize()`)
-        if (!this.shouldAutoInitialize()) {
-            return;
-        }
-        // if the service is eager, initialize the default instance
-        if (isComponentEager(component)) {
-            try {
-                this.getOrInitializeService({ instanceIdentifier: DEFAULT_ENTRY_NAME$1 });
-            }
-            catch (e) {
-                // when the instance factory for an eager Component throws an exception during the eager
-                // initialization, it should not cause a fatal error.
-                // TODO: Investigate if we need to make it configurable, because some component may want to cause
-                // a fatal error in this case?
-            }
-        }
-        // Create service instances for the pending promises and resolve them
-        // NOTE: if this.multipleInstances is false, only the default instance will be created
-        // and all promises with resolve with it regardless of the identifier.
-        for (const [instanceIdentifier, instanceDeferred] of this.instancesDeferred.entries()) {
-            const normalizedIdentifier = this.normalizeInstanceIdentifier(instanceIdentifier);
-            try {
-                // `getOrInitializeService()` should always return a valid instance since a component is guaranteed. use ! to make typescript happy.
-                const instance = this.getOrInitializeService({
-                    instanceIdentifier: normalizedIdentifier
-                });
-                instanceDeferred.resolve(instance);
-            }
-            catch (e) {
-                // when the instance factory throws an exception, it should not cause
-                // a fatal error. We just leave the promise unresolved.
-            }
-        }
-    }
-    clearInstance(identifier = DEFAULT_ENTRY_NAME$1) {
-        this.instancesDeferred.delete(identifier);
-        this.instancesOptions.delete(identifier);
-        this.instances.delete(identifier);
-    }
-    // app.delete() will call this method on every provider to delete the services
-    // TODO: should we mark the provider as deleted?
-    async delete() {
-        const services = Array.from(this.instances.values());
-        await Promise.all([
-            ...services
-                .filter(service => 'INTERNAL' in service) // legacy services
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                .map(service => service.INTERNAL.delete()),
-            ...services
-                .filter(service => '_delete' in service) // modularized services
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                .map(service => service._delete())
-        ]);
-    }
-    isComponentSet() {
-        return this.component != null;
-    }
-    isInitialized(identifier = DEFAULT_ENTRY_NAME$1) {
-        return this.instances.has(identifier);
-    }
-    getOptions(identifier = DEFAULT_ENTRY_NAME$1) {
-        return this.instancesOptions.get(identifier) || {};
-    }
-    initialize(opts = {}) {
-        const { options = {} } = opts;
-        const normalizedIdentifier = this.normalizeInstanceIdentifier(opts.instanceIdentifier);
-        if (this.isInitialized(normalizedIdentifier)) {
-            throw Error(`${this.name}(${normalizedIdentifier}) has already been initialized`);
-        }
-        if (!this.isComponentSet()) {
-            throw Error(`Component ${this.name} has not been registered yet`);
-        }
-        const instance = this.getOrInitializeService({
-            instanceIdentifier: normalizedIdentifier,
-            options
-        });
-        // resolve any pending promise waiting for the service instance
-        for (const [instanceIdentifier, instanceDeferred] of this.instancesDeferred.entries()) {
-            const normalizedDeferredIdentifier = this.normalizeInstanceIdentifier(instanceIdentifier);
-            if (normalizedIdentifier === normalizedDeferredIdentifier) {
-                instanceDeferred.resolve(instance);
-            }
-        }
-        return instance;
-    }
-    /**
-     *
-     * @param callback - a function that will be invoked  after the provider has been initialized by calling provider.initialize().
-     * The function is invoked SYNCHRONOUSLY, so it should not execute any longrunning tasks in order to not block the program.
-     *
-     * @param identifier An optional instance identifier
-     * @returns a function to unregister the callback
-     */
-    onInit(callback, identifier) {
-        var _a;
-        const normalizedIdentifier = this.normalizeInstanceIdentifier(identifier);
-        const existingCallbacks = (_a = this.onInitCallbacks.get(normalizedIdentifier)) !== null && _a !== void 0 ? _a : new Set();
-        existingCallbacks.add(callback);
-        this.onInitCallbacks.set(normalizedIdentifier, existingCallbacks);
-        const existingInstance = this.instances.get(normalizedIdentifier);
-        if (existingInstance) {
-            callback(existingInstance, normalizedIdentifier);
-        }
-        return () => {
-            existingCallbacks.delete(callback);
-        };
-    }
-    /**
-     * Invoke onInit callbacks synchronously
-     * @param instance the service instance`
-     */
-    invokeOnInitCallbacks(instance, identifier) {
-        const callbacks = this.onInitCallbacks.get(identifier);
-        if (!callbacks) {
-            return;
-        }
-        for (const callback of callbacks) {
-            try {
-                callback(instance, identifier);
-            }
-            catch (_a) {
-                // ignore errors in the onInit callback
-            }
-        }
-    }
-    getOrInitializeService({ instanceIdentifier, options = {} }) {
-        let instance = this.instances.get(instanceIdentifier);
-        if (!instance && this.component) {
-            instance = this.component.instanceFactory(this.container, {
-                instanceIdentifier: normalizeIdentifierForFactory(instanceIdentifier),
-                options
-            });
-            this.instances.set(instanceIdentifier, instance);
-            this.instancesOptions.set(instanceIdentifier, options);
-            /**
-             * Invoke onInit listeners.
-             * Note this.component.onInstanceCreated is different, which is used by the component creator,
-             * while onInit listeners are registered by consumers of the provider.
-             */
-            this.invokeOnInitCallbacks(instance, instanceIdentifier);
-            /**
-             * Order is important
-             * onInstanceCreated() should be called after this.instances.set(instanceIdentifier, instance); which
-             * makes `isInitialized()` return true.
-             */
-            if (this.component.onInstanceCreated) {
-                try {
-                    this.component.onInstanceCreated(this.container, instanceIdentifier, instance);
-                }
-                catch (_a) {
-                    // ignore errors in the onInstanceCreatedCallback
-                }
-            }
-        }
-        return instance || null;
-    }
-    normalizeInstanceIdentifier(identifier = DEFAULT_ENTRY_NAME$1) {
-        if (this.component) {
-            return this.component.multipleInstances ? identifier : DEFAULT_ENTRY_NAME$1;
-        }
-        else {
-            return identifier; // assume multiple instances are supported before the component is provided.
-        }
-    }
-    shouldAutoInitialize() {
-        return (!!this.component &&
-            this.component.instantiationMode !== "EXPLICIT" /* InstantiationMode.EXPLICIT */);
-    }
-}
-// undefined should be passed to the service factory for the default instance
-function normalizeIdentifierForFactory(identifier) {
-    return identifier === DEFAULT_ENTRY_NAME$1 ? undefined : identifier;
-}
-function isComponentEager(component) {
-    return component.instantiationMode === "EAGER" /* InstantiationMode.EAGER */;
-}
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * ComponentContainer that provides Providers for service name T, e.g. `auth`, `auth-internal`
- */
-class ComponentContainer {
-    constructor(name) {
-        this.name = name;
-        this.providers = new Map();
-    }
-    /**
-     *
-     * @param component Component being added
-     * @param overwrite When a component with the same name has already been registered,
-     * if overwrite is true: overwrite the existing component with the new component and create a new
-     * provider with the new component. It can be useful in tests where you want to use different mocks
-     * for different tests.
-     * if overwrite is false: throw an exception
-     */
-    addComponent(component) {
-        const provider = this.getProvider(component.name);
-        if (provider.isComponentSet()) {
-            throw new Error(`Component ${component.name} has already been registered with ${this.name}`);
-        }
-        provider.setComponent(component);
-    }
-    addOrOverwriteComponent(component) {
-        const provider = this.getProvider(component.name);
-        if (provider.isComponentSet()) {
-            // delete the existing provider from the container, so we can register the new component
-            this.providers.delete(component.name);
-        }
-        this.addComponent(component);
-    }
-    /**
-     * getProvider provides a type safe interface where it can only be called with a field name
-     * present in NameServiceMapping interface.
-     *
-     * Firebase SDKs providing services should extend NameServiceMapping interface to register
-     * themselves.
-     */
-    getProvider(name) {
-        if (this.providers.has(name)) {
-            return this.providers.get(name);
-        }
-        // create a Provider for a service that hasn't registered with Firebase
-        const provider = new Provider(name, this);
-        this.providers.set(name, provider);
-        return provider;
-    }
-    getProviders() {
-        return Array.from(this.providers.values());
-    }
-}
-
-/**
- * @license
- * Copyright 2017 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * A container for all of the Logger instances
- */
-/**
- * The JS SDK supports 5 log levels and also allows a user the ability to
- * silence the logs altogether.
- *
- * The order is a follows:
- * DEBUG < VERBOSE < INFO < WARN < ERROR
- *
- * All of the log types above the current log level will be captured (i.e. if
- * you set the log level to `INFO`, errors will still be logged, but `DEBUG` and
- * `VERBOSE` logs will not)
- */
-var LogLevel;
-(function (LogLevel) {
-    LogLevel[LogLevel["DEBUG"] = 0] = "DEBUG";
-    LogLevel[LogLevel["VERBOSE"] = 1] = "VERBOSE";
-    LogLevel[LogLevel["INFO"] = 2] = "INFO";
-    LogLevel[LogLevel["WARN"] = 3] = "WARN";
-    LogLevel[LogLevel["ERROR"] = 4] = "ERROR";
-    LogLevel[LogLevel["SILENT"] = 5] = "SILENT";
-})(LogLevel || (LogLevel = {}));
-const levelStringToEnum = {
-    'debug': LogLevel.DEBUG,
-    'verbose': LogLevel.VERBOSE,
-    'info': LogLevel.INFO,
-    'warn': LogLevel.WARN,
-    'error': LogLevel.ERROR,
-    'silent': LogLevel.SILENT
-};
-/**
- * The default log level
- */
-const defaultLogLevel = LogLevel.INFO;
-/**
- * By default, `console.debug` is not displayed in the developer console (in
- * chrome). To avoid forcing users to have to opt-in to these logs twice
- * (i.e. once for firebase, and once in the console), we are sending `DEBUG`
- * logs to the `console.log` function.
- */
-const ConsoleMethod = {
-    [LogLevel.DEBUG]: 'log',
-    [LogLevel.VERBOSE]: 'log',
-    [LogLevel.INFO]: 'info',
-    [LogLevel.WARN]: 'warn',
-    [LogLevel.ERROR]: 'error'
-};
-/**
- * The default log handler will forward DEBUG, VERBOSE, INFO, WARN, and ERROR
- * messages on to their corresponding console counterparts (if the log method
- * is supported by the current log level)
- */
-const defaultLogHandler = (instance, logType, ...args) => {
-    if (logType < instance.logLevel) {
-        return;
-    }
-    const now = new Date().toISOString();
-    const method = ConsoleMethod[logType];
-    if (method) {
-        console[method](`[${now}]  ${instance.name}:`, ...args);
-    }
-    else {
-        throw new Error(`Attempted to log a message with an invalid logType (value: ${logType})`);
-    }
-};
-class Logger {
-    /**
-     * Gives you an instance of a Logger to capture messages according to
-     * Firebase's logging scheme.
-     *
-     * @param name The name that the logs will be associated with
-     */
-    constructor(name) {
-        this.name = name;
-        /**
-         * The log level of the given Logger instance.
-         */
-        this._logLevel = defaultLogLevel;
-        /**
-         * The main (internal) log handler for the Logger instance.
-         * Can be set to a new function in internal package code but not by user.
-         */
-        this._logHandler = defaultLogHandler;
-        /**
-         * The optional, additional, user-defined log handler for the Logger instance.
-         */
-        this._userLogHandler = null;
-    }
-    get logLevel() {
-        return this._logLevel;
-    }
-    set logLevel(val) {
-        if (!(val in LogLevel)) {
-            throw new TypeError(`Invalid value "${val}" assigned to \`logLevel\``);
-        }
-        this._logLevel = val;
-    }
-    // Workaround for setter/getter having to be the same type.
-    setLogLevel(val) {
-        this._logLevel = typeof val === 'string' ? levelStringToEnum[val] : val;
-    }
-    get logHandler() {
-        return this._logHandler;
-    }
-    set logHandler(val) {
-        if (typeof val !== 'function') {
-            throw new TypeError('Value assigned to `logHandler` must be a function');
-        }
-        this._logHandler = val;
-    }
-    get userLogHandler() {
-        return this._userLogHandler;
-    }
-    set userLogHandler(val) {
-        this._userLogHandler = val;
-    }
-    /**
-     * The functions below are all based on the `console` interface
-     */
-    debug(...args) {
-        this._userLogHandler && this._userLogHandler(this, LogLevel.DEBUG, ...args);
-        this._logHandler(this, LogLevel.DEBUG, ...args);
-    }
-    log(...args) {
-        this._userLogHandler &&
-            this._userLogHandler(this, LogLevel.VERBOSE, ...args);
-        this._logHandler(this, LogLevel.VERBOSE, ...args);
-    }
-    info(...args) {
-        this._userLogHandler && this._userLogHandler(this, LogLevel.INFO, ...args);
-        this._logHandler(this, LogLevel.INFO, ...args);
-    }
-    warn(...args) {
-        this._userLogHandler && this._userLogHandler(this, LogLevel.WARN, ...args);
-        this._logHandler(this, LogLevel.WARN, ...args);
-    }
-    error(...args) {
-        this._userLogHandler && this._userLogHandler(this, LogLevel.ERROR, ...args);
-        this._logHandler(this, LogLevel.ERROR, ...args);
-    }
-}
-
-const instanceOfAny = (object, constructors) => constructors.some((c) => object instanceof c);
-
-let idbProxyableTypes;
-let cursorAdvanceMethods;
-// This is a function to prevent it throwing up in node environments.
-function getIdbProxyableTypes() {
-    return (idbProxyableTypes ||
-        (idbProxyableTypes = [
-            IDBDatabase,
-            IDBObjectStore,
-            IDBIndex,
-            IDBCursor,
-            IDBTransaction,
-        ]));
-}
-// This is a function to prevent it throwing up in node environments.
-function getCursorAdvanceMethods() {
-    return (cursorAdvanceMethods ||
-        (cursorAdvanceMethods = [
-            IDBCursor.prototype.advance,
-            IDBCursor.prototype.continue,
-            IDBCursor.prototype.continuePrimaryKey,
-        ]));
-}
-const cursorRequestMap = new WeakMap();
-const transactionDoneMap = new WeakMap();
-const transactionStoreNamesMap = new WeakMap();
-const transformCache = new WeakMap();
-const reverseTransformCache = new WeakMap();
-function promisifyRequest(request) {
-    const promise = new Promise((resolve, reject) => {
-        const unlisten = () => {
-            request.removeEventListener('success', success);
-            request.removeEventListener('error', error);
-        };
-        const success = () => {
-            resolve(wrap(request.result));
-            unlisten();
-        };
-        const error = () => {
-            reject(request.error);
-            unlisten();
-        };
-        request.addEventListener('success', success);
-        request.addEventListener('error', error);
-    });
-    promise
-        .then((value) => {
-        // Since cursoring reuses the IDBRequest (*sigh*), we cache it for later retrieval
-        // (see wrapFunction).
-        if (value instanceof IDBCursor) {
-            cursorRequestMap.set(value, request);
-        }
-        // Catching to avoid "Uncaught Promise exceptions"
-    })
-        .catch(() => { });
-    // This mapping exists in reverseTransformCache but doesn't doesn't exist in transformCache. This
-    // is because we create many promises from a single IDBRequest.
-    reverseTransformCache.set(promise, request);
-    return promise;
-}
-function cacheDonePromiseForTransaction(tx) {
-    // Early bail if we've already created a done promise for this transaction.
-    if (transactionDoneMap.has(tx))
-        return;
-    const done = new Promise((resolve, reject) => {
-        const unlisten = () => {
-            tx.removeEventListener('complete', complete);
-            tx.removeEventListener('error', error);
-            tx.removeEventListener('abort', error);
-        };
-        const complete = () => {
-            resolve();
-            unlisten();
-        };
-        const error = () => {
-            reject(tx.error || new DOMException('AbortError', 'AbortError'));
-            unlisten();
-        };
-        tx.addEventListener('complete', complete);
-        tx.addEventListener('error', error);
-        tx.addEventListener('abort', error);
-    });
-    // Cache it for later retrieval.
-    transactionDoneMap.set(tx, done);
-}
-let idbProxyTraps = {
-    get(target, prop, receiver) {
-        if (target instanceof IDBTransaction) {
-            // Special handling for transaction.done.
-            if (prop === 'done')
-                return transactionDoneMap.get(target);
-            // Polyfill for objectStoreNames because of Edge.
-            if (prop === 'objectStoreNames') {
-                return target.objectStoreNames || transactionStoreNamesMap.get(target);
-            }
-            // Make tx.store return the only store in the transaction, or undefined if there are many.
-            if (prop === 'store') {
-                return receiver.objectStoreNames[1]
-                    ? undefined
-                    : receiver.objectStore(receiver.objectStoreNames[0]);
-            }
-        }
-        // Else transform whatever we get back.
-        return wrap(target[prop]);
-    },
-    set(target, prop, value) {
-        target[prop] = value;
-        return true;
-    },
-    has(target, prop) {
-        if (target instanceof IDBTransaction &&
-            (prop === 'done' || prop === 'store')) {
-            return true;
-        }
-        return prop in target;
-    },
-};
-function replaceTraps(callback) {
-    idbProxyTraps = callback(idbProxyTraps);
-}
-function wrapFunction(func) {
-    // Due to expected object equality (which is enforced by the caching in `wrap`), we
-    // only create one new func per func.
-    // Edge doesn't support objectStoreNames (booo), so we polyfill it here.
-    if (func === IDBDatabase.prototype.transaction &&
-        !('objectStoreNames' in IDBTransaction.prototype)) {
-        return function (storeNames, ...args) {
-            const tx = func.call(unwrap(this), storeNames, ...args);
-            transactionStoreNamesMap.set(tx, storeNames.sort ? storeNames.sort() : [storeNames]);
-            return wrap(tx);
-        };
-    }
-    // Cursor methods are special, as the behaviour is a little more different to standard IDB. In
-    // IDB, you advance the cursor and wait for a new 'success' on the IDBRequest that gave you the
-    // cursor. It's kinda like a promise that can resolve with many values. That doesn't make sense
-    // with real promises, so each advance methods returns a new promise for the cursor object, or
-    // undefined if the end of the cursor has been reached.
-    if (getCursorAdvanceMethods().includes(func)) {
-        return function (...args) {
-            // Calling the original function with the proxy as 'this' causes ILLEGAL INVOCATION, so we use
-            // the original object.
-            func.apply(unwrap(this), args);
-            return wrap(cursorRequestMap.get(this));
-        };
-    }
-    return function (...args) {
-        // Calling the original function with the proxy as 'this' causes ILLEGAL INVOCATION, so we use
-        // the original object.
-        return wrap(func.apply(unwrap(this), args));
-    };
-}
-function transformCachableValue(value) {
-    if (typeof value === 'function')
-        return wrapFunction(value);
-    // This doesn't return, it just creates a 'done' promise for the transaction,
-    // which is later returned for transaction.done (see idbObjectHandler).
-    if (value instanceof IDBTransaction)
-        cacheDonePromiseForTransaction(value);
-    if (instanceOfAny(value, getIdbProxyableTypes()))
-        return new Proxy(value, idbProxyTraps);
-    // Return the same value back if we're not going to transform it.
-    return value;
-}
-function wrap(value) {
-    // We sometimes generate multiple promises from a single IDBRequest (eg when cursoring), because
-    // IDB is weird and a single IDBRequest can yield many responses, so these can't be cached.
-    if (value instanceof IDBRequest)
-        return promisifyRequest(value);
-    // If we've already transformed this value before, reuse the transformed value.
-    // This is faster, but it also provides object equality.
-    if (transformCache.has(value))
-        return transformCache.get(value);
-    const newValue = transformCachableValue(value);
-    // Not all types are transformed.
-    // These may be primitive types, so they can't be WeakMap keys.
-    if (newValue !== value) {
-        transformCache.set(value, newValue);
-        reverseTransformCache.set(newValue, value);
-    }
-    return newValue;
-}
-const unwrap = (value) => reverseTransformCache.get(value);
-
-/**
- * Open a database.
- *
- * @param name Name of the database.
- * @param version Schema version.
- * @param callbacks Additional callbacks.
- */
-function openDB(name, version, { blocked, upgrade, blocking, terminated } = {}) {
-    const request = indexedDB.open(name, version);
-    const openPromise = wrap(request);
-    if (upgrade) {
-        request.addEventListener('upgradeneeded', (event) => {
-            upgrade(wrap(request.result), event.oldVersion, event.newVersion, wrap(request.transaction), event);
-        });
-    }
-    if (blocked) {
-        request.addEventListener('blocked', (event) => blocked(
-        // Casting due to https://github.com/microsoft/TypeScript-DOM-lib-generator/pull/1405
-        event.oldVersion, event.newVersion, event));
-    }
-    openPromise
-        .then((db) => {
-        if (terminated)
-            db.addEventListener('close', () => terminated());
-        if (blocking) {
-            db.addEventListener('versionchange', (event) => blocking(event.oldVersion, event.newVersion, event));
-        }
-    })
-        .catch(() => { });
-    return openPromise;
-}
-
-const readMethods = ['get', 'getKey', 'getAll', 'getAllKeys', 'count'];
-const writeMethods = ['put', 'add', 'delete', 'clear'];
-const cachedMethods = new Map();
-function getMethod(target, prop) {
-    if (!(target instanceof IDBDatabase &&
-        !(prop in target) &&
-        typeof prop === 'string')) {
-        return;
-    }
-    if (cachedMethods.get(prop))
-        return cachedMethods.get(prop);
-    const targetFuncName = prop.replace(/FromIndex$/, '');
-    const useIndex = prop !== targetFuncName;
-    const isWrite = writeMethods.includes(targetFuncName);
-    if (
-    // Bail if the target doesn't exist on the target. Eg, getAll isn't in Edge.
-    !(targetFuncName in (useIndex ? IDBIndex : IDBObjectStore).prototype) ||
-        !(isWrite || readMethods.includes(targetFuncName))) {
-        return;
-    }
-    const method = async function (storeName, ...args) {
-        // isWrite ? 'readwrite' : undefined gzipps better, but fails in Edge :(
-        const tx = this.transaction(storeName, isWrite ? 'readwrite' : 'readonly');
-        let target = tx.store;
-        if (useIndex)
-            target = target.index(args.shift());
-        // Must reject if op rejects.
-        // If it's a write operation, must reject if tx.done rejects.
-        // Must reject with op rejection first.
-        // Must resolve with op value.
-        // Must handle both promises (no unhandled rejections)
-        return (await Promise.all([
-            target[targetFuncName](...args),
-            isWrite && tx.done,
-        ]))[0];
-    };
-    cachedMethods.set(prop, method);
-    return method;
-}
-replaceTraps((oldTraps) => ({
-    ...oldTraps,
-    get: (target, prop, receiver) => getMethod(target, prop) || oldTraps.get(target, prop, receiver),
-    has: (target, prop) => !!getMethod(target, prop) || oldTraps.has(target, prop),
-}));
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-class PlatformLoggerServiceImpl {
-    constructor(container) {
-        this.container = container;
-    }
-    // In initial implementation, this will be called by installations on
-    // auth token refresh, and installations will send this string.
-    getPlatformInfoString() {
-        const providers = this.container.getProviders();
-        // Loop through providers and get library/version pairs from any that are
-        // version components.
-        return providers
-            .map(provider => {
-            if (isVersionServiceProvider(provider)) {
-                const service = provider.getImmediate();
-                return `${service.library}/${service.version}`;
-            }
-            else {
-                return null;
-            }
-        })
-            .filter(logString => logString)
-            .join(' ');
-    }
-}
-/**
- *
- * @param provider check if this provider provides a VersionService
- *
- * NOTE: Using Provider<'app-version'> is a hack to indicate that the provider
- * provides VersionService. The provider is not necessarily a 'app-version'
- * provider.
- */
-function isVersionServiceProvider(provider) {
-    const component = provider.getComponent();
-    return (component === null || component === void 0 ? void 0 : component.type) === "VERSION" /* ComponentType.VERSION */;
-}
-
-const name$q = "@firebase/app";
-const version$1 = "0.13.2";
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-const logger = new Logger('@firebase/app');
-
-const name$p = "@firebase/app-compat";
-
-const name$o = "@firebase/analytics-compat";
-
-const name$n = "@firebase/analytics";
-
-const name$m = "@firebase/app-check-compat";
-
-const name$l = "@firebase/app-check";
-
-const name$k = "@firebase/auth";
-
-const name$j = "@firebase/auth-compat";
-
-const name$i = "@firebase/database";
-
-const name$h = "@firebase/data-connect";
-
-const name$g = "@firebase/database-compat";
-
-const name$f = "@firebase/functions";
-
-const name$e = "@firebase/functions-compat";
-
-const name$d = "@firebase/installations";
-
-const name$c = "@firebase/installations-compat";
-
-const name$b = "@firebase/messaging";
-
-const name$a = "@firebase/messaging-compat";
-
-const name$9 = "@firebase/performance";
-
-const name$8 = "@firebase/performance-compat";
-
-const name$7 = "@firebase/remote-config";
-
-const name$6 = "@firebase/remote-config-compat";
-
-const name$5 = "@firebase/storage";
-
-const name$4 = "@firebase/storage-compat";
-
-const name$3 = "@firebase/firestore";
-
-const name$2 = "@firebase/ai";
-
-const name$1 = "@firebase/firestore-compat";
-
-const name$r = "firebase";
-const version$2 = "11.10.0";
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * The default app name
- *
- * @internal
- */
-const DEFAULT_ENTRY_NAME = '[DEFAULT]';
-const PLATFORM_LOG_STRING = {
-    [name$q]: 'fire-core',
-    [name$p]: 'fire-core-compat',
-    [name$n]: 'fire-analytics',
-    [name$o]: 'fire-analytics-compat',
-    [name$l]: 'fire-app-check',
-    [name$m]: 'fire-app-check-compat',
-    [name$k]: 'fire-auth',
-    [name$j]: 'fire-auth-compat',
-    [name$i]: 'fire-rtdb',
-    [name$h]: 'fire-data-connect',
-    [name$g]: 'fire-rtdb-compat',
-    [name$f]: 'fire-fn',
-    [name$e]: 'fire-fn-compat',
-    [name$d]: 'fire-iid',
-    [name$c]: 'fire-iid-compat',
-    [name$b]: 'fire-fcm',
-    [name$a]: 'fire-fcm-compat',
-    [name$9]: 'fire-perf',
-    [name$8]: 'fire-perf-compat',
-    [name$7]: 'fire-rc',
-    [name$6]: 'fire-rc-compat',
-    [name$5]: 'fire-gcs',
-    [name$4]: 'fire-gcs-compat',
-    [name$3]: 'fire-fst',
-    [name$1]: 'fire-fst-compat',
-    [name$2]: 'fire-vertex',
-    'fire-js': 'fire-js', // Platform identifier for JS SDK.
-    [name$r]: 'fire-js-all'
-};
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * @internal
- */
-const _apps = new Map();
-/**
- * @internal
- */
-const _serverApps = new Map();
-/**
- * Registered components.
- *
- * @internal
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const _components = new Map();
-/**
- * @param component - the component being added to this app's container
- *
- * @internal
- */
-function _addComponent(app, component) {
-    try {
-        app.container.addComponent(component);
-    }
-    catch (e) {
-        logger.debug(`Component ${component.name} failed to register with FirebaseApp ${app.name}`, e);
-    }
-}
-/**
- *
- * @param component - the component to register
- * @returns whether or not the component is registered successfully
- *
- * @internal
- */
-function _registerComponent(component) {
-    const componentName = component.name;
-    if (_components.has(componentName)) {
-        logger.debug(`There were multiple attempts to register component ${componentName}.`);
-        return false;
-    }
-    _components.set(componentName, component);
-    // add the component to existing app instances
-    for (const app of _apps.values()) {
-        _addComponent(app, component);
-    }
-    for (const serverApp of _serverApps.values()) {
-        _addComponent(serverApp, component);
-    }
-    return true;
-}
-/**
- *
- * @param app - FirebaseApp instance
- * @param name - service name
- *
- * @returns the provider for the service with the matching name
- *
- * @internal
- */
-function _getProvider(app, name) {
-    const heartbeatController = app.container
-        .getProvider('heartbeat')
-        .getImmediate({ optional: true });
-    if (heartbeatController) {
-        void heartbeatController.triggerHeartbeat();
-    }
-    return app.container.getProvider(name);
-}
-/**
- *
- * @param obj - an object of type FirebaseApp.
- *
- * @returns true if the provided object is of type FirebaseServerAppImpl.
- *
- * @internal
- */
-function _isFirebaseServerApp(obj) {
-    if (obj === null || obj === undefined) {
-        return false;
-    }
-    return obj.settings !== undefined;
-}
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-const ERRORS = {
-    ["no-app" /* AppError.NO_APP */]: "No Firebase App '{$appName}' has been created - " +
-        'call initializeApp() first',
-    ["bad-app-name" /* AppError.BAD_APP_NAME */]: "Illegal App name: '{$appName}'",
-    ["duplicate-app" /* AppError.DUPLICATE_APP */]: "Firebase App named '{$appName}' already exists with different options or config",
-    ["app-deleted" /* AppError.APP_DELETED */]: "Firebase App named '{$appName}' already deleted",
-    ["server-app-deleted" /* AppError.SERVER_APP_DELETED */]: 'Firebase Server App has been deleted',
-    ["no-options" /* AppError.NO_OPTIONS */]: 'Need to provide options, when not being deployed to hosting via source.',
-    ["invalid-app-argument" /* AppError.INVALID_APP_ARGUMENT */]: 'firebase.{$appName}() takes either no argument or a ' +
-        'Firebase App instance.',
-    ["invalid-log-argument" /* AppError.INVALID_LOG_ARGUMENT */]: 'First argument to `onLog` must be null or a function.',
-    ["idb-open" /* AppError.IDB_OPEN */]: 'Error thrown when opening IndexedDB. Original error: {$originalErrorMessage}.',
-    ["idb-get" /* AppError.IDB_GET */]: 'Error thrown when reading from IndexedDB. Original error: {$originalErrorMessage}.',
-    ["idb-set" /* AppError.IDB_WRITE */]: 'Error thrown when writing to IndexedDB. Original error: {$originalErrorMessage}.',
-    ["idb-delete" /* AppError.IDB_DELETE */]: 'Error thrown when deleting from IndexedDB. Original error: {$originalErrorMessage}.',
-    ["finalization-registry-not-supported" /* AppError.FINALIZATION_REGISTRY_NOT_SUPPORTED */]: 'FirebaseServerApp deleteOnDeref field defined but the JS runtime does not support FinalizationRegistry.',
-    ["invalid-server-app-environment" /* AppError.INVALID_SERVER_APP_ENVIRONMENT */]: 'FirebaseServerApp is not for use in browser environments.'
-};
-const ERROR_FACTORY = new ErrorFactory('app', 'Firebase', ERRORS);
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-class FirebaseAppImpl {
-    constructor(options, config, container) {
-        this._isDeleted = false;
-        this._options = Object.assign({}, options);
-        this._config = Object.assign({}, config);
-        this._name = config.name;
-        this._automaticDataCollectionEnabled =
-            config.automaticDataCollectionEnabled;
-        this._container = container;
-        this.container.addComponent(new Component('app', () => this, "PUBLIC" /* ComponentType.PUBLIC */));
-    }
-    get automaticDataCollectionEnabled() {
-        this.checkDestroyed();
-        return this._automaticDataCollectionEnabled;
-    }
-    set automaticDataCollectionEnabled(val) {
-        this.checkDestroyed();
-        this._automaticDataCollectionEnabled = val;
-    }
-    get name() {
-        this.checkDestroyed();
-        return this._name;
-    }
-    get options() {
-        this.checkDestroyed();
-        return this._options;
-    }
-    get config() {
-        this.checkDestroyed();
-        return this._config;
-    }
-    get container() {
-        return this._container;
-    }
-    get isDeleted() {
-        return this._isDeleted;
-    }
-    set isDeleted(val) {
-        this._isDeleted = val;
-    }
-    /**
-     * This function will throw an Error if the App has already been deleted -
-     * use before performing API actions on the App.
-     */
-    checkDestroyed() {
-        if (this.isDeleted) {
-            throw ERROR_FACTORY.create("app-deleted" /* AppError.APP_DELETED */, { appName: this._name });
-        }
-    }
-}
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/**
- * The current SDK version.
- *
- * @public
- */
-const SDK_VERSION = version$2;
-function initializeApp(_options, rawConfig = {}) {
-    let options = _options;
-    if (typeof rawConfig !== 'object') {
-        const name = rawConfig;
-        rawConfig = { name };
-    }
-    const config = Object.assign({ name: DEFAULT_ENTRY_NAME, automaticDataCollectionEnabled: true }, rawConfig);
-    const name = config.name;
-    if (typeof name !== 'string' || !name) {
-        throw ERROR_FACTORY.create("bad-app-name" /* AppError.BAD_APP_NAME */, {
-            appName: String(name)
-        });
-    }
-    options || (options = getDefaultAppConfig());
-    if (!options) {
-        throw ERROR_FACTORY.create("no-options" /* AppError.NO_OPTIONS */);
-    }
-    const existingApp = _apps.get(name);
-    if (existingApp) {
-        // return the existing app if options and config deep equal the ones in the existing app.
-        if (deepEqual(options, existingApp.options) &&
-            deepEqual(config, existingApp.config)) {
-            return existingApp;
-        }
-        else {
-            throw ERROR_FACTORY.create("duplicate-app" /* AppError.DUPLICATE_APP */, { appName: name });
-        }
-    }
-    const container = new ComponentContainer(name);
-    for (const component of _components.values()) {
-        container.addComponent(component);
-    }
-    const newApp = new FirebaseAppImpl(options, config, container);
-    _apps.set(name, newApp);
-    return newApp;
-}
-/**
- * Retrieves a {@link @firebase/app#FirebaseApp} instance.
- *
- * When called with no arguments, the default app is returned. When an app name
- * is provided, the app corresponding to that name is returned.
- *
- * An exception is thrown if the app being retrieved has not yet been
- * initialized.
- *
- * @example
- * ```javascript
- * // Return the default app
- * const app = getApp();
- * ```
- *
- * @example
- * ```javascript
- * // Return a named app
- * const otherApp = getApp("otherApp");
- * ```
- *
- * @param name - Optional name of the app to return. If no name is
- *   provided, the default is `"[DEFAULT]"`.
- *
- * @returns The app corresponding to the provided app name.
- *   If no app name is provided, the default app is returned.
- *
- * @public
- */
-function getApp(name = DEFAULT_ENTRY_NAME) {
-    const app = _apps.get(name);
-    if (!app && name === DEFAULT_ENTRY_NAME && getDefaultAppConfig()) {
-        return initializeApp();
-    }
-    if (!app) {
-        throw ERROR_FACTORY.create("no-app" /* AppError.NO_APP */, { appName: name });
-    }
-    return app;
-}
-/**
- * Registers a library's name and version for platform logging purposes.
- * @param library - Name of 1p or 3p library (e.g. firestore, angularfire)
- * @param version - Current version of that library.
- * @param variant - Bundle variant, e.g., node, rn, etc.
- *
- * @public
- */
-function registerVersion(libraryKeyOrName, version, variant) {
-    var _a;
-    // TODO: We can use this check to whitelist strings when/if we set up
-    // a good whitelist system.
-    let library = (_a = PLATFORM_LOG_STRING[libraryKeyOrName]) !== null && _a !== void 0 ? _a : libraryKeyOrName;
-    if (variant) {
-        library += `-${variant}`;
-    }
-    const libraryMismatch = library.match(/\s|\//);
-    const versionMismatch = version.match(/\s|\//);
-    if (libraryMismatch || versionMismatch) {
-        const warning = [
-            `Unable to register library "${library}" with version "${version}":`
-        ];
-        if (libraryMismatch) {
-            warning.push(`library name "${library}" contains illegal characters (whitespace or "/")`);
-        }
-        if (libraryMismatch && versionMismatch) {
-            warning.push('and');
-        }
-        if (versionMismatch) {
-            warning.push(`version name "${version}" contains illegal characters (whitespace or "/")`);
-        }
-        logger.warn(warning.join(' '));
-        return;
-    }
-    _registerComponent(new Component(`${library}-version`, () => ({ library, version }), "VERSION" /* ComponentType.VERSION */));
-}
-
-/**
- * @license
- * Copyright 2021 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-const DB_NAME$1 = 'firebase-heartbeat-database';
-const DB_VERSION$1 = 1;
-const STORE_NAME = 'firebase-heartbeat-store';
-let dbPromise = null;
-function getDbPromise() {
-    if (!dbPromise) {
-        dbPromise = openDB(DB_NAME$1, DB_VERSION$1, {
-            upgrade: (db, oldVersion) => {
-                // We don't use 'break' in this switch statement, the fall-through
-                // behavior is what we want, because if there are multiple versions between
-                // the old version and the current version, we want ALL the migrations
-                // that correspond to those versions to run, not only the last one.
-                // eslint-disable-next-line default-case
-                switch (oldVersion) {
-                    case 0:
-                        try {
-                            db.createObjectStore(STORE_NAME);
-                        }
-                        catch (e) {
-                            // Safari/iOS browsers throw occasional exceptions on
-                            // db.createObjectStore() that may be a bug. Avoid blocking
-                            // the rest of the app functionality.
-                            console.warn(e);
-                        }
-                }
-            }
-        }).catch(e => {
-            throw ERROR_FACTORY.create("idb-open" /* AppError.IDB_OPEN */, {
-                originalErrorMessage: e.message
-            });
-        });
-    }
-    return dbPromise;
-}
-async function readHeartbeatsFromIndexedDB(app) {
-    try {
-        const db = await getDbPromise();
-        const tx = db.transaction(STORE_NAME);
-        const result = await tx.objectStore(STORE_NAME).get(computeKey(app));
-        // We already have the value but tx.done can throw,
-        // so we need to await it here to catch errors
-        await tx.done;
-        return result;
-    }
-    catch (e) {
-        if (e instanceof FirebaseError) {
-            logger.warn(e.message);
-        }
-        else {
-            const idbGetError = ERROR_FACTORY.create("idb-get" /* AppError.IDB_GET */, {
-                originalErrorMessage: e === null || e === void 0 ? void 0 : e.message
-            });
-            logger.warn(idbGetError.message);
-        }
-    }
-}
-async function writeHeartbeatsToIndexedDB(app, heartbeatObject) {
-    try {
-        const db = await getDbPromise();
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        const objectStore = tx.objectStore(STORE_NAME);
-        await objectStore.put(heartbeatObject, computeKey(app));
-        await tx.done;
-    }
-    catch (e) {
-        if (e instanceof FirebaseError) {
-            logger.warn(e.message);
-        }
-        else {
-            const idbGetError = ERROR_FACTORY.create("idb-set" /* AppError.IDB_WRITE */, {
-                originalErrorMessage: e === null || e === void 0 ? void 0 : e.message
-            });
-            logger.warn(idbGetError.message);
-        }
-    }
-}
-function computeKey(app) {
-    return `${app.name}!${app.options.appId}`;
-}
-
-/**
- * @license
- * Copyright 2021 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-const MAX_HEADER_BYTES = 1024;
-const MAX_NUM_STORED_HEARTBEATS = 30;
-class HeartbeatServiceImpl {
-    constructor(container) {
-        this.container = container;
-        /**
-         * In-memory cache for heartbeats, used by getHeartbeatsHeader() to generate
-         * the header string.
-         * Stores one record per date. This will be consolidated into the standard
-         * format of one record per user agent string before being sent as a header.
-         * Populated from indexedDB when the controller is instantiated and should
-         * be kept in sync with indexedDB.
-         * Leave public for easier testing.
-         */
-        this._heartbeatsCache = null;
-        const app = this.container.getProvider('app').getImmediate();
-        this._storage = new HeartbeatStorageImpl(app);
-        this._heartbeatsCachePromise = this._storage.read().then(result => {
-            this._heartbeatsCache = result;
-            return result;
-        });
-    }
-    /**
-     * Called to report a heartbeat. The function will generate
-     * a HeartbeatsByUserAgent object, update heartbeatsCache, and persist it
-     * to IndexedDB.
-     * Note that we only store one heartbeat per day. So if a heartbeat for today is
-     * already logged, subsequent calls to this function in the same day will be ignored.
-     */
-    async triggerHeartbeat() {
-        var _a, _b;
-        try {
-            const platformLogger = this.container
-                .getProvider('platform-logger')
-                .getImmediate();
-            // This is the "Firebase user agent" string from the platform logger
-            // service, not the browser user agent.
-            const agent = platformLogger.getPlatformInfoString();
-            const date = getUTCDateString();
-            if (((_a = this._heartbeatsCache) === null || _a === void 0 ? void 0 : _a.heartbeats) == null) {
-                this._heartbeatsCache = await this._heartbeatsCachePromise;
-                // If we failed to construct a heartbeats cache, then return immediately.
-                if (((_b = this._heartbeatsCache) === null || _b === void 0 ? void 0 : _b.heartbeats) == null) {
-                    return;
-                }
-            }
-            // Do not store a heartbeat if one is already stored for this day
-            // or if a header has already been sent today.
-            if (this._heartbeatsCache.lastSentHeartbeatDate === date ||
-                this._heartbeatsCache.heartbeats.some(singleDateHeartbeat => singleDateHeartbeat.date === date)) {
-                return;
-            }
-            else {
-                // There is no entry for this date. Create one.
-                this._heartbeatsCache.heartbeats.push({ date, agent });
-                // If the number of stored heartbeats exceeds the maximum number of stored heartbeats, remove the heartbeat with the earliest date.
-                // Since this is executed each time a heartbeat is pushed, the limit can only be exceeded by one, so only one needs to be removed.
-                if (this._heartbeatsCache.heartbeats.length > MAX_NUM_STORED_HEARTBEATS) {
-                    const earliestHeartbeatIdx = getEarliestHeartbeatIdx(this._heartbeatsCache.heartbeats);
-                    this._heartbeatsCache.heartbeats.splice(earliestHeartbeatIdx, 1);
-                }
-            }
-            return this._storage.overwrite(this._heartbeatsCache);
-        }
-        catch (e) {
-            logger.warn(e);
-        }
-    }
-    /**
-     * Returns a base64 encoded string which can be attached to the heartbeat-specific header directly.
-     * It also clears all heartbeats from memory as well as in IndexedDB.
-     *
-     * NOTE: Consuming product SDKs should not send the header if this method
-     * returns an empty string.
-     */
-    async getHeartbeatsHeader() {
-        var _a;
-        try {
-            if (this._heartbeatsCache === null) {
-                await this._heartbeatsCachePromise;
-            }
-            // If it's still null or the array is empty, there is no data to send.
-            if (((_a = this._heartbeatsCache) === null || _a === void 0 ? void 0 : _a.heartbeats) == null ||
-                this._heartbeatsCache.heartbeats.length === 0) {
-                return '';
-            }
-            const date = getUTCDateString();
-            // Extract as many heartbeats from the cache as will fit under the size limit.
-            const { heartbeatsToSend, unsentEntries } = extractHeartbeatsForHeader(this._heartbeatsCache.heartbeats);
-            const headerString = base64urlEncodeWithoutPadding(JSON.stringify({ version: 2, heartbeats: heartbeatsToSend }));
-            // Store last sent date to prevent another being logged/sent for the same day.
-            this._heartbeatsCache.lastSentHeartbeatDate = date;
-            if (unsentEntries.length > 0) {
-                // Store any unsent entries if they exist.
-                this._heartbeatsCache.heartbeats = unsentEntries;
-                // This seems more likely than emptying the array (below) to lead to some odd state
-                // since the cache isn't empty and this will be called again on the next request,
-                // and is probably safest if we await it.
-                await this._storage.overwrite(this._heartbeatsCache);
-            }
-            else {
-                this._heartbeatsCache.heartbeats = [];
-                // Do not wait for this, to reduce latency.
-                void this._storage.overwrite(this._heartbeatsCache);
-            }
-            return headerString;
-        }
-        catch (e) {
-            logger.warn(e);
-            return '';
-        }
-    }
-}
-function getUTCDateString() {
-    const today = new Date();
-    // Returns date format 'YYYY-MM-DD'
-    return today.toISOString().substring(0, 10);
-}
-function extractHeartbeatsForHeader(heartbeatsCache, maxSize = MAX_HEADER_BYTES) {
-    // Heartbeats grouped by user agent in the standard format to be sent in
-    // the header.
-    const heartbeatsToSend = [];
-    // Single date format heartbeats that are not sent.
-    let unsentEntries = heartbeatsCache.slice();
-    for (const singleDateHeartbeat of heartbeatsCache) {
-        // Look for an existing entry with the same user agent.
-        const heartbeatEntry = heartbeatsToSend.find(hb => hb.agent === singleDateHeartbeat.agent);
-        if (!heartbeatEntry) {
-            // If no entry for this user agent exists, create one.
-            heartbeatsToSend.push({
-                agent: singleDateHeartbeat.agent,
-                dates: [singleDateHeartbeat.date]
-            });
-            if (countBytes(heartbeatsToSend) > maxSize) {
-                // If the header would exceed max size, remove the added heartbeat
-                // entry and stop adding to the header.
-                heartbeatsToSend.pop();
-                break;
-            }
-        }
-        else {
-            heartbeatEntry.dates.push(singleDateHeartbeat.date);
-            // If the header would exceed max size, remove the added date
-            // and stop adding to the header.
-            if (countBytes(heartbeatsToSend) > maxSize) {
-                heartbeatEntry.dates.pop();
-                break;
-            }
-        }
-        // Pop unsent entry from queue. (Skipped if adding the entry exceeded
-        // quota and the loop breaks early.)
-        unsentEntries = unsentEntries.slice(1);
-    }
-    return {
-        heartbeatsToSend,
-        unsentEntries
-    };
-}
-class HeartbeatStorageImpl {
-    constructor(app) {
-        this.app = app;
-        this._canUseIndexedDBPromise = this.runIndexedDBEnvironmentCheck();
-    }
-    async runIndexedDBEnvironmentCheck() {
-        if (!isIndexedDBAvailable()) {
-            return false;
-        }
-        else {
-            return validateIndexedDBOpenable()
-                .then(() => true)
-                .catch(() => false);
-        }
-    }
-    /**
-     * Read all heartbeats.
-     */
-    async read() {
-        const canUseIndexedDB = await this._canUseIndexedDBPromise;
-        if (!canUseIndexedDB) {
-            return { heartbeats: [] };
-        }
-        else {
-            const idbHeartbeatObject = await readHeartbeatsFromIndexedDB(this.app);
-            if (idbHeartbeatObject === null || idbHeartbeatObject === void 0 ? void 0 : idbHeartbeatObject.heartbeats) {
-                return idbHeartbeatObject;
-            }
-            else {
-                return { heartbeats: [] };
-            }
-        }
-    }
-    // overwrite the storage with the provided heartbeats
-    async overwrite(heartbeatsObject) {
-        var _a;
-        const canUseIndexedDB = await this._canUseIndexedDBPromise;
-        if (!canUseIndexedDB) {
-            return;
-        }
-        else {
-            const existingHeartbeatsObject = await this.read();
-            return writeHeartbeatsToIndexedDB(this.app, {
-                lastSentHeartbeatDate: (_a = heartbeatsObject.lastSentHeartbeatDate) !== null && _a !== void 0 ? _a : existingHeartbeatsObject.lastSentHeartbeatDate,
-                heartbeats: heartbeatsObject.heartbeats
-            });
-        }
-    }
-    // add heartbeats
-    async add(heartbeatsObject) {
-        var _a;
-        const canUseIndexedDB = await this._canUseIndexedDBPromise;
-        if (!canUseIndexedDB) {
-            return;
-        }
-        else {
-            const existingHeartbeatsObject = await this.read();
-            return writeHeartbeatsToIndexedDB(this.app, {
-                lastSentHeartbeatDate: (_a = heartbeatsObject.lastSentHeartbeatDate) !== null && _a !== void 0 ? _a : existingHeartbeatsObject.lastSentHeartbeatDate,
-                heartbeats: [
-                    ...existingHeartbeatsObject.heartbeats,
-                    ...heartbeatsObject.heartbeats
-                ]
-            });
-        }
-    }
-}
-/**
- * Calculate bytes of a HeartbeatsByUserAgent array after being wrapped
- * in a platform logging header JSON object, stringified, and converted
- * to base 64.
- */
-function countBytes(heartbeatsCache) {
-    // base64 has a restricted set of characters, all of which should be 1 byte.
-    return base64urlEncodeWithoutPadding(
-    // heartbeatsCache wrapper properties
-    JSON.stringify({ version: 2, heartbeats: heartbeatsCache })).length;
-}
-/**
- * Returns the index of the heartbeat with the earliest date.
- * If the heartbeats array is empty, -1 is returned.
- */
-function getEarliestHeartbeatIdx(heartbeats) {
-    if (heartbeats.length === 0) {
-        return -1;
-    }
-    let earliestHeartbeatIdx = 0;
-    let earliestHeartbeatDate = heartbeats[0].date;
-    for (let i = 1; i < heartbeats.length; i++) {
-        if (heartbeats[i].date < earliestHeartbeatDate) {
-            earliestHeartbeatDate = heartbeats[i].date;
-            earliestHeartbeatIdx = i;
-        }
-    }
-    return earliestHeartbeatIdx;
-}
-
-/**
- * @license
- * Copyright 2019 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-function registerCoreComponents(variant) {
-    _registerComponent(new Component('platform-logger', container => new PlatformLoggerServiceImpl(container), "PRIVATE" /* ComponentType.PRIVATE */));
-    _registerComponent(new Component('heartbeat', container => new HeartbeatServiceImpl(container), "PRIVATE" /* ComponentType.PRIVATE */));
-    // Register `app` package.
-    registerVersion(name$q, version$1, variant);
-    // BUILD_TARGET will be replaced by values like esm2017, cjs2017, etc during the compilation
-    registerVersion(name$q, version$1, 'esm2017');
-    // Register platform SDK identifier (no version).
-    registerVersion('fire-js', '');
-}
-
-/**
- * Firebase App
- *
- * @remarks This package coordinates the communication between the different Firebase components
- * @packageDocumentation
- */
-registerCoreComponents('');
+import { v as van } from './van-t8DywzvC.js';
+import { e as eventBus } from './eventbus-BMI3jhi1.js';
+import { d as database } from './db-Ds_fOpqx.js';
+import { L as Logger, x as getExperimentalSetting, y as isMobileCordova, z as isReactNative, e as _registerComponent, C as Component, r as registerVersion, A as isBrowserExtension, S as SDK_VERSION, E as ErrorFactory, d as _isFirebaseServerApp, j as getModularInstance, t as getUA, B as createSubscribe, n as LogLevel, F as FirebaseError, G as base64Decode, H as querystring, l as isCloudWorkstation, h as getApp, c as _getProvider, I as getDefaultEmulatorHost, o as deepEqual, p as pingServer, u as updateEmulatorBanner, J as isIE, K as isEmpty, M as querystringDecode, N as extractQuerystring, O as isCloudflareWorker } from './index.esm2017-lITlcZ-l.js';
 
 /******************************************************************************
 Copyright (c) Microsoft Corporation.
@@ -4094,6 +622,18 @@ async function _getFinalTarget(auth, host, path, query) {
     }
     return finalTarget;
 }
+function _parseEnforcementState(enforcementStateStr) {
+    switch (enforcementStateStr) {
+        case 'ENFORCE':
+            return "ENFORCE" /* EnforcementState.ENFORCE */;
+        case 'AUDIT':
+            return "AUDIT" /* EnforcementState.AUDIT */;
+        case 'OFF':
+            return "OFF" /* EnforcementState.OFF */;
+        default:
+            return "ENFORCEMENT_STATE_UNSPECIFIED" /* EnforcementState.ENFORCEMENT_STATE_UNSPECIFIED */;
+    }
+}
 class NetworkTimeout {
     clearNetworkTimeout() {
         clearTimeout(this.timer);
@@ -4125,6 +665,71 @@ function _makeTaggedError(auth, code, response) {
     // We know customData is defined on error because errorParams is defined
     error.customData._tokenResponse = response;
     return error;
+}
+function isEnterprise(grecaptcha) {
+    return (grecaptcha !== undefined &&
+        grecaptcha.enterprise !== undefined);
+}
+class RecaptchaConfig {
+    constructor(response) {
+        /**
+         * The reCAPTCHA site key.
+         */
+        this.siteKey = '';
+        /**
+         * The list of providers and their enablement status for reCAPTCHA Enterprise.
+         */
+        this.recaptchaEnforcementState = [];
+        if (response.recaptchaKey === undefined) {
+            throw new Error('recaptchaKey undefined');
+        }
+        // Example response.recaptchaKey: "projects/proj123/keys/sitekey123"
+        this.siteKey = response.recaptchaKey.split('/')[3];
+        this.recaptchaEnforcementState = response.recaptchaEnforcementState;
+    }
+    /**
+     * Returns the reCAPTCHA Enterprise enforcement state for the given provider.
+     *
+     * @param providerStr - The provider whose enforcement state is to be returned.
+     * @returns The reCAPTCHA Enterprise enforcement state for the given provider.
+     */
+    getProviderEnforcementState(providerStr) {
+        if (!this.recaptchaEnforcementState ||
+            this.recaptchaEnforcementState.length === 0) {
+            return null;
+        }
+        for (const recaptchaEnforcementState of this.recaptchaEnforcementState) {
+            if (recaptchaEnforcementState.provider &&
+                recaptchaEnforcementState.provider === providerStr) {
+                return _parseEnforcementState(recaptchaEnforcementState.enforcementState);
+            }
+        }
+        return null;
+    }
+    /**
+     * Returns true if the reCAPTCHA Enterprise enforcement state for the provider is set to ENFORCE or AUDIT.
+     *
+     * @param providerStr - The provider whose enablement state is to be returned.
+     * @returns Whether or not reCAPTCHA Enterprise protection is enabled for the given provider.
+     */
+    isProviderEnabled(providerStr) {
+        return (this.getProviderEnforcementState(providerStr) ===
+            "ENFORCE" /* EnforcementState.ENFORCE */ ||
+            this.getProviderEnforcementState(providerStr) === "AUDIT" /* EnforcementState.AUDIT */);
+    }
+    /**
+     * Returns true if reCAPTCHA Enterprise protection is enabled in at least one provider, otherwise
+     * returns false.
+     *
+     * @returns Whether or not reCAPTCHA Enterprise protection is enabled for at least one provider.
+     */
+    isAnyProviderEnabled() {
+        return (this.isProviderEnabled("EMAIL_PASSWORD_PROVIDER" /* RecaptchaAuthProvider.EMAIL_PASSWORD_PROVIDER */) ||
+            this.isProviderEnabled("PHONE_PROVIDER" /* RecaptchaAuthProvider.PHONE_PROVIDER */));
+    }
+}
+async function getRecaptchaConfig(auth, request) {
+    return _performApiRequest(auth, "GET" /* HttpMethod.GET */, "/v2/recaptchaConfig" /* Endpoint.GET_RECAPTCHA_CONFIG */, _addTidIfNecessary(auth, request));
 }
 
 /**
@@ -6175,11 +2780,235 @@ function _setExternalJSProvider(p) {
 function _loadJS(url) {
     return externalJSProvider.loadJS(url);
 }
+function _recaptchaEnterpriseScriptUrl() {
+    return externalJSProvider.recaptchaEnterpriseScript;
+}
 function _gapiScriptUrl() {
     return externalJSProvider.gapiScript;
 }
 function _generateCallbackName(prefix) {
     return `__${prefix}${Math.floor(Math.random() * 1000000)}`;
+}
+class MockGreCAPTCHATopLevel {
+    constructor() {
+        this.enterprise = new MockGreCAPTCHA();
+    }
+    ready(callback) {
+        callback();
+    }
+    execute(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _siteKey, _options) {
+        return Promise.resolve('token');
+    }
+    render(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _container, _parameters) {
+        return '';
+    }
+}
+class MockGreCAPTCHA {
+    ready(callback) {
+        callback();
+    }
+    execute(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _siteKey, _options) {
+        return Promise.resolve('token');
+    }
+    render(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _container, _parameters) {
+        return '';
+    }
+}
+
+/* eslint-disable @typescript-eslint/no-require-imports */
+const RECAPTCHA_ENTERPRISE_VERIFIER_TYPE = 'recaptcha-enterprise';
+const FAKE_TOKEN = 'NO_RECAPTCHA';
+class RecaptchaEnterpriseVerifier {
+    /**
+     *
+     * @param authExtern - The corresponding Firebase {@link Auth} instance.
+     *
+     */
+    constructor(authExtern) {
+        /**
+         * Identifies the type of application verifier (e.g. "recaptcha-enterprise").
+         */
+        this.type = RECAPTCHA_ENTERPRISE_VERIFIER_TYPE;
+        this.auth = _castAuth(authExtern);
+    }
+    /**
+     * Executes the verification process.
+     *
+     * @returns A Promise for a token that can be used to assert the validity of a request.
+     */
+    async verify(action = 'verify', forceRefresh = false) {
+        async function retrieveSiteKey(auth) {
+            if (!forceRefresh) {
+                if (auth.tenantId == null && auth._agentRecaptchaConfig != null) {
+                    return auth._agentRecaptchaConfig.siteKey;
+                }
+                if (auth.tenantId != null &&
+                    auth._tenantRecaptchaConfigs[auth.tenantId] !== undefined) {
+                    return auth._tenantRecaptchaConfigs[auth.tenantId].siteKey;
+                }
+            }
+            return new Promise(async (resolve, reject) => {
+                getRecaptchaConfig(auth, {
+                    clientType: "CLIENT_TYPE_WEB" /* RecaptchaClientType.WEB */,
+                    version: "RECAPTCHA_ENTERPRISE" /* RecaptchaVersion.ENTERPRISE */
+                })
+                    .then(response => {
+                    if (response.recaptchaKey === undefined) {
+                        reject(new Error('recaptcha Enterprise site key undefined'));
+                    }
+                    else {
+                        const config = new RecaptchaConfig(response);
+                        if (auth.tenantId == null) {
+                            auth._agentRecaptchaConfig = config;
+                        }
+                        else {
+                            auth._tenantRecaptchaConfigs[auth.tenantId] = config;
+                        }
+                        return resolve(config.siteKey);
+                    }
+                })
+                    .catch(error => {
+                    reject(error);
+                });
+            });
+        }
+        function retrieveRecaptchaToken(siteKey, resolve, reject) {
+            const grecaptcha = window.grecaptcha;
+            if (isEnterprise(grecaptcha)) {
+                grecaptcha.enterprise.ready(() => {
+                    grecaptcha.enterprise
+                        .execute(siteKey, { action })
+                        .then(token => {
+                        resolve(token);
+                    })
+                        .catch(() => {
+                        resolve(FAKE_TOKEN);
+                    });
+                });
+            }
+            else {
+                reject(Error('No reCAPTCHA enterprise script loaded.'));
+            }
+        }
+        // Returns Promise for a mock token when appVerificationDisabledForTesting is true.
+        if (this.auth.settings.appVerificationDisabledForTesting) {
+            const mockRecaptcha = new MockGreCAPTCHATopLevel();
+            return mockRecaptcha.execute('siteKey', { action: 'verify' });
+        }
+        return new Promise((resolve, reject) => {
+            retrieveSiteKey(this.auth)
+                .then(siteKey => {
+                if (!forceRefresh && isEnterprise(window.grecaptcha)) {
+                    retrieveRecaptchaToken(siteKey, resolve, reject);
+                }
+                else {
+                    if (typeof window === 'undefined') {
+                        reject(new Error('RecaptchaVerifier is only supported in browser'));
+                        return;
+                    }
+                    let url = _recaptchaEnterpriseScriptUrl();
+                    if (url.length !== 0) {
+                        url += siteKey;
+                    }
+                    _loadJS(url)
+                        .then(() => {
+                        retrieveRecaptchaToken(siteKey, resolve, reject);
+                    })
+                        .catch(error => {
+                        reject(error);
+                    });
+                }
+            })
+                .catch(error => {
+                reject(error);
+            });
+        });
+    }
+}
+async function injectRecaptchaFields(auth, request, action, isCaptchaResp = false, isFakeToken = false) {
+    const verifier = new RecaptchaEnterpriseVerifier(auth);
+    let captchaResponse;
+    if (isFakeToken) {
+        captchaResponse = FAKE_TOKEN;
+    }
+    else {
+        try {
+            captchaResponse = await verifier.verify(action);
+        }
+        catch (error) {
+            captchaResponse = await verifier.verify(action, true);
+        }
+    }
+    const newRequest = Object.assign({}, request);
+    if (action === "mfaSmsEnrollment" /* RecaptchaActionName.MFA_SMS_ENROLLMENT */ ||
+        action === "mfaSmsSignIn" /* RecaptchaActionName.MFA_SMS_SIGNIN */) {
+        if ('phoneEnrollmentInfo' in newRequest) {
+            const phoneNumber = newRequest.phoneEnrollmentInfo.phoneNumber;
+            const recaptchaToken = newRequest.phoneEnrollmentInfo.recaptchaToken;
+            Object.assign(newRequest, {
+                'phoneEnrollmentInfo': {
+                    phoneNumber,
+                    recaptchaToken,
+                    captchaResponse,
+                    'clientType': "CLIENT_TYPE_WEB" /* RecaptchaClientType.WEB */,
+                    'recaptchaVersion': "RECAPTCHA_ENTERPRISE" /* RecaptchaVersion.ENTERPRISE */
+                }
+            });
+        }
+        else if ('phoneSignInInfo' in newRequest) {
+            const recaptchaToken = newRequest.phoneSignInInfo.recaptchaToken;
+            Object.assign(newRequest, {
+                'phoneSignInInfo': {
+                    recaptchaToken,
+                    captchaResponse,
+                    'clientType': "CLIENT_TYPE_WEB" /* RecaptchaClientType.WEB */,
+                    'recaptchaVersion': "RECAPTCHA_ENTERPRISE" /* RecaptchaVersion.ENTERPRISE */
+                }
+            });
+        }
+        return newRequest;
+    }
+    if (!isCaptchaResp) {
+        Object.assign(newRequest, { captchaResponse });
+    }
+    else {
+        Object.assign(newRequest, { 'captchaResp': captchaResponse });
+    }
+    Object.assign(newRequest, { 'clientType': "CLIENT_TYPE_WEB" /* RecaptchaClientType.WEB */ });
+    Object.assign(newRequest, {
+        'recaptchaVersion': "RECAPTCHA_ENTERPRISE" /* RecaptchaVersion.ENTERPRISE */
+    });
+    return newRequest;
+}
+async function handleRecaptchaFlow(authInstance, request, actionName, actionMethod, recaptchaAuthProvider) {
+    var _a;
+    {
+        if ((_a = authInstance
+            ._getRecaptchaConfig()) === null || _a === void 0 ? void 0 : _a.isProviderEnabled("EMAIL_PASSWORD_PROVIDER" /* RecaptchaAuthProvider.EMAIL_PASSWORD_PROVIDER */)) {
+            const requestWithRecaptcha = await injectRecaptchaFields(authInstance, request, actionName, actionName === "getOobCode" /* RecaptchaActionName.GET_OOB_CODE */);
+            return actionMethod(authInstance, requestWithRecaptcha);
+        }
+        else {
+            return actionMethod(authInstance, request).catch(async (error) => {
+                if (error.code === `auth/${"missing-recaptcha-token" /* AuthErrorCode.MISSING_RECAPTCHA_TOKEN */}`) {
+                    console.log(`${actionName} is protected by reCAPTCHA Enterprise for this project. Automatically triggering the reCAPTCHA flow and restarting the flow.`);
+                    const requestWithRecaptcha = await injectRecaptchaFields(authInstance, request, actionName, actionName === "getOobCode" /* RecaptchaActionName.GET_OOB_CODE */);
+                    return actionMethod(authInstance, requestWithRecaptcha);
+                }
+                else {
+                    return Promise.reject(error);
+                }
+            });
+        }
+    }
 }
 
 /**
@@ -6444,6 +3273,179 @@ class AuthCredential {
         return debugFail('not implemented');
     }
 }
+// Used for linking an email/password account to an existing idToken. Uses the same request/response
+// format as updateEmailPassword.
+async function linkEmailPassword(auth, request) {
+    return _performApiRequest(auth, "POST" /* HttpMethod.POST */, "/v1/accounts:signUp" /* Endpoint.SIGN_UP */, request);
+}
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+async function signInWithPassword(auth, request) {
+    return _performSignInRequest(auth, "POST" /* HttpMethod.POST */, "/v1/accounts:signInWithPassword" /* Endpoint.SIGN_IN_WITH_PASSWORD */, _addTidIfNecessary(auth, request));
+}
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+async function signInWithEmailLink$1(auth, request) {
+    return _performSignInRequest(auth, "POST" /* HttpMethod.POST */, "/v1/accounts:signInWithEmailLink" /* Endpoint.SIGN_IN_WITH_EMAIL_LINK */, _addTidIfNecessary(auth, request));
+}
+async function signInWithEmailLinkForLinking(auth, request) {
+    return _performSignInRequest(auth, "POST" /* HttpMethod.POST */, "/v1/accounts:signInWithEmailLink" /* Endpoint.SIGN_IN_WITH_EMAIL_LINK */, _addTidIfNecessary(auth, request));
+}
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Interface that represents the credentials returned by {@link EmailAuthProvider} for
+ * {@link ProviderId}.PASSWORD
+ *
+ * @remarks
+ * Covers both {@link SignInMethod}.EMAIL_PASSWORD and
+ * {@link SignInMethod}.EMAIL_LINK.
+ *
+ * @public
+ */
+class EmailAuthCredential extends AuthCredential {
+    /** @internal */
+    constructor(
+    /** @internal */
+    _email, 
+    /** @internal */
+    _password, signInMethod, 
+    /** @internal */
+    _tenantId = null) {
+        super("password" /* ProviderId.PASSWORD */, signInMethod);
+        this._email = _email;
+        this._password = _password;
+        this._tenantId = _tenantId;
+    }
+    /** @internal */
+    static _fromEmailAndPassword(email, password) {
+        return new EmailAuthCredential(email, password, "password" /* SignInMethod.EMAIL_PASSWORD */);
+    }
+    /** @internal */
+    static _fromEmailAndCode(email, oobCode, tenantId = null) {
+        return new EmailAuthCredential(email, oobCode, "emailLink" /* SignInMethod.EMAIL_LINK */, tenantId);
+    }
+    /** {@inheritdoc AuthCredential.toJSON} */
+    toJSON() {
+        return {
+            email: this._email,
+            password: this._password,
+            signInMethod: this.signInMethod,
+            tenantId: this._tenantId
+        };
+    }
+    /**
+     * Static method to deserialize a JSON representation of an object into an {@link  AuthCredential}.
+     *
+     * @param json - Either `object` or the stringified representation of the object. When string is
+     * provided, `JSON.parse` would be called first.
+     *
+     * @returns If the JSON input does not represent an {@link AuthCredential}, null is returned.
+     */
+    static fromJSON(json) {
+        const obj = typeof json === 'string' ? JSON.parse(json) : json;
+        if ((obj === null || obj === void 0 ? void 0 : obj.email) && (obj === null || obj === void 0 ? void 0 : obj.password)) {
+            if (obj.signInMethod === "password" /* SignInMethod.EMAIL_PASSWORD */) {
+                return this._fromEmailAndPassword(obj.email, obj.password);
+            }
+            else if (obj.signInMethod === "emailLink" /* SignInMethod.EMAIL_LINK */) {
+                return this._fromEmailAndCode(obj.email, obj.password, obj.tenantId);
+            }
+        }
+        return null;
+    }
+    /** @internal */
+    async _getIdTokenResponse(auth) {
+        switch (this.signInMethod) {
+            case "password" /* SignInMethod.EMAIL_PASSWORD */:
+                const request = {
+                    returnSecureToken: true,
+                    email: this._email,
+                    password: this._password,
+                    clientType: "CLIENT_TYPE_WEB" /* RecaptchaClientType.WEB */
+                };
+                return handleRecaptchaFlow(auth, request, "signInWithPassword" /* RecaptchaActionName.SIGN_IN_WITH_PASSWORD */, signInWithPassword);
+            case "emailLink" /* SignInMethod.EMAIL_LINK */:
+                return signInWithEmailLink$1(auth, {
+                    email: this._email,
+                    oobCode: this._password
+                });
+            default:
+                _fail(auth, "internal-error" /* AuthErrorCode.INTERNAL_ERROR */);
+        }
+    }
+    /** @internal */
+    async _linkToIdToken(auth, idToken) {
+        switch (this.signInMethod) {
+            case "password" /* SignInMethod.EMAIL_PASSWORD */:
+                const request = {
+                    idToken,
+                    returnSecureToken: true,
+                    email: this._email,
+                    password: this._password,
+                    clientType: "CLIENT_TYPE_WEB" /* RecaptchaClientType.WEB */
+                };
+                return handleRecaptchaFlow(auth, request, "signUpPassword" /* RecaptchaActionName.SIGN_UP_PASSWORD */, linkEmailPassword);
+            case "emailLink" /* SignInMethod.EMAIL_LINK */:
+                return signInWithEmailLinkForLinking(auth, {
+                    idToken,
+                    email: this._email,
+                    oobCode: this._password
+                });
+            default:
+                _fail(auth, "internal-error" /* AuthErrorCode.INTERNAL_ERROR */);
+        }
+    }
+    /** @internal */
+    _getReauthenticationResolver(auth) {
+        return this._getIdTokenResponse(auth);
+    }
+}
 
 /**
  * @license
@@ -6604,6 +3606,201 @@ class OAuthCredential extends AuthCredential {
         return request;
     }
 }
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Maps the mode string in action code URL to Action Code Info operation.
+ *
+ * @param mode
+ */
+function parseMode(mode) {
+    switch (mode) {
+        case 'recoverEmail':
+            return "RECOVER_EMAIL" /* ActionCodeOperation.RECOVER_EMAIL */;
+        case 'resetPassword':
+            return "PASSWORD_RESET" /* ActionCodeOperation.PASSWORD_RESET */;
+        case 'signIn':
+            return "EMAIL_SIGNIN" /* ActionCodeOperation.EMAIL_SIGNIN */;
+        case 'verifyEmail':
+            return "VERIFY_EMAIL" /* ActionCodeOperation.VERIFY_EMAIL */;
+        case 'verifyAndChangeEmail':
+            return "VERIFY_AND_CHANGE_EMAIL" /* ActionCodeOperation.VERIFY_AND_CHANGE_EMAIL */;
+        case 'revertSecondFactorAddition':
+            return "REVERT_SECOND_FACTOR_ADDITION" /* ActionCodeOperation.REVERT_SECOND_FACTOR_ADDITION */;
+        default:
+            return null;
+    }
+}
+/**
+ * Helper to parse FDL links
+ *
+ * @param url
+ */
+function parseDeepLink(url) {
+    const link = querystringDecode(extractQuerystring(url))['link'];
+    // Double link case (automatic redirect).
+    const doubleDeepLink = link
+        ? querystringDecode(extractQuerystring(link))['deep_link_id']
+        : null;
+    // iOS custom scheme links.
+    const iOSDeepLink = querystringDecode(extractQuerystring(url))['deep_link_id'];
+    const iOSDoubleDeepLink = iOSDeepLink
+        ? querystringDecode(extractQuerystring(iOSDeepLink))['link']
+        : null;
+    return iOSDoubleDeepLink || iOSDeepLink || doubleDeepLink || link || url;
+}
+/**
+ * A utility class to parse email action URLs such as password reset, email verification,
+ * email link sign in, etc.
+ *
+ * @public
+ */
+class ActionCodeURL {
+    /**
+     * @param actionLink - The link from which to extract the URL.
+     * @returns The {@link ActionCodeURL} object, or null if the link is invalid.
+     *
+     * @internal
+     */
+    constructor(actionLink) {
+        var _a, _b, _c, _d, _e, _f;
+        const searchParams = querystringDecode(extractQuerystring(actionLink));
+        const apiKey = (_a = searchParams["apiKey" /* QueryField.API_KEY */]) !== null && _a !== void 0 ? _a : null;
+        const code = (_b = searchParams["oobCode" /* QueryField.CODE */]) !== null && _b !== void 0 ? _b : null;
+        const operation = parseMode((_c = searchParams["mode" /* QueryField.MODE */]) !== null && _c !== void 0 ? _c : null);
+        // Validate API key, code and mode.
+        _assert(apiKey && code && operation, "argument-error" /* AuthErrorCode.ARGUMENT_ERROR */);
+        this.apiKey = apiKey;
+        this.operation = operation;
+        this.code = code;
+        this.continueUrl = (_d = searchParams["continueUrl" /* QueryField.CONTINUE_URL */]) !== null && _d !== void 0 ? _d : null;
+        this.languageCode = (_e = searchParams["lang" /* QueryField.LANGUAGE_CODE */]) !== null && _e !== void 0 ? _e : null;
+        this.tenantId = (_f = searchParams["tenantId" /* QueryField.TENANT_ID */]) !== null && _f !== void 0 ? _f : null;
+    }
+    /**
+     * Parses the email action link string and returns an {@link ActionCodeURL} if the link is valid,
+     * otherwise returns null.
+     *
+     * @param link  - The email action link string.
+     * @returns The {@link ActionCodeURL} object, or null if the link is invalid.
+     *
+     * @public
+     */
+    static parseLink(link) {
+        const actionLink = parseDeepLink(link);
+        try {
+            return new ActionCodeURL(actionLink);
+        }
+        catch (_a) {
+            return null;
+        }
+    }
+}
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Provider for generating {@link EmailAuthCredential}.
+ *
+ * @public
+ */
+class EmailAuthProvider {
+    constructor() {
+        /**
+         * Always set to {@link ProviderId}.PASSWORD, even for email link.
+         */
+        this.providerId = EmailAuthProvider.PROVIDER_ID;
+    }
+    /**
+     * Initialize an {@link AuthCredential} using an email and password.
+     *
+     * @example
+     * ```javascript
+     * const authCredential = EmailAuthProvider.credential(email, password);
+     * const userCredential = await signInWithCredential(auth, authCredential);
+     * ```
+     *
+     * @example
+     * ```javascript
+     * const userCredential = await signInWithEmailAndPassword(auth, email, password);
+     * ```
+     *
+     * @param email - Email address.
+     * @param password - User account password.
+     * @returns The auth provider credential.
+     */
+    static credential(email, password) {
+        return EmailAuthCredential._fromEmailAndPassword(email, password);
+    }
+    /**
+     * Initialize an {@link AuthCredential} using an email and an email link after a sign in with
+     * email link operation.
+     *
+     * @example
+     * ```javascript
+     * const authCredential = EmailAuthProvider.credentialWithLink(auth, email, emailLink);
+     * const userCredential = await signInWithCredential(auth, authCredential);
+     * ```
+     *
+     * @example
+     * ```javascript
+     * await sendSignInLinkToEmail(auth, email);
+     * // Obtain emailLink from user.
+     * const userCredential = await signInWithEmailLink(auth, email, emailLink);
+     * ```
+     *
+     * @param auth - The {@link Auth} instance used to verify the link.
+     * @param email - Email address.
+     * @param emailLink - Sign-in email link.
+     * @returns - The auth provider credential.
+     */
+    static credentialWithLink(email, emailLink) {
+        const actionCodeUrl = ActionCodeURL.parseLink(emailLink);
+        _assert(actionCodeUrl, "argument-error" /* AuthErrorCode.ARGUMENT_ERROR */);
+        return EmailAuthCredential._fromEmailAndCode(email, actionCodeUrl.code, actionCodeUrl.tenantId);
+    }
+}
+/**
+ * Always set to {@link ProviderId}.PASSWORD, even for email link.
+ */
+EmailAuthProvider.PROVIDER_ID = "password" /* ProviderId.PASSWORD */;
+/**
+ * Always set to {@link SignInMethod}.EMAIL_PASSWORD.
+ */
+EmailAuthProvider.EMAIL_PASSWORD_SIGN_IN_METHOD = "password" /* SignInMethod.EMAIL_PASSWORD */;
+/**
+ * Always set to {@link SignInMethod}.EMAIL_LINK.
+ */
+EmailAuthProvider.EMAIL_LINK_SIGN_IN_METHOD = "emailLink" /* SignInMethod.EMAIL_LINK */;
 
 /**
  * @license
@@ -7353,6 +4550,93 @@ async function _signInWithCredential(auth, credential, bypassAuthState = false) 
     return userCredential;
 }
 /**
+ * Asynchronously signs in with the given credentials.
+ *
+ * @remarks
+ * An {@link AuthProvider} can be used to generate the credential.
+ *
+ * This method is not supported by {@link Auth} instances created with a
+ * {@link @firebase/app#FirebaseServerApp}.
+ *
+ * @param auth - The {@link Auth} instance.
+ * @param credential - The auth credential.
+ *
+ * @public
+ */
+async function signInWithCredential(auth, credential) {
+    return _signInWithCredential(_castAuth(auth), credential);
+}
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Updates the password policy cached in the {@link Auth} instance if a policy is already
+ * cached for the project or tenant.
+ *
+ * @remarks
+ * We only fetch the password policy if the password did not meet policy requirements and
+ * there is an existing policy cached. A developer must call validatePassword at least
+ * once for the cache to be automatically updated.
+ *
+ * @param auth - The {@link Auth} instance.
+ *
+ * @private
+ */
+async function recachePasswordPolicy(auth) {
+    const authInternal = _castAuth(auth);
+    if (authInternal._getPasswordPolicyInternal()) {
+        await authInternal._updatePasswordPolicy();
+    }
+}
+/**
+ * Asynchronously signs in using an email and password.
+ *
+ * @remarks
+ * Fails with an error if the email address and password do not match. When
+ * {@link https://cloud.google.com/identity-platform/docs/admin/email-enumeration-protection | Email Enumeration Protection}
+ * is enabled, this method fails with "auth/invalid-credential" in case of an invalid
+ * email/password.
+ *
+ * This method is not supported on {@link Auth} instances created with a
+ * {@link @firebase/app#FirebaseServerApp}.
+ *
+ * Note: The user's password is NOT the password used to access the user's email account. The
+ * email address serves as a unique identifier for the user, and the password is used to access
+ * the user's account in your Firebase project. See also: {@link createUserWithEmailAndPassword}.
+ *
+ *
+ * @param auth - The {@link Auth} instance.
+ * @param email - The users email address.
+ * @param password - The users password.
+ *
+ * @public
+ */
+function signInWithEmailAndPassword(auth, email, password) {
+    if (_isFirebaseServerApp(auth.app)) {
+        return Promise.reject(_serverAppCurrentUserOperationNotSupportedError(auth));
+    }
+    return signInWithCredential(getModularInstance(auth), EmailAuthProvider.credential(email, password)).catch(async (error) => {
+        if (error.code === `auth/${"password-does-not-meet-requirements" /* AuthErrorCode.PASSWORD_DOES_NOT_MEET_REQUIREMENTS */}`) {
+            void recachePasswordPolicy(auth);
+        }
+        throw error;
+    });
+}
+/**
  * Adds an observer for changes to the signed-in user's ID token.
  *
  * @remarks
@@ -7383,6 +4667,20 @@ function onIdTokenChanged(auth, nextOrObserver, error, completed) {
  */
 function beforeAuthStateChanged(auth, callback, onAbort) {
     return getModularInstance(auth).beforeAuthStateChanged(callback, onAbort);
+}
+/**
+ * Signs out the current user.
+ *
+ * @remarks
+ * This method is not supported by {@link Auth} instances created with a
+ * {@link @firebase/app#FirebaseServerApp}.
+ *
+ * @param auth - The {@link Auth} instance.
+ *
+ * @public
+ */
+function signOut(auth) {
+    return getModularInstance(auth).signOut();
 }
 
 const STORAGE_AVAILABLE_KEY = '__sak';
@@ -9768,7 +7066,7 @@ if (typeof window !== "undefined") {
  * - updated: Timestamp of last update (auto-generated)
  */
 
-const COLLECTION$2 = "organizations";
+const COLLECTION = "organizations";
 
 class OrganizationsData {
     constructor() {}
@@ -9778,17 +7076,17 @@ class OrganizationsData {
     // =========================================================================
 
     async getById(id) {
-        return await database.get(COLLECTION$2, id);
+        return await database.get(COLLECTION, id);
     }
 
     async getByUser(userId) {
-        return await database.query(COLLECTION$2, {
+        return await database.query(COLLECTION, {
             members: { op: "array-contains", value: userId },
         });
     }
 
     async getByOwner(userId) {
-        return await database.query(COLLECTION$2, {
+        return await database.query(COLLECTION, {
             owners: { op: "array-contains", value: userId },
         });
     }
@@ -9805,7 +7103,7 @@ class OrganizationsData {
             invites: [],
             ...orgData,
         };
-        const id = await database.set(COLLECTION$2, org);
+        const id = await database.set(COLLECTION, org);
         return id;
     }
 
@@ -9820,7 +7118,7 @@ class OrganizationsData {
         if (Object.keys(filteredUpdates).length === 0) {
             return false;
         }
-        return await database.update(COLLECTION$2, id, filteredUpdates);
+        return await database.update(COLLECTION, id, filteredUpdates);
     }
 
     async delete(id) {
@@ -9828,7 +7126,7 @@ class OrganizationsData {
         if (org?.isPersonal) {
             throw new Error("Cannot delete personal organization");
         }
-        return await database.delete(COLLECTION$2, id);
+        return await database.delete(COLLECTION, id);
     }
 
     tokenize(name) {
@@ -9848,7 +7146,7 @@ class OrganizationsData {
         const baseToken = this.tokenize(name);
         let token = baseToken;
         while (true) {
-            const existingOrgs = await database.query(COLLECTION$2, {
+            const existingOrgs = await database.query(COLLECTION, {
                 token: token,
             });
             if (!existingOrgs || existingOrgs.length === 0) {
@@ -9868,9 +7166,9 @@ class OrganizationsData {
 
         try {
             if (poid) {
-                existing = await database.get(COLLECTION$2, poid);
+                existing = await database.get(COLLECTION, poid);
             } else {
-                existing = await database.query(COLLECTION$2, { uid: userId });
+                existing = await database.query(COLLECTION, { uid: userId });
             }
         } catch (error) {
             console.error("Error checking for personal organization:", error);
@@ -9901,14 +7199,14 @@ class OrganizationsData {
     // =========================================================================
 
     async addMember(orgId, userId) {
-        return await database.update(COLLECTION$2, orgId, {
+        return await database.update(COLLECTION, orgId, {
             members: { op: "arrayUnion", value: userId },
         });
     }
 
     async removeMember(orgId, userId) {
         // Remove from both members and owners
-        return await database.update(COLLECTION$2, orgId, {
+        return await database.update(COLLECTION, orgId, {
             members: { op: "arrayRemove", value: userId },
             owners: { op: "arrayRemove", value: userId },
         });
@@ -9916,7 +7214,7 @@ class OrganizationsData {
 
     async addOwner(orgId, userId) {
         // Add to both owners and members (in case not already a member)
-        return await database.update(COLLECTION$2, orgId, {
+        return await database.update(COLLECTION, orgId, {
             owners: { op: "arrayUnion", value: userId },
             members: { op: "arrayUnion", value: userId },
         });
@@ -9924,7 +7222,7 @@ class OrganizationsData {
 
     async removeOwner(orgId, userId) {
         // Remove from owners only, keep as member
-        return await database.update(COLLECTION$2, orgId, {
+        return await database.update(COLLECTION, orgId, {
             owners: { op: "arrayRemove", value: userId },
         });
     }
@@ -9935,14 +7233,14 @@ class OrganizationsData {
 
     async createInvite(orgId) {
         const token = database.pushid();
-        await database.update(COLLECTION$2, orgId, {
+        await database.update(COLLECTION, orgId, {
             invites: { op: "arrayUnion", value: token },
         });
         return token;
     }
 
     async getByInvite(token) {
-        const orgs = await database.query(COLLECTION$2, {
+        const orgs = await database.query(COLLECTION, {
             invites: { op: "array-contains", value: token },
         });
 
@@ -9967,7 +7265,7 @@ class OrganizationsData {
         }
 
         // Remove the invite token
-        await database.update(COLLECTION$2, org.id, {
+        await database.update(COLLECTION, org.id, {
             invites: { op: "arrayRemove", value: token },
         });
 
@@ -9982,394 +7280,127 @@ class OrganizationsData {
     }
 
     async revokeInvite(orgId, token) {
-        return await database.update(COLLECTION$2, orgId, {
+        return await database.update(COLLECTION, orgId, {
             invites: { op: "arrayRemove", value: token },
         });
     }
 }
 
-/**
- * ApplicationsData manages application records for an organization.
- *
- * Applications are stored in the "applications" collection:
- * - id: Record identifier (auto-generated)
- * - oid: Organization ID
- * - name: Application name
- * - description: Application description
- * - created: Timestamp of creation (auto-generated)
- * - updated: Timestamp of last update (auto-generated)
- */
+const STORAGE_KEY = "vy_current_org_id";
 
-const COLLECTION$1 = "applications";
+class OrgContext {
+    constructor() {
+        this.orgsData = new OrganizationsData();
 
-class ApplicationsData {
-    constructor() {}
+        this.currentOrgId = van.state(null);
+        this.currentOrg = van.state(null);
+        this.userOrgs = van.state([]);
+        this.isLoading = van.state(true);
 
-    async getById(id) {
-        return await database.get(COLLECTION$1, id);
+        this.userId = null;
     }
 
-    async getByOrg(oid) {
-        return await database.query(COLLECTION$1, { oid: { op: "==", value: oid } });
+    async init(user) {
+        console.log("init org context with user:", user);
+        this.userId = user.uid;
+
+        this.isLoading.val = true;
+
+        const personalOrg = await this.orgsData.ensurePersonalOrg(user);
+
+        const orgs = await this.orgsData.getByUser(this.userId);
+        this.userOrgs.val = this.sortOrgs(orgs || []);
+
+        const storedOrgId = localStorage.getItem(STORAGE_KEY);
+        const validOrg = this.userOrgs.val.find((o) => o.id === storedOrgId);
+
+        if (validOrg) {
+            await this.setCurrentOrg(storedOrgId, false);
+        } else {
+            await this.setCurrentOrg(personalOrg.id, false);
+        }
+
+        this.isLoading.val = false;
     }
 
-    async create(oid, data) {
-        const application = { oid, ...data };
-        return await database.set(COLLECTION$1, application);
-    }
-
-    async update(id, updates) {
-        return await database.update(COLLECTION$1, id, updates);
-    }
-
-    async delete(id) {
-        return await database.delete(COLLECTION$1, id);
-    }
-}
-
-/**
- * ApiKeysData manages API keys associated with an application.
- *
- * API keys are stored in the "api_keys" collection:
- * - id: Record identifier (auto-generated)
- * - oid: Organization ID
- * - application: FK to applications.id
- * - name: Human-readable key name
- * - key: The API key value (vyk_ + 32 random hex chars)
- * - expires: Expiration date (optional)
- * - used: Last used date (optional)
- * - created: Timestamp of creation (auto-generated)
- *
- * Keys are written by the /api/org/api_key/generate endpoint.
- */
-
-const COLLECTION = "api_keys";
-
-class ApiKeysData {
-    constructor() {}
-
-    async getById(id) {
-        return await database.get(COLLECTION, id);
-    }
-
-    async getByApplication(oid, application) {
-        return await database.query(COLLECTION, {
-            oid,
-            application,
+    sortOrgs(orgs) {
+        return orgs.slice().sort((a, b) => {
+            if (a.isPersonal && !b.isPersonal) return -1;
+            if (!a.isPersonal && b.isPersonal) return 1;
+            return (a.name || "").localeCompare(b.name || "");
         });
     }
 
-    async getByOrg(oid) {
-        return await database.query(COLLECTION, {
-            oid,
-        });
-    }
-
-    async create(keyData) {
-        return await database.set(COLLECTION, keyData);
-    }
-
-    async update(id, updates) {
-        return await database.update(COLLECTION, id, updates);
-    }
-
-    async delete(id) {
-        return await database.delete(COLLECTION, id);
-    }
-
-    async getByHash(keyHash) {
-        const results = await database.query(COLLECTION, { keyHash });
-        return results[0] || null;
-    }
-}
-
-const keyHashHmacSecret = defineSecret("KEY_HASH_HMAC_SECRET");
-
-function getSecrets() {
-    return {
-        keyHashHmacSecret:
-            process.env.KEY_HASH_HMAC_SECRET || keyHashHmacSecret.value(),
-    };
-}
-
-// Express app for development
-const orgApp = express();
-
-orgApp.use(express.json());
-orgApp.use(requireAuth);
-
-// Helper to sync a user's org memberships to their custom claims
-async function syncUserOrgClaims(userId) {
-    const orgsData = new OrganizationsData();
-    const orgs = await orgsData.getByUser(userId);
-    const orgIds = orgs.map((org) => org.id);
-    const poid = orgs.find((org) => org.isPersonal)?.id || null;
-
-    await getAuth$1().setCustomUserClaims(userId, { orgIds, poid });
-    console.log(
-        `Updated claims for user ${userId}: orgIds = [${orgIds.join(", ")}] poid = ${poid}`
-    );
-    return orgIds;
-}
-
-// Accept an invite token and join organization
-orgApp.post("/accept/:token", async (req, res) => {
-    const { token } = req.params;
-
-    if (!token) {
-        return res.status(400).json({
-            error: "Bad Request",
-            message: "Invite token is required",
-        });
-    }
-
-    try {
-        const orgsData = new OrganizationsData();
-        const orgId = await orgsData.acceptInvite(token, req.uid);
+    getCurrentOrgId() {
+        let orgId = this.currentOrgId.val;
 
         if (!orgId) {
-            return res.status(404).json({
-                error: "Not Found",
-                message: "Invalid or expired invite token",
-            });
+            orgId = localStorage.getItem(STORAGE_KEY);
         }
 
-        // Sync user's org claims
-        await syncUserOrgClaims(req.uid);
-
-        const org = await orgsData.getById(orgId);
-
-        return res.status(200).json({
-            success: true,
-            message: "Successfully joined organization",
-            organization: {
-                id: org.id,
-                name: org.name,
-            },
-        });
-    } catch (error) {
-        console.error("Error accepting invite:", error);
-        return res.status(500).json({
-            error: "Internal Server Error",
-            message: "Failed to accept invite",
-        });
-    }
-});
-
-// Create a new organization
-orgApp.post("/create", async (req, res) => {
-    const { name } = req.body;
-
-    if (!name || !name.trim()) {
-        return res.status(400).json({
-            error: "Bad Request",
-            message: "Organization name is required",
-        });
+        return orgId;
     }
 
-    try {
-        const orgsData = new OrganizationsData();
-        const orgId = await orgsData.create(name.trim(), req.uid);
-
-        // Sync user's org claims
-        await syncUserOrgClaims(req.uid);
-
-        const org = await orgsData.getById(orgId);
-
-        return res.status(201).json({
-            success: true,
-            message: "Organization created",
-            organization: {
-                id: org.id,
-                name: org.name,
-            },
-        });
-    } catch (error) {
-        console.error("Error creating organization:", error);
-        return res.status(500).json({
-            error: "Internal Server Error",
-            message: "Failed to create organization",
-        });
-    }
-});
-
-// Delete an organization (owner only)
-orgApp.delete("/:orgId", async (req, res) => {
-    const { orgId } = req.params;
-
-    if (!orgId) {
-        return res.status(400).json({
-            error: "Bad Request",
-            message: "Organization ID is required",
-        });
+    getCurrentOrg() {
+        return this.currentOrg.val;
     }
 
-    try {
-        const orgsData = new OrganizationsData();
-        const org = await orgsData.getById(orgId);
-
+    async setCurrentOrg(orgId, fireEvent = true) {
+        const org = this.userOrgs.val.find((o) => o.id === orgId);
         if (!org) {
-            return res.status(404).json({
-                error: "Not Found",
-                message: "Organization not found",
+            console.warn("Organization not found:", orgId);
+            return false;
+        }
+
+        this.currentOrgId.val = orgId;
+        this.currentOrg.val = org;
+        localStorage.setItem(STORAGE_KEY, orgId);
+        console.log("Set current organization to:", orgId);
+
+        if (fireEvent) {
+            eventBus.fire("org.changed", {
+                orgId,
+                org,
+                isPersonal: org.isPersonal || false,
             });
         }
 
-        // Check if user is an owner
-        if (!org.owners.includes(req.uid)) {
-            return res.status(403).json({
-                error: "Forbidden",
-                message: "Only owners can delete an organization",
-            });
-        }
-
-        // Get all members before deletion to update their claims
-        const memberIds = [...org.members];
-
-        // Delete the organization
-        await orgsData.delete(orgId);
-
-        // Sync claims for all affected members
-        for (const memberId of memberIds) {
-            await syncUserOrgClaims(memberId);
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: "Organization deleted",
-        });
-    } catch (error) {
-        console.error("Error deleting organization:", error);
-        return res.status(500).json({
-            error: "Internal Server Error",
-            message: "Failed to delete organization",
-        });
-    }
-});
-
-orgApp.post("/create/personal", async (req, res) => {
-    try {
-        const orgsData = new OrganizationsData();
-        const user = await getAuth$1().getUser(req.uid);
-        const token = await orgsData.ensureUniqueToken(user.email);
-
-        const org = {
-            name: user.displayName || user.email,
-            isPersonal: true,
-            uid: req.uid,
-            owners: [req.uid],
-            members: [req.uid],
-            invites: [],
-            token: token,
-        };
-        org.id = await orgsData.create(org.name, req.uid, org);
-
-        await syncUserOrgClaims(req.uid);
-
-        return res.status(201).json({
-            success: true,
-            message: "Personal organization created",
-            organization: org,
-        });
-    } catch (error) {
-        console.error("Error creating personal organization:", error);
-        return res.status(500).json({
-            error: "Internal Server Error",
-            message: "Failed to create personal organization",
-        });
-    }
-});
-
-orgApp.post("/sync", async (req, res) => {
-    await syncUserOrgClaims(req.uid);
-    return res.status(200).json({ ok: "ok" });
-});
-
-orgApp.post("/key/generate", async (req, res) => {
-    const { application, name } = req.body;
-
-    if (!application || !name?.trim()) {
-        return res.status(400).json({
-            error: "Bad Request",
-            message: "application and name are required",
-        });
+        return true;
     }
 
-    try {
-        // Look up the application to get its org
-        const appsData = new ApplicationsData();
-        const app = await appsData.getById(application);
+    async refreshOrgs() {
+        if (!this.userId) return;
 
-        if (!app) {
-            return res.status(404).json({
-                error: "Not Found",
-                message: "Application not found",
-            });
+        const orgs = await this.orgsData.getByUser(this.userId);
+        this.userOrgs.val = this.sortOrgs(orgs || []);
+
+        const currentStillValid = this.userOrgs.val.find(
+            (o) => o.id === this.currentOrgId.val
+        );
+        if (!currentStillValid) {
+            const personal = this.userOrgs.val.find((o) => o.isPersonal);
+            if (personal) {
+                await this.setCurrentOrg(personal.id);
+            }
+        } else {
+            this.currentOrg.val = currentStillValid;
         }
-
-        // Validate the user belongs to the org that owns the application
-        const userOrgIds = req.user.orgIds || [];
-        if (!userOrgIds.includes(app.oid)) {
-            return res.status(403).json({
-                error: "Forbidden",
-                message: "You do not have access to this application",
-            });
-        }
-
-        // Generate the API key using a cryptographically secure method
-        const rawKey = randomBytes(16).toString("hex");
-        const fullKey = `vyk_${rawKey}`;
-        const keyPrefix = `vyk_${rawKey.substring(0, 8)}`;
-
-        // Hash the API key using HMAC-SHA256
-        const secrets = getSecrets();
-        const keyHash = createHmac("sha256", secrets.keyHashHmacSecret)
-            .update(fullKey)
-            .digest("hex");
-
-        // Store the hashed key, prefix, and metadata — never the full key
-        const apiKeysData = new ApiKeysData();
-        const keyData = {
-            oid: app.oid,
-            application,
-            name: name.trim(),
-            keyHash,
-            keyPrefix,
-        };
-        const id = await apiKeysData.create(keyData);
-
-        // Return the full key once — it will never be retrievable again
-        return res.status(201).json({
-            success: true,
-            id,
-            name: name.trim(),
-            keyPrefix,
-            key: fullKey,
-        });
-    } catch (error) {
-        console.error("Error generating API key:", error);
-        return res.status(500).json({
-            error: "Internal Server Error",
-            message: "Failed to generate API key",
-        });
     }
-});
 
-const functionApp = express();
-functionApp.use("/api/org", orgApp);
+    getPersonalOrg() {
+        return this.userOrgs.val.find((o) => o.isPersonal);
+    }
 
-console.log("Setting up Cloud Function export...");
-// Export Cloud Function for production
-const org = onRequest(
-    {
-        region: "us-central1",
-        memory: "512MiB",
-        timeoutSeconds: 60,
-        invoker: "public",
-        secrets: [keyHashHmacSecret],
-    },
-    functionApp
-);
+    isInOrg(orgId) {
+        return this.userOrgs.val.some((o) => o.id === orgId);
+    }
+}
 
-export { org, orgApp };
-//# sourceMappingURL=index.js.map
+const orgContext = new OrgContext();
+
+if (typeof window !== "undefined") {
+    window._vy_orgContext = orgContext;
+}
+
+export { OrganizationsData as O, signOut as a, apiUtil as b, getAuth as g, orgContext as o, signInWithEmailAndPassword as s };
+//# sourceMappingURL=orgContext-Bly-4Rpq.js.map

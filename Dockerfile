@@ -42,6 +42,8 @@ WORKDIR /app/functions/org
 RUN npm install
 WORKDIR /app/functions/file
 RUN npm install
+WORKDIR /app/functions/v1
+RUN npm install
 
 
 WORKDIR /app
