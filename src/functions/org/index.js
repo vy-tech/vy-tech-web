@@ -260,6 +260,7 @@ orgApp.post("/key/generate", async (req, res) => {
         const apiKeysData = new ApiKeysData();
         const keyData = {
             oid: app.oid,
+            uid: req.uid,
             application,
             name: name.trim(),
             keyHash,

@@ -7,8 +7,18 @@ import { defineSecret } from "firebase-functions/params";
 import { createHmac } from "crypto";
 
 import { ApiKeysData } from "../../data/apiKeys.js";
+import { FilesData } from "../../data/files.js";
+import { JobsData } from "../../data/jobs.js";
+import { OrganizationsData } from "../../data/organizations.js";
+import { UploadsData } from "../../data/uploads.js";
+import { Storage } from "../../data/storage.js";
+import { orgContext } from "../../data/orgContext.js";
 
 const keyHashHmacSecret = defineSecret("KEY_HASH_HMAC_SECRET");
+const storageAccessKeySeaweed = defineSecret("STORAGE_ACCESS_KEY_SEAWEED");
+const storageSecretKeySeaweed = defineSecret("STORAGE_SECRET_KEY_SEAWEED");
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function getSecrets() {
     return {
@@ -16,6 +26,37 @@ function getSecrets() {
             process.env.KEY_HASH_HMAC_SECRET || keyHashHmacSecret.value(),
     };
 }
+
+function getStorageSecrets() {
+    return {
+        access_key:
+            process.env.STORAGE_ACCESS_KEY_SEAWEED ||
+            storageAccessKeySeaweed.value(),
+        secret_key:
+            process.env.STORAGE_SECRET_KEY_SEAWEED ||
+            storageSecretKeySeaweed.value(),
+    };
+}
+
+function guessMimeType(filename) {
+    const extension = filename.split(".").pop().toLowerCase();
+    const mimeTypes = {
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        gif: "image/gif",
+        pdf: "application/pdf",
+        txt: "text/plain",
+        mp4: "video/mp4",
+        avi: "video/x-msvideo",
+        mov: "video/quicktime",
+        m4v: "video/x-m4v",
+        mkv: "video/x-matroska",
+    };
+    return mimeTypes[extension] || "application/octet-stream";
+}
+
+// ── Auth middleware ──────────────────────────────────────────────────────────
 
 async function requireApiKey(req, res, next) {
     // Accept X-API-Key header or Authorization: Bearer vyk_...
@@ -64,7 +105,18 @@ async function requireApiKey(req, res, next) {
         // Fire-and-forget last-used timestamp
         apiKeysData.update(apiKey.id, { used: Date.now() }).catch(() => {});
 
-        next();
+        // Set server-side org context for downstream data layer code
+        const orgsData = new OrganizationsData();
+        const org = await orgsData.getById(apiKey.oid);
+
+        orgContext.run(
+            {
+                orgId: apiKey.oid,
+                org: org || { id: apiKey.oid },
+                userId: apiKey.uid || "api:" + apiKey.id,
+            },
+            () => next()
+        );
     } catch (error) {
         console.error("API key auth error:", error);
         return res
@@ -73,7 +125,8 @@ async function requireApiKey(req, res, next) {
     }
 }
 
-// Express app for development
+// ── Express app ─────────────────────────────────────────────────────────────
+
 const v1App = express();
 
 v1App.use(express.json());
@@ -85,19 +138,271 @@ functionApp.use("/api/v1", v1App);
 // Export for development server
 export { v1App };
 
+// ── Endpoints ───────────────────────────────────────────────────────────────
+
 v1App.get("/health", (req, res) => {
     res.json({ status: "ok" });
 });
 
+// Initiates a multipart upload and returns an uploadId for subsequent calls.
+v1App.post("/video/upload/request", async (req, res) => {
+    let { filename, mimeType } = req.body || {};
+
+    if (!filename) {
+        return res
+            .status(400)
+            .json({ error: "Bad Request", message: "filename is required" });
+    }
+
+    mimeType = mimeType || guessMimeType(filename);
+    if (!mimeType.startsWith("video/")) {
+        return res.status(400).json({
+            error: "Bad Request",
+            message: "File does not appear to be a video",
+        });
+    }
+
+    const oid = req.apiKey.oid;
+    const destinationPath = "videos";
+    const remotePath = `files/${oid}/${destinationPath}/${filename}`;
+
+    try {
+        const secrets = getStorageSecrets();
+        const storage = Storage.getInstance("seaweed", {}, secrets);
+        const { uploadId } = await storage.createMultipartUpload(
+            remotePath,
+            mimeType
+        );
+
+        const uploads = new UploadsData();
+        await uploads.create({
+            uploadId,
+            remotePath,
+            filename,
+            destinationPath,
+            mimeType,
+            oid,
+            uid: req.apiKey.uid || "api:" + req.apiKey.id,
+        });
+
+        console.log(
+            `Initiated multipart upload ${uploadId} for ${filename} by API key ${req.apiKey.id}`
+        );
+
+        return res.status(200).json({ uploadId });
+    } catch (error) {
+        console.error("Error initiating multipart upload:", error);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to initiate multipart upload",
+        });
+    }
+});
+
+// Returns a presigned URL for uploading a single part of a multipart upload.
+v1App.post("/video/upload/part", async (req, res) => {
+    const { uploadId, partNumber } = req.body || {};
+
+    if (!uploadId || !partNumber) {
+        return res.status(400).json({
+            error: "Bad Request",
+            message: "uploadId and partNumber are required",
+        });
+    }
+
+    try {
+        const uploads = new UploadsData();
+        const upload = await uploads.getByUploadId(uploadId);
+
+        if (!upload) {
+            return res
+                .status(404)
+                .json({ error: "Not Found", message: "Upload not found" });
+        }
+
+        if (upload.oid !== req.apiKey.oid) {
+            return res.status(403).json({
+                error: "Forbidden",
+                message: "You do not have access to this upload",
+            });
+        }
+
+        const secrets = getStorageSecrets();
+        const storage = Storage.getInstance("seaweed", {}, secrets);
+        const uploadUrl = await storage.createSignedPartUrl(
+            upload.remotePath,
+            uploadId,
+            partNumber,
+            15 * 60
+        );
+
+        return res.status(200).json({ uploadUrl, partNumber });
+    } catch (error) {
+        console.error("Error generating part upload URL:", error);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to generate part upload URL",
+        });
+    }
+});
+
+// Completes a multipart upload, saves a file record, and queues processing.
+v1App.post("/video/upload/complete", async (req, res) => {
+    const { uploadId, parts, location } = req.body || {};
+
+    if (!uploadId || !Array.isArray(parts) || parts.length === 0) {
+        return res.status(400).json({
+            error: "Bad Request",
+            message: "uploadId and parts are required",
+        });
+    }
+
+    try {
+        const uploads = new UploadsData();
+        const upload = await uploads.getByUploadId(uploadId);
+
+        if (!upload) {
+            return res
+                .status(404)
+                .json({ error: "Not Found", message: "Upload not found" });
+        }
+
+        if (upload.oid !== req.apiKey.oid) {
+            return res.status(403).json({
+                error: "Forbidden",
+                message: "You do not have access to this upload",
+            });
+        }
+
+        // Complete the multipart upload in storage
+        const secrets = getStorageSecrets();
+        const storage = Storage.getInstance("seaweed", {}, secrets);
+        await storage.completeMultipartUpload(
+            upload.remotePath,
+            uploadId,
+            parts
+        );
+
+        // Save file record — orgContext is set by requireApiKey middleware
+        const files = new FilesData();
+        const fileId = await files.save(
+            upload.filename,
+            upload.destinationPath,
+            "video",
+            upload.mimeType
+        );
+
+        // Queue processing job
+        const uid = req.apiKey.uid || "api:" + req.apiKey.id;
+        const jobs = new JobsData();
+        const jobId = await jobs.queueJob(
+            "file",
+            fileId,
+            "ProcessFootage",
+            uid,
+            upload.oid,
+            location || null
+        );
+
+        // Link job to file record
+        await files.update(fileId, { job: jobId });
+
+        // Clean up upload tracking record
+        await uploads.delete(upload.id);
+
+        console.log(
+            `Completed upload for ${upload.filename}: fileId=${fileId}, jobId=${jobId}`
+        );
+
+        return res.status(200).json({
+            fileId,
+            jobId,
+            message: "Upload complete, processing queued",
+        });
+    } catch (error) {
+        console.error("Error completing upload:", error);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to complete upload",
+        });
+    }
+});
+
+// Returns the status of a video file and its associated processing job(s).
+v1App.get("/video/status/:id", async (req, res) => {
+    const fileId = req.params.id;
+
+    if (!fileId) {
+        return res
+            .status(400)
+            .json({ error: "Bad Request", message: "File ID is required" });
+    }
+
+    try {
+        const files = new FilesData();
+        const file = await files.getById(fileId);
+
+        if (!file) {
+            return res
+                .status(404)
+                .json({ error: "Not Found", message: "File not found" });
+        }
+
+        if (file.oid !== req.apiKey.oid) {
+            return res.status(403).json({
+                error: "Forbidden",
+                message: "You do not have access to this file",
+            });
+        }
+
+        const jobs = new JobsData();
+        const fileJobs = await jobs.getByFile(fileId);
+
+        return res.status(200).json({
+            file: {
+                id: file.id,
+                filename: file.filename,
+                context: file.context,
+                type: file.type,
+                created: file.created,
+            },
+            jobs: (fileJobs || []).map((job) => ({
+                id: job.id,
+                type: job.type,
+                status: job.status,
+                message: job.message || null,
+            })),
+        });
+    } catch (error) {
+        console.error("Error fetching video status:", error);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to fetch video status",
+        });
+    }
+});
+
+// Gets the results of a processed video (stub — to be implemented later).
+v1App.get("/video/results/:id", async (req, res) => {
+    return res
+        .status(501)
+        .json({ error: "Not Implemented", message: "Coming soon" });
+});
+
+// ── Cloud Function export ───────────────────────────────────────────────────
+
 console.log("Setting up Cloud Function export...");
-// Export Cloud Function for production
 export const v1 = onRequest(
     {
         region: "us-central1",
         memory: "512MiB",
         timeoutSeconds: 60,
         invoker: "public",
-        secrets: [keyHashHmacSecret],
+        secrets: [
+            keyHashHmacSecret,
+            storageAccessKeySeaweed,
+            storageSecretKeySeaweed,
+        ],
     },
     functionApp
 );

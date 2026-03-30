@@ -124,13 +124,11 @@ const cleanupChunks = (chunks) => {
 
 app.get("/playlist/:hierarchy-:quality.m3u8", async (req, res) => {
     const { hierarchy, quality } = req.params;
-    
+
     if (!hierarchy || !quality) {
         return res
             .status(400)
-            .send(
-                "Missing 'hierarchy', or 'quality' query parameter."
-            );
+            .send("Missing 'hierarchy', or 'quality' query parameter.");
     }
 
     const hier = new Hierarchy(hierarchy);
@@ -142,9 +140,7 @@ app.get("/playlist/:hierarchy-:quality.m3u8", async (req, res) => {
     if (snapshot.empty) {
         return res
             .status(404)
-            .send(
-                "No video segments found for this identifier."
-            );
+            .send("No video segments found for this identifier.");
     }
 
     var chunks = cleanupChunks(snapshot.docs.map((doc) => doc.data()));
@@ -192,7 +188,10 @@ app.get("/playlist/:hierarchy-:quality.m3u8", async (req, res) => {
 app.get("/bluesky/feed", async (req, res) => {
     try {
         // Check Firestore cache (bluesky_cache/site_news)
-        const cacheDoc = await db.collection("bluesky_cache").doc("site_news").get();
+        const cacheDoc = await db
+            .collection("bluesky_cache")
+            .doc("site_news")
+            .get();
 
         if (cacheDoc.exists) {
             const cache = cacheDoc.data();
@@ -207,7 +206,8 @@ app.get("/bluesky/feed", async (req, res) => {
 
         // Fetch fresh from Bluesky API
         console.log("Fetching fresh Bluesky feed");
-        const blueskyUrl = "https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=vy-tech.bsky.social&limit=10";
+        const blueskyUrl =
+            "https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=vy-tech.bsky.social&limit=10";
         const response = await fetch(blueskyUrl);
 
         if (!response.ok) {
@@ -217,40 +217,43 @@ app.get("/bluesky/feed", async (req, res) => {
         const data = await response.json();
 
         // Transform posts
-        const posts = data.feed.map(item => ({
+        const posts = data.feed.map((item) => ({
             uri: item.post.uri,
             text: item.post.record.text,
             createdAt: item.post.record.createdAt,
             author: {
                 handle: item.post.author.handle,
-                displayName: item.post.author.displayName || item.post.author.handle
-            }
+                displayName:
+                    item.post.author.displayName || item.post.author.handle,
+            },
         }));
 
         // Cache with 15-minute expiration
         const now = new Date();
-        const expiresAt = new Date(now.getTime() + (15 * 60 * 1000));
+        const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
 
         await db.collection("bluesky_cache").doc("site_news").set({
             posts,
             fetchedAt: now,
-            expiresAt
+            expiresAt,
         });
 
         res.json({ posts, cached: false });
-
     } catch (error) {
         console.error("Error fetching Bluesky feed:", error);
 
         // Fallback: Return stale cache if available
         try {
-            const cacheDoc = await db.collection("bluesky_cache").doc("site_news").get();
+            const cacheDoc = await db
+                .collection("bluesky_cache")
+                .doc("site_news")
+                .get();
             if (cacheDoc.exists) {
                 console.log("Returning stale cache due to error");
                 return res.json({
                     posts: cacheDoc.data().posts,
                     cached: true,
-                    stale: true
+                    stale: true,
                 });
             }
         } catch (fallbackError) {
@@ -260,7 +263,7 @@ app.get("/bluesky/feed", async (req, res) => {
         // Ultimate fallback
         res.status(500).json({
             error: "Failed to fetch site news",
-            posts: []
+            posts: [],
         });
     }
 });
@@ -274,6 +277,7 @@ const appEndpoints = [
     "profile",
     "admin",
     "chat",
+    "docs",
 ];
 
 // Add the app endpoints to the express app

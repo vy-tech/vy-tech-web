@@ -68,6 +68,7 @@ const clientConfig = {
         rsprofile: "src/rsprofile.js",
         rsadmin: "src/rsadmin.js",
         rschat: "src/rschat.js",
+        rsdocs: "src/rsdocs.js",
     },
     external: (id) => {
         // Ignore Firebase Admin SDK imports
