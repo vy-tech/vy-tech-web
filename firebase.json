@@ -26,6 +26,14 @@
                     "region": "us-central1"
                 }
             },
+            {
+                "regex": "^/api/v1/.*$",
+                "function": {
+                    "functionId": "v1",
+                    "codebase": "v1",
+                    "region": "us-central1"
+                }
+            },
             { "source": "**", "destination": "/index.html" }
         ],
         "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
@@ -60,6 +68,17 @@
         {
             "source": "functions/org",
             "codebase": "org",
+            "ignore": [
+                "node_modules",
+                ".git",
+                "firebase-debug.log",
+                "firebase-debug.*.log",
+                "*.local"
+            ]
+        },
+        {
+            "source": "functions/v1",
+            "codebase": "v1",
             "ignore": [
                 "node_modules",
                 ".git",

@@ -2,10 +2,24 @@ import "../firebase-shim.js";
 
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
+
+import { randomBytes, createHmac } from "crypto";
 
 import { requireAuth, getAuth } from "../common.js";
 
 import { OrganizationsData } from "../../data/organizations.js";
+import { ApplicationsData } from "../../data/applications.js";
+import { ApiKeysData } from "../../data/apiKeys.js";
+
+const keyHashHmacSecret = defineSecret("KEY_HASH_HMAC_SECRET");
+
+function getSecrets() {
+    return {
+        keyHashHmacSecret:
+            process.env.KEY_HASH_HMAC_SECRET || keyHashHmacSecret.value(),
+    };
+}
 
 // Express app for development
 const orgApp = express();
@@ -200,6 +214,76 @@ orgApp.post("/sync", async (req, res) => {
     return res.status(200).json({ ok: "ok" });
 });
 
+orgApp.post("/key/generate", async (req, res) => {
+    const { application, name } = req.body;
+
+    if (!application || !name?.trim()) {
+        return res.status(400).json({
+            error: "Bad Request",
+            message: "application and name are required",
+        });
+    }
+
+    try {
+        // Look up the application to get its org
+        const appsData = new ApplicationsData();
+        const app = await appsData.getById(application);
+
+        if (!app) {
+            return res.status(404).json({
+                error: "Not Found",
+                message: "Application not found",
+            });
+        }
+
+        // Validate the user belongs to the org that owns the application
+        const userOrgIds = req.user.orgIds || [];
+        if (!userOrgIds.includes(app.oid)) {
+            return res.status(403).json({
+                error: "Forbidden",
+                message: "You do not have access to this application",
+            });
+        }
+
+        // Generate the API key using a cryptographically secure method
+        const rawKey = randomBytes(24).toString("hex");
+        const fullKey = `vyk_${rawKey}`;
+        const keyPrefix = `vyk_${rawKey.substring(0, 8)}`;
+
+        // Hash the API key using HMAC-SHA256
+        const secrets = getSecrets();
+        const keyHash = createHmac("sha256", secrets.keyHashHmacSecret)
+            .update(fullKey)
+            .digest("hex");
+
+        // Store the hashed key, prefix, and metadata — never the full key
+        const apiKeysData = new ApiKeysData();
+        const keyData = {
+            oid: app.oid,
+            application,
+            name: name.trim(),
+            keyHash,
+            keyPrefix,
+        };
+        const id = await apiKeysData.create(keyData);
+
+        // Return the full key once — it will never be retrievable again
+        return res.status(201).json({
+            success: true,
+            id,
+            name: name.trim(),
+            keyPrefix,
+            key: fullKey,
+        });
+    } catch (error) {
+        console.error("Error generating API key:", error);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to generate API key",
+        });
+    }
+});
+
 const functionApp = express();
 functionApp.use("/api/org", orgApp);
 
@@ -214,6 +298,7 @@ export const org = onRequest(
         memory: "512MiB",
         timeoutSeconds: 60,
         invoker: "public",
+        secrets: [keyHashHmacSecret],
     },
     functionApp
 );

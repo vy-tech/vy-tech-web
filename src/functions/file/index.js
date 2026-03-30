@@ -148,25 +148,46 @@ fileApp.post("/upload/multipart/complete", async (req, res) => {
     const secrets = getSecrets(storageType);
 
     if (!uploadId || !path || !Array.isArray(parts) || parts.length === 0) {
-        return res.status(400).json({ error: "Bad Request", message: "uploadId, path, and parts are required" });
+        return res
+            .status(400)
+            .json({
+                error: "Bad Request",
+                message: "uploadId, path, and parts are required",
+            });
     }
 
     if (!requestedOrgId || !validOids.includes(requestedOrgId)) {
-        console.warn(`User ${req.uid} attempted to complete multipart upload for unauthorized org ${requestedOrgId}`);
-        return res.status(403).json({ error: "Forbidden", message: "You do not have access to the specified organization" });
+        console.warn(
+            `User ${req.uid} attempted to complete multipart upload for unauthorized org ${requestedOrgId}`
+        );
+        return res
+            .status(403)
+            .json({
+                error: "Forbidden",
+                message: "You do not have access to the specified organization",
+            });
     }
 
     const remotePath = `files/${requestedOrgId}/${path}`;
-    console.log(`Completing multipart upload for user ${req.uid} at path ${remotePath} with ${parts.length} parts`);
+    console.log(
+        `Completing multipart upload for user ${req.uid} at path ${remotePath} with ${parts.length} parts`
+    );
 
     const storage = Storage.getInstance(storageType, {}, secrets);
 
     try {
         await storage.completeMultipartUpload(remotePath, uploadId, parts);
-        return res.status(200).json({ message: "Multipart upload completed successfully" });
+        return res
+            .status(200)
+            .json({ message: "Multipart upload completed successfully" });
     } catch (error) {
         console.error("Error completing multipart upload:", error);
-        return res.status(500).json({ error: "Internal Server Error", message: "Failed to complete multipart upload" });
+        return res
+            .status(500)
+            .json({
+                error: "Internal Server Error",
+                message: "Failed to complete multipart upload",
+            });
     }
 });
 
@@ -189,25 +210,44 @@ fileApp.post("/upload/multipart/:path", async (req, res) => {
     const secrets = getSecrets(storageType);
 
     if (!path) {
-        return res.status(400).json({ error: "Bad Request", message: "Upload path is required" });
+        return res
+            .status(400)
+            .json({ error: "Bad Request", message: "Upload path is required" });
     }
 
     if (!requestedOrgId || !validOids.includes(requestedOrgId)) {
-        console.warn(`User ${req.uid} attempted multipart upload to unauthorized org ${requestedOrgId}`);
-        return res.status(403).json({ error: "Forbidden", message: "You do not have access to the specified organization" });
+        console.warn(
+            `User ${req.uid} attempted multipart upload to unauthorized org ${requestedOrgId}`
+        );
+        return res
+            .status(403)
+            .json({
+                error: "Forbidden",
+                message: "You do not have access to the specified organization",
+            });
     }
 
     const remotePath = `files/${requestedOrgId}/${path}`;
-    console.log(`Initiating multipart upload for user ${req.uid} to org ${requestedOrgId} at path ${remotePath}`);
+    console.log(
+        `Initiating multipart upload for user ${req.uid} to org ${requestedOrgId} at path ${remotePath}`
+    );
 
     const storage = Storage.getInstance(storageType, {}, secrets);
 
     try {
-        const { uploadId } = await storage.createMultipartUpload(remotePath, mimeType);
+        const { uploadId } = await storage.createMultipartUpload(
+            remotePath,
+            mimeType
+        );
         return res.status(200).json({ uploadId, path, remotePath, mimeType });
     } catch (error) {
         console.error("Error initiating multipart upload:", error);
-        return res.status(500).json({ error: "Internal Server Error", message: "Failed to initiate multipart upload" });
+        return res
+            .status(500)
+            .json({
+                error: "Internal Server Error",
+                message: "Failed to initiate multipart upload",
+            });
     }
 });
 
@@ -224,28 +264,55 @@ fileApp.post("/upload/part", async (req, res) => {
     validOids.push("personal_" + req.uid);
 
     const opts = req.body || {};
-    const { uploadId, path, partNumber, storage: storageType = "seaweed" } = opts;
+    const {
+        uploadId,
+        path,
+        partNumber,
+        storage: storageType = "seaweed",
+    } = opts;
     const requestedOrgId = opts.oid || validOids[0];
     const secrets = getSecrets(storageType);
 
     if (!uploadId || !path || !partNumber) {
-        return res.status(400).json({ error: "Bad Request", message: "uploadId, path, and partNumber are required" });
+        return res
+            .status(400)
+            .json({
+                error: "Bad Request",
+                message: "uploadId, path, and partNumber are required",
+            });
     }
 
     if (!requestedOrgId || !validOids.includes(requestedOrgId)) {
-        console.warn(`User ${req.uid} attempted part upload to unauthorized org ${requestedOrgId}`);
-        return res.status(403).json({ error: "Forbidden", message: "You do not have access to the specified organization" });
+        console.warn(
+            `User ${req.uid} attempted part upload to unauthorized org ${requestedOrgId}`
+        );
+        return res
+            .status(403)
+            .json({
+                error: "Forbidden",
+                message: "You do not have access to the specified organization",
+            });
     }
 
     const remotePath = `files/${requestedOrgId}/${path}`;
     const storage = Storage.getInstance(storageType, {}, secrets);
 
     try {
-        const uploadUrl = await storage.createSignedPartUrl(remotePath, uploadId, partNumber, 15 * 60);
+        const uploadUrl = await storage.createSignedPartUrl(
+            remotePath,
+            uploadId,
+            partNumber,
+            15 * 60
+        );
         return res.status(200).json({ uploadUrl, partNumber });
     } catch (error) {
         console.error("Error generating part upload URL:", error);
-        return res.status(500).json({ error: "Internal Server Error", message: "Failed to generate part upload URL" });
+        return res
+            .status(500)
+            .json({
+                error: "Internal Server Error",
+                message: "Failed to generate part upload URL",
+            });
     }
 });
 
@@ -392,6 +459,7 @@ export const file = onRequest(
         memory: "512MiB",
         timeoutSeconds: 60,
         invoker: "public",
+        secrets: [storageAccessKeySeaweed, storageSecretKeySeaweed],
     },
     functionApp
 );

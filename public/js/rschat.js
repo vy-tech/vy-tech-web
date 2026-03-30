@@ -4,8 +4,7 @@ import { e as eventBus } from './chunks/eventbus-BMI3jhi1.js';
 import { g as getAuth } from './chunks/orgContext-C_Ixz4_0.js';
 import './chunks/index.esm2017-Y6lvFaM5.js';
 import { E as EventsData, H as Hierarchy, t as timeUtil } from './chunks/events-B-GJuop3.js';
-import { S as Summarizer } from './chunks/summarizer-BKKXoAxA.js';
-import { A as AnnotationsData, b as progress } from './chunks/annotations-CwiEd5pN.js';
+import { S as Summarizer, A as AnnotationsData, p as progress } from './chunks/annotations-DBoRFf_v.js';
 import { a as auth } from './chunks/rsauth-75RzRyMG.js';
 import './chunks/van-ui-YSP0ZuSh.js';
 

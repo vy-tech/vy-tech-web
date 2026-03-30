@@ -3,6 +3,7 @@ import { _app as legacyApp } from "./functions/app/index.js";
 import { chatApp } from "./functions/chat/index.js"; // Import your new chat Express app
 import { orgApp } from "./functions/org/index.js";
 import { fileApp } from "./functions/file/index.js";
+import { v1App } from "./functions/v1/index.js";
 
 const app = express();
 
@@ -23,6 +24,9 @@ app.use("/api/org", orgApp);
 
 // Mount the file app at /api/file
 app.use("/api/file", fileApp);
+
+// Mount the v1 app at /api/v1
+app.use("/api/v1", v1App);
 
 // Map /s to serve static files from the public directory
 app.use("/s", express.static("public/s"));

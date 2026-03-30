@@ -30,12 +30,6 @@ class Nav {
             description: "Documentation",
         },
         {
-            name: "billing",
-            path: "/billing",
-            icon: "credit-card",
-            description: "Billing",
-        },
-        {
             name: "settings",
             path: "/settings",
             icon: "cog",
