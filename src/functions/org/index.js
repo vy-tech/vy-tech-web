@@ -246,7 +246,7 @@ orgApp.post("/key/generate", async (req, res) => {
         }
 
         // Generate the API key using a cryptographically secure method
-        const rawKey = randomBytes(16).toString("hex");
+        const rawKey = randomBytes(24).toString("hex");
         const fullKey = `vyk_${rawKey}`;
         const keyPrefix = `vyk_${rawKey.substring(0, 8)}`;
 
