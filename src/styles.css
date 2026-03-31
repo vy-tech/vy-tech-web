@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 @config "../tailwind.config.js";
+@source "../public/index.html";
+@source "./";
+@source "../functions/app/views";
+
 
 /* Video.js control bar override */
 .vjs-control-bar {

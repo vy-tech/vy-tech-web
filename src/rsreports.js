@@ -258,8 +258,7 @@ class Reports {
                 { class: "relative w-full pt-[62.8125%] mt-4" },
                 video({
                     id: "report-video",
-                    class: "absolute top-0 left-0 w-full h-auto aspect-video video-js video-js-default-skin",
-
+                    class: "!absolute !top-0 !left-0 !w-full !h-auto !aspect-video video-js video-js-default-skin",
                     controls: true,
                     muted: true,
                 }),

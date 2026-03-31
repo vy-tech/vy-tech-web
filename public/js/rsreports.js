@@ -1,11 +1,11 @@
 import van from './chunks/van-CscOHmlp.js';
 import { M as Modal, T as Tabs } from './chunks/van-ui-DNNh7cjk.js';
 import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
-import { P as ProfilesData, A as AnnotationsData, p as progress, s as summarizer, a as activeBoxManager, g as geomUtil, b as scoring, d as demographics, c as storage, e as profilesData } from './chunks/annotations-BFH2BR_Z.js';
-import { e as events } from './chunks/events-CcWvyjDX.js';
+import { P as ProfilesData, A as AnnotationsData, p as progress, s as summarizer, a as activeBoxManager, g as geomUtil, b as scoring, d as demographics, c as storage, e as profilesData } from './chunks/annotations-C29TLDUx.js';
+import { e as events } from './chunks/events-ByxtTz8T.js';
 import { d as database, s as serverTimestamp } from './chunks/db-s3IORrbE.js';
-import { H as Hierarchy, t as timeUtil } from './chunks/events-CRlL1VZk.js';
-import { o as orgContext, a as apiUtil } from './chunks/orgContext-sSg4pt8b.js';
+import { H as Hierarchy, t as timeUtil } from './chunks/events-Cf6J3LLW.js';
+import { o as orgContext, a as apiUtil } from './chunks/orgContext-bT4952H3.js';
 import './chunks/index.esm2017-Y6lvFaM5.js';
 
 class Profiles extends ProfilesData {
@@ -3222,8 +3222,7 @@ class Reports {
                 { class: "relative w-full pt-[62.8125%] mt-4" },
                 video({
                     id: "report-video",
-                    class: "absolute top-0 left-0 w-full h-auto aspect-video video-js video-js-default-skin",
-
+                    class: "!absolute !top-0 !left-0 !w-full !h-auto !aspect-video video-js video-js-default-skin",
                     controls: true,
                     muted: true,
                 }),
