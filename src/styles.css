@@ -1,1 +1,43 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@config "../tailwind.config.js";
+
+/* Video.js control bar override */
+.vjs-control-bar {
+    position: absolute !important;
+    bottom: -35px !important;
+    z-index: 1000 !important;
+    opacity: 1 !important;
+}
+
+/* Landing page custom styles */
+.pillar-label {
+    font-family: "Mako", "Roboto", Arial, sans-serif;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.without-with {
+    border-left: 2px solid;
+    padding-left: 1rem;
+}
+
+/* Chat message content */
+.message-content ul {
+    list-style-type: disc !important;
+    padding-left: 1.5rem !important;
+    margin: 0.5rem 0 !important;
+}
+
+.message-content ol {
+    list-style-type: decimal !important;
+    padding-left: 1.5rem !important;
+    margin: 0.5rem 0 !important;
+}
+
+.message-content li {
+    list-style: inherit !important;
+    margin-bottom: 0.25rem !important;
+}

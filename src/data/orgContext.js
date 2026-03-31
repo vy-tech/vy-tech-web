@@ -1,10 +1,21 @@
-import van from "vanjs-core";
-import { eventBus } from "../eventbus.js";
 import { OrganizationsData } from "./organizations.js";
 
 const STORAGE_KEY = "vy_current_org_id";
 
-class OrgContext {
+// ── BrowserOrgContext ───────────────────────────────────────────────────────
+// Full-featured org context for browser environments. Uses VanJS reactive
+// state and localStorage for persistence.
+
+let van = null;
+let AsyncLocalStorage = null;
+
+if (typeof window !== "undefined") {
+    van = (await import("vanjs-core")).default;
+} else {
+    AsyncLocalStorage = (await import("node:async_hooks")).AsyncLocalStorage;
+}
+
+class BrowserOrgContext {
     constructor() {
         this.orgsData = new OrganizationsData();
 
@@ -62,6 +73,8 @@ class OrgContext {
     }
 
     async setCurrentOrg(orgId, fireEvent = true) {
+        const { eventBus } = await import("../eventbus.js");
+
         const org = this.userOrgs.val.find((o) => o.id === orgId);
         if (!org) {
             console.warn("Organization not found:", orgId);
@@ -112,10 +125,47 @@ class OrgContext {
     }
 }
 
-const orgContext = new OrgContext();
+// ── ServerOrgContext ─────────────────────────────────────────────────────────
+// Lightweight request-scoped org context for server (Cloud Functions)
+// environments. Uses Node.js AsyncLocalStorage so each concurrent request
+// gets its own isolated context.
+
+class ServerOrgContext {
+    constructor() {
+        this._als = new AsyncLocalStorage();
+    }
+
+    /** Executes `fn` with the given org context available to all downstream code. */
+    run(context, fn) {
+        return this._als.run(context, fn);
+    }
+
+    getCurrentOrgId() {
+        return this._als.getStore()?.orgId ?? null;
+    }
+
+    getCurrentOrg() {
+        return this._als.getStore()?.org ?? null;
+    }
+
+    get userId() {
+        return this._als.getStore()?.userId ?? null;
+    }
+
+    isInOrg(orgId) {
+        return this.getCurrentOrgId() === orgId;
+    }
+}
+
+// ── Proxy export ────────────────────────────────────────────────────────────
+
+const orgContext =
+    typeof window !== "undefined"
+        ? new BrowserOrgContext()
+        : new ServerOrgContext();
 
 if (typeof window !== "undefined") {
     window._vy_orgContext = orgContext;
 }
 
-export { OrgContext, orgContext };
+export { BrowserOrgContext, ServerOrgContext, orgContext };

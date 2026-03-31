@@ -24,8 +24,8 @@ class Nav {
             description: "Schedule",
         },
         {
-            name: "documentation",
-            path: "/documentation",
+            name: "docs",
+            path: "/docs",
             icon: "book",
             description: "Documentation",
         },
