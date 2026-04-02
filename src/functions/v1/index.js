@@ -27,6 +27,10 @@ function getSecrets() {
     };
 }
 
+function getUploadStorageType() {
+    return process.env.UPLOAD_STORAGE_TYPE || "seaweed";
+}
+
 function getStorageSecrets() {
     return {
         access_key:
@@ -36,6 +40,12 @@ function getStorageSecrets() {
             process.env.STORAGE_SECRET_KEY_SEAWEED ||
             storageSecretKeySeaweed.value(),
     };
+}
+
+function getUploadStorage() {
+    const storageType = getUploadStorageType();
+    const secrets = storageType === "firebase" ? {} : getStorageSecrets();
+    return Storage.getInstance(storageType, {}, secrets);
 }
 
 function guessMimeType(filename) {
@@ -167,8 +177,7 @@ v1App.post("/video/upload/request", async (req, res) => {
     const remotePath = `files/${oid}/${destinationPath}/${filename}`;
 
     try {
-        const secrets = getStorageSecrets();
-        const storage = Storage.getInstance("seaweed", {}, secrets);
+        const storage = getUploadStorage();
         const { uploadId } = await storage.createMultipartUpload(
             remotePath,
             mimeType
@@ -227,8 +236,7 @@ v1App.post("/video/upload/part", async (req, res) => {
             });
         }
 
-        const secrets = getStorageSecrets();
-        const storage = Storage.getInstance("seaweed", {}, secrets);
+        const storage = getUploadStorage();
         const uploadUrl = await storage.createSignedPartUrl(
             upload.remotePath,
             uploadId,
@@ -275,8 +283,7 @@ v1App.post("/video/upload/complete", async (req, res) => {
         }
 
         // Complete the multipart upload in storage
-        const secrets = getStorageSecrets();
-        const storage = Storage.getInstance("seaweed", {}, secrets);
+        const storage = getUploadStorage();
         await storage.completeMultipartUpload(
             upload.remotePath,
             uploadId,

@@ -239,7 +239,9 @@ fileApp.post("/upload/multipart/:path", async (req, res) => {
             remotePath,
             mimeType
         );
-        return res.status(200).json({ uploadId, path, remotePath, mimeType });
+        return res
+            .status(200)
+            .json({ uploadId, path, remotePath, mimeType, storageType });
     } catch (error) {
         console.error("Error initiating multipart upload:", error);
         return res

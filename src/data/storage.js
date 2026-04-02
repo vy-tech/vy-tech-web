@@ -553,7 +553,13 @@ class Storage {
         });
     }
 
-    uploadToSignedPartUrl(presignedUrl, chunk, progressCallback = null) {
+    uploadToSignedPartUrl(
+        presignedUrl,
+        chunk,
+        progressCallback = null,
+        _offset = null,
+        _totalSize = null
+    ) {
         return new Promise((resolve, reject) => {
             if (typeof XMLHttpRequest !== "undefined") {
                 const xhr = new XMLHttpRequest();
@@ -862,6 +868,112 @@ class FirebaseStorage extends Storage {
         const adminStorage = global._vy_storage_functions.getStorage();
         await adminStorage.bucket().file(remotePath).delete();
         console.log(`File ${remotePath} deleted from Firebase Storage`);
+    }
+
+    async createMultipartUpload(remotePath, contentType = null) {
+        assertAdminSdk("FirebaseStorage.createMultipartUpload");
+        const adminStorage = global._vy_storage_functions.getStorage();
+        const bucket = adminStorage.bucket();
+        const file = bucket.file(remotePath);
+        const [sessionUri] = await file.createResumableUpload({
+            metadata: {
+                ...(contentType ? { contentType } : {}),
+            },
+        });
+        return { uploadId: sessionUri, key: remotePath };
+    }
+
+    async createSignedPartUrl(
+        _remotePath,
+        uploadId,
+        _partNumber,
+        _expiresIn = 3600
+    ) {
+        // For GCS resumable uploads, the uploadId IS the session URI.
+        // The same URI is used for all chunks — partNumber and expiresIn are ignored.
+        return uploadId;
+    }
+
+    uploadToSignedPartUrl(
+        sessionUri,
+        chunk,
+        progressCallback = null,
+        offset = 0,
+        totalSize = null
+    ) {
+        const chunkSize = chunk.size || chunk.byteLength || chunk.length;
+        const rangeEnd = offset + chunkSize - 1;
+        const total = totalSize != null ? totalSize : "*";
+        const contentRange = `bytes ${offset}-${rangeEnd}/${total}`;
+
+        return new Promise((resolve, reject) => {
+            if (typeof XMLHttpRequest !== "undefined") {
+                const xhr = new XMLHttpRequest();
+                xhr.open("PUT", sessionUri);
+                xhr.setRequestHeader("Content-Range", contentRange);
+
+                if (progressCallback) {
+                    xhr.upload.onprogress = (event) => {
+                        if (event.lengthComputable)
+                            progressCallback(
+                                (event.loaded / event.total) * 100
+                            );
+                    };
+                }
+
+                xhr.onload = () => {
+                    // GCS returns 200/201 on final chunk, 308 on intermediate chunks
+                    if (
+                        xhr.status === 200 ||
+                        xhr.status === 201 ||
+                        xhr.status === 308
+                    ) {
+                        resolve(null);
+                    } else {
+                        reject(
+                            new Error(`HTTP ${xhr.status}: ${xhr.statusText}`)
+                        );
+                    }
+                };
+                xhr.onerror = () =>
+                    reject(new Error("Network error during part upload"));
+                xhr.send(chunk);
+            } else {
+                fetch(sessionUri, {
+                    method: "PUT",
+                    body: chunk,
+                    headers: { "Content-Range": contentRange },
+                })
+                    .then((resp) => {
+                        if (
+                            resp.status === 200 ||
+                            resp.status === 201 ||
+                            resp.status === 308
+                        ) {
+                            resolve(null);
+                        } else {
+                            throw new Error(
+                                `HTTP ${resp.status}: ${resp.statusText}`
+                            );
+                        }
+                    })
+                    .catch(reject);
+            }
+        });
+    }
+
+    async completeMultipartUpload(remotePath, _uploadId, _parts) {
+        // GCS resumable uploads auto-complete when the final chunk is sent.
+        // Verify the file actually exists.
+        assertAdminSdk("FirebaseStorage.completeMultipartUpload");
+        const adminStorage = global._vy_storage_functions.getStorage();
+        const bucket = adminStorage.bucket();
+        const [exists] = await bucket.file(remotePath).exists();
+        if (!exists) {
+            throw new Error(
+                `Upload verification failed: file ${remotePath} does not exist in Firebase Storage`
+            );
+        }
     }
 }
 

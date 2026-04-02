@@ -5,22 +5,20 @@ import Hierarchy from "../util/hierarchy.js";
 
 class EventsData {
     constructor() {
-        this.current = null;
+        // this.event = null;
     }
 
-    get() {
-        return this.current;
-    }
+    // get() {
+    //     return this.event;
+    // }
 
-    getCurrentTitle() {
-        if (this.current) {
-            let displayText = this.current.description;
+    getTitle(event) {
+        if (event) {
+            let displayText = event.description;
 
-            if (this.current.begin) {
-                const displayDate = this.current.begin
-                    .toDate()
-                    .toLocaleDateString();
-                const displayDescription = this.current.description.replace(
+            if (event.begin) {
+                const displayDate = event.begin.toDate().toLocaleDateString();
+                const displayDescription = event.description.replace(
                     /\(Baseball\) /,
                     ""
                 );
@@ -36,7 +34,7 @@ class EventsData {
 
     async getByHierarchy(hierarchy) {
         if (hierarchy == null) {
-            this.current = null;
+            this.event = null;
             return null;
         }
 
@@ -44,7 +42,7 @@ class EventsData {
 
         if (!h.date && !h.event) {
             console.warn("Invalid hierarchy for event lookup:", hierarchy);
-            this.current = null;
+            this.event = null;
             return null;
         }
 
@@ -61,13 +59,13 @@ class EventsData {
         }
 
         if (events && events.length > 0) {
-            this.current = events[0];
-            return this.current;
+            this.event = events[0];
+            return this.event;
         } else {
             console.warn("Event not found for hierarchy:", h.toEventString());
         }
 
-        this.current = null;
+        this.event = null;
         return null;
     }
 
@@ -86,8 +84,8 @@ class EventsData {
 
     async updateEventSummary(hierarchy, summary) {
         let event =
-            this.current.hierarchy == hierarchy
-                ? this.current
+            this.event.hierarchy == hierarchy
+                ? this.event
                 : await this.getByHierarchy(hierarchy);
 
         if (!event) {

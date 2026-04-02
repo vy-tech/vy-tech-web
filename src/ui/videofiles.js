@@ -6,7 +6,7 @@ import { Modal } from "vanjs-ui";
 import { JobsData } from "../data/jobs.js";
 import { eventBus } from "../eventbus.js";
 import { orgContext } from "../data/orgContext.js";
-import storage from "../data/storage.js";
+import storage, { Storage } from "../data/storage.js";
 import { database } from "../data/db.js";
 import { apiUtil } from "../util/apiUtil.js";
 
@@ -313,12 +313,14 @@ class VideoFiles extends FilesData {
             statusMsg.val = "Initiating upload...";
             eventBus.fire("videoUpload.requestingUrl", { file });
 
-            const { uploadId, path } = await storage.requestMultipartUploadUrl(
+            const initResult = await storage.requestMultipartUploadUrl(
                 file,
                 "videos",
                 filename,
                 orgId
             );
+            const { uploadId, path, storageType } = initResult;
+            const uploadStorage = Storage.getInstance(storageType || "seaweed");
 
             const numParts = Math.ceil(file.size / CHUNK_SIZE);
             const parts = [];
@@ -342,7 +344,7 @@ class VideoFiles extends FilesData {
                     orgId
                 );
 
-                const etag = await storage.uploadToSignedPartUrl(
+                const etag = await uploadStorage.uploadToSignedPartUrl(
                     uploadUrl,
                     chunk,
                     (pct) => {
@@ -352,7 +354,9 @@ class VideoFiles extends FilesData {
                             100;
                         uploadPct.val = overall;
                         eventBus.fire("videoUpload.progress", { pct: overall });
-                    }
+                    },
+                    start,
+                    file.size
                 );
 
                 bytesUploaded += partSize;

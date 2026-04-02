@@ -649,14 +649,14 @@ class Annotations extends AnnotationsData {
         closed.val = true;
     }
 
-    async getAvailable() {
-        const events = await database.query(
-            "events",
-            { status: "available" },
-            "begin"
-        );
-        return events;
-    }
+    // async getAvailable() {
+    //     const events = await database.query(
+    //         "events",
+    //         { status: "available" },
+    //         "begin"
+    //     );
+    //     return events;
+    // }
 }
 
 const annotations = new Annotations();

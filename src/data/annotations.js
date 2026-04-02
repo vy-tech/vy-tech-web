@@ -95,14 +95,14 @@ class AnnotationsData {
         if (closed) closed.val = true;
     }
 
-    async getAvailable() {
-        const events = await database.query(
-            "events",
-            { status: "available" },
-            "begin"
-        );
-        return events;
-    }
+    // async getAvailable() {
+    //     const events = await database.query(
+    //         "events",
+    //         { status: "available" },
+    //         "begin"
+    //     );
+    //     return events;
+    // }
 }
 
 const annotationsData = new AnnotationsData();
