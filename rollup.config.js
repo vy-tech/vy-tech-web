@@ -1,6 +1,7 @@
 import resolve from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
 import json from "@rollup/plugin-json";
+import del from "rollup-plugin-delete";
 import { glob } from "glob";
 import path from "path";
 import { spawn } from "child_process";
@@ -90,6 +91,7 @@ const clientConfig = {
         assetFileNames: "assets/[name]-[hash][extname]",
     },
     plugins: [
+        del({ targets: "public/js/chunks/*", runOnce: true }),
         cloudflareDevMode(),
         resolve({
             browser: true,
@@ -134,6 +136,7 @@ const functionsConfigs = Object.entries(functionEntries).map(
             chunkFileNames: "chunks/[name]-[hash].js",
         },
         plugins: [
+            del({ targets: `functions/${functionName}/chunks/*`, runOnce: true }),
             resolve({
                 preferBuiltins: true,
                 browser: false,
