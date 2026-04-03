@@ -44,7 +44,7 @@ class Reports {
         this.transcript = [];
         this.tsIndex = 0;
 
-        this.event = null;
+        //this.event = null;
         this.wallclockStartTimeUTC = null;
     }
 
@@ -60,21 +60,22 @@ class Reports {
             this.hls.loadSource("");
             activeBoxManager.reset();
             this.score.resetWindow();
-            this.event = events.current = null;
+            //this.event = events.current = null;
         } else {
             this.hierarchy = new Hierarchy(hierarchy);
             this.playlistUrl = `/playlist/${this.hierarchy.toString("-")}-720p.m3u8`;
             this.startTimeOffset = 0;
 
             this.hierarchy.camera = 1;
-            this.event = await events.getByHierarchy(
-                this.hierarchy.toString(":")
-            );
+            // this.event = await events.getByHierarchy(
+            //     this.hierarchy.toString(":")
+            // );
             await summarizer.ensure(this.hierarchy.toString("-"));
             this.changeCamera(1);
         }
 
-        this.updateReportTitle();
+        this.resetTitle();
+        this.loadSource();
 
         eventBus.fire("ui.hierarchyChanged", {
             hierarchy: this.hierarchy,
@@ -88,7 +89,7 @@ class Reports {
         // This is kind of hacky, todo fixme
         profilesData.profile = profiles.profile;
 
-        this.event = await events.getByHierarchy(this.hierarchy?.toString(":"));
+        //this.event = await events.getByHierarchy(this.hierarchy?.toString(":"));
 
         this.addElements();
 
@@ -98,18 +99,19 @@ class Reports {
             hierarchy: this.hierarchy?.toString("-"),
         });
 
-        this.updateReportTitle();
+        this.resetTitle();
+        this.loadSource();
     }
 
-    updateReportTitle() {
-        if (this.event) {
-            document.title = `Vy - ${events.getCurrentTitle()}`;
-            document.getElementById("report-title").innerText =
-                events.getCurrentTitle();
-        } else {
-            document.title = "Vy - No Event Selected";
-            document.getElementById("report-title").innerText =
-                "No Event Selected";
+    async loadSource() {
+        if (this.hierarchy) {
+            if (this.hierarchy.type === "event") {
+                const event = await events.getByHierarchy(this.hierarchy);
+                eventBus.fire("reports.eventLoaded", { event });
+            } else if (this.hierarchy.type === "file") {
+                const file = await videoFiles.getByHierarchy(this.hierarchy);
+                eventBus.fire("reports.fileLoaded", { file });
+            }
         }
     }
 
@@ -130,6 +132,15 @@ class Reports {
             camera: camera,
             hierarchy: this.hierarchy.toString("-"),
         });
+    }
+
+    resetTitle() {
+        document.title = "Vy - No Event Selected";
+        document.getElementById("report-title").innerText = "No Event Selected";
+    }
+    setTitle(title) {
+        document.title = `Vy - ${title}`;
+        document.getElementById("report-title").innerText = title;
     }
 
     initListeners() {
@@ -167,6 +178,20 @@ class Reports {
 
         eventBus.on("ui.annotations.ready", (e) => {
             this.activeNavTab.val = "Annotations";
+        });
+
+        eventBus.on("reports.eventLoaded", (e) => {
+            const event = e.detail.event;
+            const title = event ? events.getTitle(event) : "Event Not Found";
+            document.title = `Vy - ${title}`;
+            document.getElementById("report-title").innerText = title;
+        });
+
+        eventBus.on("reports.fileLoaded", (e) => {
+            const file = e.detail.file;
+            const title = file ? file.filename : "File Not Found";
+            document.title = `Vy - ${title}`;
+            document.getElementById("report-title").innerText = title;
         });
     }
 
@@ -258,8 +283,7 @@ class Reports {
                 { class: "relative w-full pt-[62.8125%] mt-4" },
                 video({
                     id: "report-video",
-                    class: "absolute top-0 left-0 w-full h-auto aspect-video video-js video-js-default-skin",
-
+                    class: "!absolute !top-0 !left-0 !w-full !h-auto !aspect-video video-js video-js-default-skin",
                     controls: true,
                     muted: true,
                 }),

@@ -11,12 +11,12 @@ import { FilesData } from "../../data/files.js";
 import { JobsData } from "../../data/jobs.js";
 import { OrganizationsData } from "../../data/organizations.js";
 import { UploadsData } from "../../data/uploads.js";
+import { ChunksData } from "../../data/chunk.js";
 import { Storage } from "../../data/storage.js";
 import { orgContext } from "../../data/orgContext.js";
+import Hierarchy from "../../util/hierarchy.js";
 
 const keyHashHmacSecret = defineSecret("KEY_HASH_HMAC_SECRET");
-const storageAccessKeySeaweed = defineSecret("STORAGE_ACCESS_KEY_SEAWEED");
-const storageSecretKeySeaweed = defineSecret("STORAGE_SECRET_KEY_SEAWEED");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -27,15 +27,8 @@ function getSecrets() {
     };
 }
 
-function getStorageSecrets() {
-    return {
-        access_key:
-            process.env.STORAGE_ACCESS_KEY_SEAWEED ||
-            storageAccessKeySeaweed.value(),
-        secret_key:
-            process.env.STORAGE_SECRET_KEY_SEAWEED ||
-            storageSecretKeySeaweed.value(),
-    };
+function getUploadStorage() {
+    return Storage.getInstance("firebase");
 }
 
 function guessMimeType(filename) {
@@ -144,7 +137,7 @@ v1App.get("/health", (req, res) => {
     res.json({ status: "ok" });
 });
 
-// Initiates a multipart upload and returns an uploadId for subsequent calls.
+// Returns a signed upload URL and an upload token for completing the upload.
 v1App.post("/video/upload/request", async (req, res) => {
     let { filename, mimeType } = req.body || {};
 
@@ -167,16 +160,16 @@ v1App.post("/video/upload/request", async (req, res) => {
     const remotePath = `files/${oid}/${destinationPath}/${filename}`;
 
     try {
-        const secrets = getStorageSecrets();
-        const storage = Storage.getInstance("seaweed", {}, secrets);
-        const { uploadId } = await storage.createMultipartUpload(
+        const storage = getUploadStorage();
+        const uploadUrl = await storage.createSignedUrl(
             remotePath,
+            "PUT",
+            15 * 60,
             mimeType
         );
 
         const uploads = new UploadsData();
-        await uploads.create({
-            uploadId,
+        const uploadToken = await uploads.create({
             remotePath,
             filename,
             destinationPath,
@@ -186,80 +179,33 @@ v1App.post("/video/upload/request", async (req, res) => {
         });
 
         console.log(
-            `Initiated multipart upload ${uploadId} for ${filename} by API key ${req.apiKey.id}`
+            `Created upload URL for ${filename} (token: ${uploadToken}) by API key ${req.apiKey.id}`
         );
 
-        return res.status(200).json({ uploadId });
+        return res.status(200).json({ uploadUrl, uploadToken });
     } catch (error) {
-        console.error("Error initiating multipart upload:", error);
+        console.error("Error creating upload URL:", error);
         return res.status(500).json({
             error: "Internal Server Error",
-            message: "Failed to initiate multipart upload",
+            message: "Failed to create upload URL",
         });
     }
 });
 
-// Returns a presigned URL for uploading a single part of a multipart upload.
-v1App.post("/video/upload/part", async (req, res) => {
-    const { uploadId, partNumber } = req.body || {};
-
-    if (!uploadId || !partNumber) {
-        return res.status(400).json({
-            error: "Bad Request",
-            message: "uploadId and partNumber are required",
-        });
-    }
-
-    try {
-        const uploads = new UploadsData();
-        const upload = await uploads.getByUploadId(uploadId);
-
-        if (!upload) {
-            return res
-                .status(404)
-                .json({ error: "Not Found", message: "Upload not found" });
-        }
-
-        if (upload.oid !== req.apiKey.oid) {
-            return res.status(403).json({
-                error: "Forbidden",
-                message: "You do not have access to this upload",
-            });
-        }
-
-        const secrets = getStorageSecrets();
-        const storage = Storage.getInstance("seaweed", {}, secrets);
-        const uploadUrl = await storage.createSignedPartUrl(
-            upload.remotePath,
-            uploadId,
-            partNumber,
-            15 * 60
-        );
-
-        return res.status(200).json({ uploadUrl, partNumber });
-    } catch (error) {
-        console.error("Error generating part upload URL:", error);
-        return res.status(500).json({
-            error: "Internal Server Error",
-            message: "Failed to generate part upload URL",
-        });
-    }
-});
-
-// Completes a multipart upload, saves a file record, and queues processing.
+// Completes an upload, saves a file record, and queues processing.
 v1App.post("/video/upload/complete", async (req, res) => {
-    const { uploadId, parts, location } = req.body || {};
+    const { uploadToken, location } = req.body || {};
 
-    if (!uploadId || !Array.isArray(parts) || parts.length === 0) {
+    if (!uploadToken) {
         return res.status(400).json({
             error: "Bad Request",
-            message: "uploadId and parts are required",
+            message: "uploadToken is required",
         });
     }
 
     try {
         const uploads = new UploadsData();
-        const upload = await uploads.getByUploadId(uploadId);
+        const upload = await uploads.getById(uploadToken);
 
         if (!upload) {
             return res
@@ -273,15 +219,6 @@ v1App.post("/video/upload/complete", async (req, res) => {
                 message: "You do not have access to this upload",
             });
         }
-
-        // Complete the multipart upload in storage
-        const secrets = getStorageSecrets();
-        const storage = Storage.getInstance("seaweed", {}, secrets);
-        await storage.completeMultipartUpload(
-            upload.remotePath,
-            uploadId,
-            parts
-        );
 
         // Save file record — orgContext is set by requireApiKey middleware
         const files = new FilesData();
@@ -356,7 +293,17 @@ v1App.get("/video/status/:id", async (req, res) => {
         }
 
         const jobs = new JobsData();
-        const fileJobs = await jobs.getByFile(fileId);
+        const processJobs = await jobs.getByRef(
+            "file",
+            fileId,
+            "ProcessFootage"
+        );
+        const rootJob = processJobs?.[0];
+
+        let jobTree = [];
+        if (rootJob) {
+            jobTree = await jobs.getJobTree(rootJob.id);
+        }
 
         return res.status(200).json({
             file: {
@@ -366,12 +313,7 @@ v1App.get("/video/status/:id", async (req, res) => {
                 type: file.type,
                 created: file.created,
             },
-            jobs: (fileJobs || []).map((job) => ({
-                id: job.id,
-                type: job.type,
-                status: job.status,
-                message: job.message || null,
-            })),
+            jobs: jobTree,
         });
     } catch (error) {
         console.error("Error fetching video status:", error);
@@ -382,11 +324,134 @@ v1App.get("/video/status/:id", async (req, res) => {
     }
 });
 
-// Gets the results of a processed video (stub — to be implemented later).
+v1App.get("/fetch/:storage/*pathParts", async (req, res) => {
+    const { storage, pathParts } = req.params;
+    const path = pathParts.join("/");
+
+    console.log(path);
+    const storageMap = {
+        1: "firebase",
+        2: "minio",
+        3: "seaweed",
+    };
+    const storageType = storageMap[storage] || storage;
+
+    try {
+        const storageInstance = Storage.getInstance(storageType);
+        const url = await storageInstance.createSignedUrl(path, "GET", 3600);
+        res.set("Cache-Control", "public, max-age=3600");
+        res.set("Location", url);
+        return res.status(302).end();
+    } catch (error) {
+        console.error("Error generating signed URL:", error);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to generate signed URL",
+        });
+    }
+});
+
+const getFetchUrl = (storage, path) => {
+    const storageMap = {
+        firebase: 1,
+        minio: 2,
+        seaweed: 3,
+    };
+
+    if (!path) return null;
+    if (!storage) return null;
+    if (!storageMap[storage]) return null;
+
+    return `/fetch/${storageMap[storage]}/${path}`;
+};
+
+// Gets the results of a processed video
 v1App.get("/video/results/:id", async (req, res) => {
-    return res
-        .status(501)
-        .json({ error: "Not Implemented", message: "Coming soon" });
+    const fileId = req.params.id;
+    const storageMap = {
+        firebase: 1,
+        minio: 2,
+        seaweed: 3,
+    };
+
+    if (!fileId) {
+        return res
+            .status(400)
+            .json({ error: "Bad Request", message: "File ID is required" });
+    }
+
+    try {
+        const files = new FilesData();
+        const file = await files.getById(fileId);
+
+        if (!file) {
+            return res
+                .status(404)
+                .json({ error: "Not Found", message: "File not found" });
+        }
+
+        if (file.oid !== req.apiKey.oid) {
+            return res.status(403).json({
+                error: "Forbidden",
+                message: "You do not have access to this file",
+            });
+        }
+
+        if (!file.hierarchy) {
+            return res.status(400).json({
+                error: "Bad Request",
+                message: "File does not have processing results",
+            });
+        }
+
+        const hierarchy = new Hierarchy(file.hierarchy);
+        const chunkData = new ChunksData();
+        const chunks = await chunkData.getByHierarchy(hierarchy);
+        const chunkResult = chunks.map((chunk) => ({
+            id: chunk.id,
+            date: chunk.date,
+            minuteOfDay: chunk.minuteOfDay,
+            duration: chunk.duration,
+            startTime: chunk.startTime,
+            playbackMetadata: {
+                segments: chunk.playbackSegments,
+                durations: chunk.playbackDurations,
+                bitrates: chunk.playbackBitrates,
+                qualities: chunk.playbackQualities,
+                prefix: chunk.playbackPrefix,
+            },
+            expressionsUrl: getFetchUrl(chunk.storage, chunk.expressionsPath),
+            demographicsUrl: getFetchUrl(chunk.storage, chunk.demographicsPath),
+        }));
+
+        const summaryPath =
+            `summaries/${hierarchy.toFileOrEventString("/")}` +
+            `/summary-${hierarchy.toString("-")}.json`;
+
+        const summaryUrl = getFetchUrl("firebase", summaryPath);
+
+        const result = {
+            ...file,
+            created: file.created.toDate().toISOString(),
+            updated: file.updated.toDate().toISOString(),
+            playlists: {
+                "360p": `/playlist/${hierarchy.toString("-")}-360p.m3u8`,
+                "720p": `/playlist/${hierarchy.toString("-")}-720p.m3u8`,
+                "1080p": `/playlist/${hierarchy.toString("-")}-1080p.m3u8`,
+                "4k": `/playlist/${hierarchy.toString("-")}-4k.m3u8`,
+            },
+            chunks: chunkResult,
+            summaryUrl,
+        };
+
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error("Error fetching video results:", error);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to fetch video results",
+        });
+    }
 });
 
 // ── Cloud Function export ───────────────────────────────────────────────────
@@ -398,11 +463,7 @@ export const v1 = onRequest(
         memory: "512MiB",
         timeoutSeconds: 60,
         invoker: "public",
-        secrets: [
-            keyHashHmacSecret,
-            storageAccessKeySeaweed,
-            storageSecretKeySeaweed,
-        ],
+        secrets: [keyHashHmacSecret],
     },
     functionApp
 );

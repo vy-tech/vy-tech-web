@@ -1,11 +1,11 @@
 import van from './chunks/van-CscOHmlp.js';
 import { M as Modal, T as Tabs } from './chunks/van-ui-DNNh7cjk.js';
 import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
-import { P as ProfilesData, A as AnnotationsData, p as progress, s as summarizer, a as activeBoxManager, g as geomUtil, b as scoring, d as demographics, c as storage, e as profilesData } from './chunks/annotations-BFH2BR_Z.js';
-import { e as events } from './chunks/events-CcWvyjDX.js';
+import { P as ProfilesData, A as AnnotationsData, p as progress, s as summarizer, a as activeBoxManager, g as geomUtil, b as scoring, d as demographics, c as storage, e as profilesData } from './chunks/annotations-B_BqLu7P.js';
+import { e as events } from './chunks/events-BAtvCXIc.js';
 import { d as database, s as serverTimestamp } from './chunks/db-s3IORrbE.js';
-import { H as Hierarchy, t as timeUtil } from './chunks/events-CRlL1VZk.js';
-import { o as orgContext, a as apiUtil } from './chunks/orgContext-sSg4pt8b.js';
+import { H as Hierarchy, t as timeUtil } from './chunks/events-Iu55q3hS.js';
+import { o as orgContext, a as apiUtil } from './chunks/orgContext-bT4952H3.js';
 import './chunks/index.esm2017-Y6lvFaM5.js';
 
 class Profiles extends ProfilesData {
@@ -709,14 +709,14 @@ class Annotations extends AnnotationsData {
         closed.val = true;
     }
 
-    async getAvailable() {
-        const events = await database.query(
-            "events",
-            { status: "available" },
-            "begin"
-        );
-        return events;
-    }
+    // async getAvailable() {
+    //     const events = await database.query(
+    //         "events",
+    //         { status: "available" },
+    //         "begin"
+    //     );
+    //     return events;
+    // }
 }
 
 const annotations = new Annotations();
@@ -1736,28 +1736,30 @@ class LinkedPlayer {
     }
 
     init() {
-        const event = events.get();
-        const embedVideo = event?.embed;
+        eventBus.on("reports.eventLoaded", (e) => {
+            const event = e.detail.event;
+            const embedVideo = event?.embed;
 
-        if (!embedVideo) {
-            this.container.innerHTML = "";
-            console.error("No embed available");
-            return;
-        }
+            if (!embedVideo) {
+                this.container.innerHTML = "";
+                console.error("No embed available");
+                return;
+            }
 
-        this.embedVideoId = embedVideo.id;
-        this.embedOffset = embedVideo.offset;
+            this.embedVideoId = embedVideo.id;
+            this.embedOffset = embedVideo.offset;
 
-        const videoId = this.embedVideoId;
-        const origin = window.location.origin;
-        this.container.innerHTML =
-            '<iframe id="report-embed-player" width="500" height="281" ' +
-            'class="w-full h-auto aspect-video" ' +
-            `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${origin}"` +
-            ' title="YouTube video player" frameborder="0" allow="web-share"' +
-            ' referrerpolicy="strict-origin-when-cross-origin" ' +
-            "allowfullscreen></iframe>";
-        this.embedPlayer = new YT.Player("report-embed-player");
+            const videoId = this.embedVideoId;
+            const origin = window.location.origin;
+            this.container.innerHTML =
+                '<iframe id="report-embed-player" width="500" height="281" ' +
+                'class="w-full h-auto aspect-video" ' +
+                `src="https://www.youtube.com/embed/${videoId}?enablejsapi=1&origin=${origin}"` +
+                ' title="YouTube video player" frameborder="0" allow="web-share"' +
+                ' referrerpolicy="strict-origin-when-cross-origin" ' +
+                "allowfullscreen></iframe>";
+            this.embedPlayer = new YT.Player("report-embed-player");
+        });
     }
 
     sync(currentTime) {
@@ -2388,6 +2390,26 @@ class FilesData {
         );
     }
 
+    async getByHierarchy(hierarchy) {
+        let h = new Hierarchy(hierarchy);
+        if (!h.file) {
+            console.warn("Invalid hierarchy for file lookup:", hierarchy);
+            return null;
+        }
+
+        let files = await database.query("files", {
+            oid: orgContext.getCurrentOrgId(),
+            hierarchy: h.toFileString(),
+        });
+
+        if (files && files.length > 0) {
+            return files[0];
+        } else {
+            console.warn("File not found for hierarchy:", h.toFileString());
+            return null;
+        }
+    }
+
     tokenize(name) {
         // Simple tokenization: lowercase, trim, replace non-words with underscores,
         // collapse underscores
@@ -2434,7 +2456,7 @@ class FilesData {
         context,
         type,
         fileId = null,
-        storage = "seaweed"
+        storage = "firebase"
     ) {
         const org = orgContext.getCurrentOrg();
         const orgId = orgContext.getCurrentOrgId();
@@ -2492,6 +2514,12 @@ class JobsData {
         return await database.query("jobs", { refType: "file", refId: fileId });
     }
 
+    async getByRef(refType, refId, type) {
+        const filters = { refType, refId };
+        if (type) filters.type = type;
+        return await database.query("jobs", filters);
+    }
+
     async queueJob(refType, refId, type, uid, oid, location = null) {
         const jobDoc = {
             refType: refType,
@@ -2504,6 +2532,27 @@ class JobsData {
         };
 
         return await database.set("jobs", jobDoc);
+    }
+
+    async getJobTree(jobId) {
+        const jobs = [];
+
+        const getJob = async (id, depth) => {
+            const jobData = await database.get("jobs", id);
+            if (!jobData) return;
+
+            jobs.push({ ...jobData, depth });
+
+            if (jobData.children && jobData.children.length > 0) {
+                for (const childId of jobData.children) {
+                    await getJob(childId, depth + 1);
+                }
+            }
+        };
+
+        await getJob(jobId, 0);
+
+        return jobs;
     }
 
     watchJobStatus(jobId, onChange) {
@@ -2526,8 +2575,12 @@ class JobsData {
                     "jobs",
                     id,
                     async (jobData) => {
-                        status[id] =
-                            `${indent}${jobData.type} - ${jobData.status}${jobData.message ? ": " + jobData.message : ""}`;
+                        if (jobData.status === "completed") {
+                            delete status[id];
+                        } else {
+                            status[id] =
+                                `${indent}${jobData.type} - ${jobData.status}${jobData.message ? ": " + jobData.message : ""}`;
+                        }
 
                         if (jobData.children && jobData.children.length > 0) {
                             for (const childId of jobData.children) {
@@ -2589,7 +2642,7 @@ class VideoFiles extends FilesData {
 
     async get() {
         let files = await this.getByContext("video");
-        this.files.val = [...files];
+        this.files.val = files.filter(f => !f.deleteRequested);
         return this.files.val;
     }
 
@@ -2857,83 +2910,35 @@ class VideoFiles extends FilesData {
     }
 
     async startUpload(file, filename, uploadPct, statusMsg, closed) {
-        console.log("Starting multipart upload for file:", filename);
-        const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB — S3 minimum part size
         const orgId = orgContext.getCurrentOrgId();
         const jobs = new JobsData();
 
         try {
-            statusMsg.val = "Initiating upload...";
+            statusMsg.val = "Requesting upload URL...";
             eventBus.fire("videoUpload.requestingUrl", { file });
 
-            const { uploadId, path } = await storage.requestMultipartUploadUrl(
-                file,
-                "videos",
-                filename,
-                orgId
+            const uploadUrl = await storage.requestUploadUrl(
+                file, "videos", filename, orgId, file.type, "firebase"
             );
-
-            const numParts = Math.ceil(file.size / CHUNK_SIZE);
-            const parts = [];
-            let bytesUploaded = 0;
 
             statusMsg.val = "Uploading...";
             eventBus.fire("videoUpload.uploading", { file });
 
-            for (let i = 0; i < numParts; i++) {
-                const partNumber = i + 1;
-                const start = i * CHUNK_SIZE;
-                const end = Math.min(start + CHUNK_SIZE, file.size);
-                const chunk = file.slice(start, end);
-                const partSize = end - start;
-                const bytesAtPartStart = bytesUploaded;
-
-                const uploadUrl = await storage.requestPartUrl(
-                    uploadId,
-                    path,
-                    partNumber,
-                    orgId
-                );
-
-                const etag = await storage.uploadToSignedPartUrl(
-                    uploadUrl,
-                    chunk,
-                    (pct) => {
-                        const overall =
-                            ((bytesAtPartStart + (pct / 100) * partSize) /
-                                file.size) *
-                            100;
-                        uploadPct.val = overall;
-                        eventBus.fire("videoUpload.progress", { pct: overall });
-                    }
-                );
-
-                bytesUploaded += partSize;
-                parts.push({ PartNumber: partNumber, ETag: etag });
-            }
+            await storage.uploadToSignedUrl(uploadUrl, file, file.type, (pct) => {
+                uploadPct.val = pct;
+                eventBus.fire("videoUpload.progress", { pct });
+            });
 
             uploadPct.val = 100;
-            statusMsg.val = "Finalizing upload...";
-            await storage.requestCompleteMultipartUpload(
-                uploadId,
-                path,
-                parts,
-                orgId
-            );
+            statusMsg.val = "Saving file record...";
 
-            console.log("Saving file record to database...", filename);
             let fileId = this.getIdForFilename(filename);
             fileId = await this.save(
-                filename,
-                "videos",
-                "video",
-                file.type,
-                fileId
+                filename, "videos", "video", file.type, fileId, "firebase"
             );
 
             eventBus.fire("videoUpload.complete", { file });
             eventBus.fire("videoFiles.updated");
-            statusMsg.val = "Upload complete.";
 
             let jobId = await this.requestProcessing(fileId);
             eventBus.fire("videoUpload.processingRequested", { file });
@@ -2943,7 +2948,6 @@ class VideoFiles extends FilesData {
             });
 
             statusMsg.val = "Processing complete.";
-            console.log("Video upload and processing complete.");
             eventBus.fire("videoUpload.processed", { file });
 
             window.setTimeout(() => {
@@ -2974,18 +2978,11 @@ class VideoFiles extends FilesData {
     }
 
     async deleteFile(file) {
-        await database.delete("files", file.id);
-
         try {
-            const orgId = orgContext.getCurrentOrgId();
-            await storage.requestDeleteFile(
-                file.filename,
-                "videos",
-                orgId,
-                file.storage
-            );
+            await this.update(file.id, { deleteRequested: Date.now() });
+            await storage.requestDeleteFile(file.id);
         } catch (err) {
-            console.error("Error deleting file from storage:", err);
+            console.error("Error requesting file deletion:", err);
         }
         eventBus.fire("videoFiles.updated");
     }
@@ -3008,7 +3005,7 @@ class Reports {
         this.transcript = [];
         this.tsIndex = 0;
 
-        this.event = null;
+        //this.event = null;
         this.wallclockStartTimeUTC = null;
     }
 
@@ -3024,21 +3021,22 @@ class Reports {
             this.hls.loadSource("");
             activeBoxManager.reset();
             this.score.resetWindow();
-            this.event = events.current = null;
+            //this.event = events.current = null;
         } else {
             this.hierarchy = new Hierarchy(hierarchy);
             this.playlistUrl = `/playlist/${this.hierarchy.toString("-")}-720p.m3u8`;
             this.startTimeOffset = 0;
 
             this.hierarchy.camera = 1;
-            this.event = await events.getByHierarchy(
-                this.hierarchy.toString(":")
-            );
+            // this.event = await events.getByHierarchy(
+            //     this.hierarchy.toString(":")
+            // );
             await summarizer.ensure(this.hierarchy.toString("-"));
             this.changeCamera(1);
         }
 
-        this.updateReportTitle();
+        this.resetTitle();
+        this.loadSource();
 
         eventBus.fire("ui.hierarchyChanged", {
             hierarchy: this.hierarchy,
@@ -3052,7 +3050,7 @@ class Reports {
         // This is kind of hacky, todo fixme
         profilesData.profile = profiles.profile;
 
-        this.event = await events.getByHierarchy(this.hierarchy?.toString(":"));
+        //this.event = await events.getByHierarchy(this.hierarchy?.toString(":"));
 
         this.addElements();
 
@@ -3062,18 +3060,19 @@ class Reports {
             hierarchy: this.hierarchy?.toString("-"),
         });
 
-        this.updateReportTitle();
+        this.resetTitle();
+        this.loadSource();
     }
 
-    updateReportTitle() {
-        if (this.event) {
-            document.title = `Vy - ${events.getCurrentTitle()}`;
-            document.getElementById("report-title").innerText =
-                events.getCurrentTitle();
-        } else {
-            document.title = "Vy - No Event Selected";
-            document.getElementById("report-title").innerText =
-                "No Event Selected";
+    async loadSource() {
+        if (this.hierarchy) {
+            if (this.hierarchy.type === "event") {
+                const event = await events.getByHierarchy(this.hierarchy);
+                eventBus.fire("reports.eventLoaded", { event });
+            } else if (this.hierarchy.type === "file") {
+                const file = await videoFiles.getByHierarchy(this.hierarchy);
+                eventBus.fire("reports.fileLoaded", { file });
+            }
         }
     }
 
@@ -3094,6 +3093,15 @@ class Reports {
             camera: camera,
             hierarchy: this.hierarchy.toString("-"),
         });
+    }
+
+    resetTitle() {
+        document.title = "Vy - No Event Selected";
+        document.getElementById("report-title").innerText = "No Event Selected";
+    }
+    setTitle(title) {
+        document.title = `Vy - ${title}`;
+        document.getElementById("report-title").innerText = title;
     }
 
     initListeners() {
@@ -3131,6 +3139,20 @@ class Reports {
 
         eventBus.on("ui.annotations.ready", (e) => {
             this.activeNavTab.val = "Annotations";
+        });
+
+        eventBus.on("reports.eventLoaded", (e) => {
+            const event = e.detail.event;
+            const title = event ? events.getTitle(event) : "Event Not Found";
+            document.title = `Vy - ${title}`;
+            document.getElementById("report-title").innerText = title;
+        });
+
+        eventBus.on("reports.fileLoaded", (e) => {
+            const file = e.detail.file;
+            const title = file ? file.filename : "File Not Found";
+            document.title = `Vy - ${title}`;
+            document.getElementById("report-title").innerText = title;
         });
     }
 
@@ -3222,8 +3244,7 @@ class Reports {
                 { class: "relative w-full pt-[62.8125%] mt-4" },
                 video({
                     id: "report-video",
-                    class: "absolute top-0 left-0 w-full h-auto aspect-video video-js video-js-default-skin",
-
+                    class: "!absolute !top-0 !left-0 !w-full !h-auto !aspect-video video-js video-js-default-skin",
                     controls: true,
                     muted: true,
                 }),

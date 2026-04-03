@@ -580,6 +580,16 @@ class Hierarchy {
         }
     }
 
+    get type() {
+        if (this.file) {
+            return "file";
+        } else if (this.date) {
+            return "event";
+        } else {
+            return "other";
+        }
+    }
+
     parseHierarchyString(hierarchyString) {
         /**
          * $location/$date					    - length=2, ends with number

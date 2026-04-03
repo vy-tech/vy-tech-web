@@ -1,4 +1,5 @@
 import { database } from "./db.js";
+import { Hierarchy } from "../util/hierarchy.js";
 
 class Chunk {
     getPublicUrl(path) {
@@ -6,12 +7,17 @@ class Chunk {
             return `https://firebasestorage.googleapis.com/v0/b/roarscore-1ddf5.firebasestorage.app/o/${path}?alt=media`;
         } else if (this.storage == "minio") {
             return `https://storage.roarscore.ai/production/${path}`;
-        }
-        else if (this.storage == "seaweed") {
+        } else if (this.storage == "seaweed") {
             return `https://s.vy.vision/${path}`;
         }
 
         return null;
+    }
+
+    getExpressionsUrl() {
+        if (!this.expressionsPath) return null;
+
+        return this.getPublicUrl(this.expressionsPath);
     }
 
     getDemographicsUrl() {
@@ -40,6 +46,20 @@ class ChunksData {
             return this.current;
         }
         return null;
+    }
+
+    async getByHierarchy(hierarchy) {
+        // Make sure hierarchy is a Hierarchy instance
+        if (!(hierarchy instanceof Hierarchy)) {
+            hierarchy = new Hierarchy(hierarchy);
+        }
+
+        const chunks = await database.query("chunks", {
+            hierarchy: hierarchy.toString(),
+        });
+        return chunks.map((chunk) =>
+            Object.setPrototypeOf(chunk, Chunk.prototype)
+        );
     }
 }
 

@@ -7,9 +7,8 @@ class UploadsData {
         return await database.set(COLLECTION, data);
     }
 
-    async getByUploadId(uploadId) {
-        const results = await database.query(COLLECTION, { uploadId });
-        return results?.[0] ?? null;
+    async getById(id) {
+        return await database.get(COLLECTION, id);
     }
 
     async delete(id) {

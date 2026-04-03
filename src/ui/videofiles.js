@@ -7,7 +7,6 @@ import { JobsData } from "../data/jobs.js";
 import { eventBus } from "../eventbus.js";
 import { orgContext } from "../data/orgContext.js";
 import storage from "../data/storage.js";
-import { database } from "../data/db.js";
 import { apiUtil } from "../util/apiUtil.js";
 
 class VideoFiles extends FilesData {
@@ -36,7 +35,7 @@ class VideoFiles extends FilesData {
 
     async get() {
         let files = await this.getByContext("video");
-        this.files.val = [...files];
+        this.files.val = files.filter(f => !f.deleteRequested);
         return this.files.val;
     }
 
@@ -304,83 +303,35 @@ class VideoFiles extends FilesData {
     }
 
     async startUpload(file, filename, uploadPct, statusMsg, closed) {
-        console.log("Starting multipart upload for file:", filename);
-        const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB — S3 minimum part size
         const orgId = orgContext.getCurrentOrgId();
         const jobs = new JobsData();
 
         try {
-            statusMsg.val = "Initiating upload...";
+            statusMsg.val = "Requesting upload URL...";
             eventBus.fire("videoUpload.requestingUrl", { file });
 
-            const { uploadId, path } = await storage.requestMultipartUploadUrl(
-                file,
-                "videos",
-                filename,
-                orgId
+            const uploadUrl = await storage.requestUploadUrl(
+                file, "videos", filename, orgId, file.type, "firebase"
             );
-
-            const numParts = Math.ceil(file.size / CHUNK_SIZE);
-            const parts = [];
-            let bytesUploaded = 0;
 
             statusMsg.val = "Uploading...";
             eventBus.fire("videoUpload.uploading", { file });
 
-            for (let i = 0; i < numParts; i++) {
-                const partNumber = i + 1;
-                const start = i * CHUNK_SIZE;
-                const end = Math.min(start + CHUNK_SIZE, file.size);
-                const chunk = file.slice(start, end);
-                const partSize = end - start;
-                const bytesAtPartStart = bytesUploaded;
-
-                const uploadUrl = await storage.requestPartUrl(
-                    uploadId,
-                    path,
-                    partNumber,
-                    orgId
-                );
-
-                const etag = await storage.uploadToSignedPartUrl(
-                    uploadUrl,
-                    chunk,
-                    (pct) => {
-                        const overall =
-                            ((bytesAtPartStart + (pct / 100) * partSize) /
-                                file.size) *
-                            100;
-                        uploadPct.val = overall;
-                        eventBus.fire("videoUpload.progress", { pct: overall });
-                    }
-                );
-
-                bytesUploaded += partSize;
-                parts.push({ PartNumber: partNumber, ETag: etag });
-            }
+            await storage.uploadToSignedUrl(uploadUrl, file, file.type, (pct) => {
+                uploadPct.val = pct;
+                eventBus.fire("videoUpload.progress", { pct });
+            });
 
             uploadPct.val = 100;
-            statusMsg.val = "Finalizing upload...";
-            await storage.requestCompleteMultipartUpload(
-                uploadId,
-                path,
-                parts,
-                orgId
-            );
+            statusMsg.val = "Saving file record...";
 
-            console.log("Saving file record to database...", filename);
             let fileId = this.getIdForFilename(filename);
             fileId = await this.save(
-                filename,
-                "videos",
-                "video",
-                file.type,
-                fileId
+                filename, "videos", "video", file.type, fileId, "firebase"
             );
 
             eventBus.fire("videoUpload.complete", { file });
             eventBus.fire("videoFiles.updated");
-            statusMsg.val = "Upload complete.";
 
             let jobId = await this.requestProcessing(fileId);
             eventBus.fire("videoUpload.processingRequested", { file });
@@ -390,7 +341,6 @@ class VideoFiles extends FilesData {
             });
 
             statusMsg.val = "Processing complete.";
-            console.log("Video upload and processing complete.");
             eventBus.fire("videoUpload.processed", { file });
 
             window.setTimeout(() => {
@@ -421,18 +371,11 @@ class VideoFiles extends FilesData {
     }
 
     async deleteFile(file) {
-        await database.delete("files", file.id);
-
         try {
-            const orgId = orgContext.getCurrentOrgId();
-            await storage.requestDeleteFile(
-                file.filename,
-                "videos",
-                orgId,
-                file.storage
-            );
+            await this.update(file.id, { deleteRequested: Date.now() });
+            await storage.requestDeleteFile(file.id);
         } catch (err) {
-            console.error("Error deleting file from storage:", err);
+            console.error("Error requesting file deletion:", err);
         }
         eventBus.fire("videoFiles.updated");
     }

@@ -22,6 +22,26 @@ class FilesData {
         );
     }
 
+    async getByHierarchy(hierarchy) {
+        let h = new Hierarchy(hierarchy);
+        if (!h.file) {
+            console.warn("Invalid hierarchy for file lookup:", hierarchy);
+            return null;
+        }
+
+        let files = await database.query("files", {
+            oid: orgContext.getCurrentOrgId(),
+            hierarchy: h.toFileString(),
+        });
+
+        if (files && files.length > 0) {
+            return files[0];
+        } else {
+            console.warn("File not found for hierarchy:", h.toFileString());
+            return null;
+        }
+    }
+
     tokenize(name) {
         // Simple tokenization: lowercase, trim, replace non-words with underscores,
         // collapse underscores
@@ -68,7 +88,7 @@ class FilesData {
         context,
         type,
         fileId = null,
-        storage = "seaweed"
+        storage = "firebase"
     ) {
         const org = orgContext.getCurrentOrg();
         const orgId = orgContext.getCurrentOrgId();
