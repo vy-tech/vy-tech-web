@@ -72,12 +72,11 @@ Health check. Does not require authentication.
 
 ### Video Upload
 
-Uploading a video is a three-step process using multipart upload. This avoids body size limits and allows reliable upload of large files.
+Uploading a video is a two-step process: request a signed upload URL, PUT the file directly to storage, then confirm the upload is complete.
 
 ```
-1. POST /video/upload/request   → get uploadId
-2. POST /video/upload/part      → get presigned URL, upload bytes directly to storage
-   (repeat for each ~5 MB chunk)
+1. POST /video/upload/request   → get uploadUrl and uploadToken
+2. PUT file bytes to uploadUrl  → upload directly to storage
 3. POST /video/upload/complete  → finalize, save record, queue processing
 ```
 
@@ -85,7 +84,7 @@ Uploading a video is a three-step process using multipart upload. This avoids bo
 
 #### POST /video/upload/request
 
-Initiates a multipart upload session. Returns an `uploadId` to use in subsequent calls.
+Returns a signed upload URL and an upload token. The signed URL allows you to PUT the entire file directly to storage. The upload token is used in the complete step.
 
 **Request body:**
 
@@ -100,61 +99,27 @@ Supported video extensions: `mp4`, `mov`, `avi`, `m4v`, `mkv`
 
 ```json
 {
-    "uploadId": "abc123..."
+    "uploadUrl": "https://storage.googleapis.com/...",
+    "uploadToken": "abc123..."
 }
 ```
+
+The `uploadUrl` expires after **15 minutes**. Upload the file by sending a `PUT` request with the raw file bytes directly to this URL. Set the `Content-Type` header to match the file's MIME type.
 
 **Errors:** `400` if `filename` is missing or the file type is not a video.
 
 ---
 
-#### POST /video/upload/part
-
-Returns a short-lived presigned URL for uploading one part. After receiving the URL, PUT the raw bytes of that chunk directly to it — do not go through this API. Collect the `ETag` header from the storage response; you will need it in the complete step.
-
-Parts must be at least 5 MB except for the final part. Use a chunk size of exactly 5 MB (`5 * 1024 * 1024` bytes) for all parts except the last.
-
-**Request body:**
-
-| Field        | Type   | Required | Description                                 |
-| ------------ | ------ | -------- | ------------------------------------------- |
-| `uploadId`   | string | yes      | The `uploadId` from `/video/upload/request` |
-| `partNumber` | number | yes      | 1-indexed part number                       |
-
-**Response `200`:**
-
-```json
-{
-    "uploadUrl": "https://s.vy.vision/...",
-    "partNumber": 1
-}
-```
-
-Presigned URLs expire after **15 minutes**.
-
-**Errors:** `400` if fields are missing; `404` if the upload session is not found; `403` if the session belongs to a different organization.
-
----
-
 #### POST /video/upload/complete
 
-Finalizes the multipart upload, creates a file record, and queues video processing. Returns the `fileId` you will use to poll status.
+Confirms the upload, creates a file record, and queues video processing. Returns the `fileId` you will use to poll status.
 
 **Request body:**
 
-| Field      | Type   | Required | Description                                                                       |
-| ---------- | ------ | -------- | --------------------------------------------------------------------------------- |
-| `uploadId` | string | yes      | The `uploadId` from `/video/upload/request`                                       |
-| `parts`    | array  | yes      | Array of `{ PartNumber, ETag }` objects collected from each part upload, in order |
-| `location` | string | no       | Optional location hint passed to the processing job                               |
-
-**`parts` element:**
-
-```json
-{ "PartNumber": 1, "ETag": "\"abc123...\"" }
-```
-
-Note: ETags returned by storage are typically wrapped in quotes — include them as-is.
+| Field         | Type   | Required | Description                                          |
+| ------------- | ------ | -------- | ---------------------------------------------------- |
+| `uploadToken` | string | yes      | The `uploadToken` from `/video/upload/request`       |
+| `location`    | string | no       | Optional location hint passed to the processing job  |
 
 **Response `200`:**
 
@@ -166,7 +131,7 @@ Note: ETags returned by storage are typically wrapped in quotes — include them
 }
 ```
 
-**Errors:** `400` if `uploadId` or `parts` are missing/empty; `404` if the upload session is not found; `403` if the session belongs to a different organization.
+**Errors:** `400` if `uploadToken` is missing; `404` if the upload session is not found; `403` if the session belongs to a different organization.
 
 ---
 
@@ -216,7 +181,6 @@ Returns the current status of a video file and its associated processing job(s).
 ```js
 const API_KEY = "vyk_...";
 const BASE_URL = "https://vy.vision/v1/api/v1";
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB
 
 async function uploadVideo(file) {
     const headers = {
@@ -224,41 +188,32 @@ async function uploadVideo(file) {
         "Content-Type": "application/json",
     };
 
-    // 1. Initiate
-    const { uploadId } = await fetch(`${BASE_URL}/video/upload/request`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ filename: file.name }),
-    }).then((r) => r.json());
-
-    // 2. Upload parts
-    const numParts = Math.ceil(file.size / CHUNK_SIZE);
-    const parts = [];
-
-    for (let i = 0; i < numParts; i++) {
-        const partNumber = i + 1;
-        const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-
-        const { uploadUrl } = await fetch(`${BASE_URL}/video/upload/part`, {
+    // 1. Request upload URL
+    const { uploadUrl, uploadToken } = await fetch(
+        `${BASE_URL}/video/upload/request`,
+        {
             method: "POST",
             headers,
-            body: JSON.stringify({ uploadId, partNumber }),
-        }).then((r) => r.json());
+            body: JSON.stringify({ filename: file.name }),
+        }
+    ).then((r) => r.json());
 
-        const uploadResp = await fetch(uploadUrl, {
-            method: "PUT",
-            body: chunk,
-        });
-        const etag = uploadResp.headers.get("ETag");
-        parts.push({ PartNumber: partNumber, ETag: etag });
-    }
+    // 2. Upload file directly to storage
+    await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+    });
 
     // 3. Complete
-    const { fileId, jobId } = await fetch(`${BASE_URL}/video/upload/complete`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ uploadId, parts }),
-    }).then((r) => r.json());
+    const { fileId, jobId } = await fetch(
+        `${BASE_URL}/video/upload/complete`,
+        {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ uploadToken }),
+        }
+    ).then((r) => r.json());
 
     // 4. Poll status
     let status = "requested";

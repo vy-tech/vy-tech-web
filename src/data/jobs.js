@@ -5,6 +5,12 @@ class JobsData {
         return await database.query("jobs", { refType: "file", refId: fileId });
     }
 
+    async getByRef(refType, refId, type) {
+        const filters = { refType, refId };
+        if (type) filters.type = type;
+        return await database.query("jobs", filters);
+    }
+
     async queueJob(refType, refId, type, uid, oid, location = null) {
         const jobDoc = {
             refType: refType,
@@ -17,6 +23,27 @@ class JobsData {
         };
 
         return await database.set("jobs", jobDoc);
+    }
+
+    async getJobTree(jobId) {
+        const jobs = [];
+
+        const getJob = async (id, depth) => {
+            const jobData = await database.get("jobs", id);
+            if (!jobData) return;
+
+            jobs.push({ ...jobData, depth });
+
+            if (jobData.children && jobData.children.length > 0) {
+                for (const childId of jobData.children) {
+                    await getJob(childId, depth + 1);
+                }
+            }
+        };
+
+        await getJob(jobId, 0);
+
+        return jobs;
     }
 
     watchJobStatus(jobId, onChange) {
@@ -39,8 +66,12 @@ class JobsData {
                     "jobs",
                     id,
                     async (jobData) => {
-                        status[id] =
-                            `${indent}${jobData.type} - ${jobData.status}${jobData.message ? ": " + jobData.message : ""}`;
+                        if (jobData.status === "completed") {
+                            delete status[id];
+                        } else {
+                            status[id] =
+                                `${indent}${jobData.type} - ${jobData.status}${jobData.message ? ": " + jobData.message : ""}`;
+                        }
 
                         if (jobData.children && jobData.children.length > 0) {
                             for (const childId of jobData.children) {

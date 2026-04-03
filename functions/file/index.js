@@ -1,7 +1,6 @@
-export { h as file, f as fileApp } from './chunks/index-TvL5ldxR.js';
+export { h as file, f as fileApp } from './chunks/index-BGJ5NL32.js';
 import 'express';
 import 'firebase-functions/v2/https';
-import 'firebase-functions/params';
 import 'firebase-admin/app';
 import 'firebase-admin/firestore';
 import 'firebase-admin/storage';

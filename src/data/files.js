@@ -88,7 +88,7 @@ class FilesData {
         context,
         type,
         fileId = null,
-        storage = "seaweed"
+        storage = "firebase"
     ) {
         const org = orgContext.getCurrentOrg();
         const orgId = orgContext.getCurrentOrgId();

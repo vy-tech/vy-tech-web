@@ -2,15 +2,11 @@ import "../firebase-shim.js";
 
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
-import { defineSecret } from "firebase-functions/params";
 import { requireAuth } from "../common.js";
 
 import { Storage } from "../../data/storage.js";
 import { JobsData } from "../../data/jobs.js";
 import { FilesData } from "../../data/files.js";
-
-const storageAccessKeySeaweed = defineSecret("STORAGE_ACCESS_KEY_SEAWEED");
-const storageSecretKeySeaweed = defineSecret("STORAGE_SECRET_KEY_SEAWEED");
 
 // Express app for development
 const fileApp = express();
@@ -39,19 +35,6 @@ function guessMimeType(filename) {
         mkv: "video/x-matroska",
     };
     return mimeTypes[extension] || "application/octet-stream";
-}
-
-function getSecrets(storageType) {
-    const secrets = {};
-    if (storageType === "seaweed") {
-        secrets.access_key =
-            process.env.STORAGE_ACCESS_KEY_SEAWEED ||
-            storageAccessKeySeaweed.value();
-        secrets.secret_key =
-            process.env.STORAGE_SECRET_KEY_SEAWEED ||
-            storageSecretKeySeaweed.value();
-    }
-    return secrets;
 }
 
 fileApp.post("/process/:file_id", async (req, res) => {
@@ -130,205 +113,12 @@ fileApp.post("/process/:file_id", async (req, res) => {
     }
 });
 
-fileApp.post("/upload/multipart/complete", async (req, res) => {
-    // Completes a multipart upload.
-    // Request body must include:
-    //   uploadId: string
-    //   path: string — same path used when initiating the upload
-    //   parts: Array<{ PartNumber: number, ETag: string }>
-    //   oid: organization ID (default: first valid org)
-    //   storage: "seaweed" | "s3" (default: "seaweed")
-
-    const validOids = req.user.orgIds || [];
-    validOids.push("personal_" + req.uid);
-
-    const opts = req.body || {};
-    const { uploadId, path, parts, storage: storageType = "seaweed" } = opts;
-    const requestedOrgId = opts.oid || validOids[0];
-    const secrets = getSecrets(storageType);
-
-    if (!uploadId || !path || !Array.isArray(parts) || parts.length === 0) {
-        return res
-            .status(400)
-            .json({
-                error: "Bad Request",
-                message: "uploadId, path, and parts are required",
-            });
-    }
-
-    if (!requestedOrgId || !validOids.includes(requestedOrgId)) {
-        console.warn(
-            `User ${req.uid} attempted to complete multipart upload for unauthorized org ${requestedOrgId}`
-        );
-        return res
-            .status(403)
-            .json({
-                error: "Forbidden",
-                message: "You do not have access to the specified organization",
-            });
-    }
-
-    const remotePath = `files/${requestedOrgId}/${path}`;
-    console.log(
-        `Completing multipart upload for user ${req.uid} at path ${remotePath} with ${parts.length} parts`
-    );
-
-    const storage = Storage.getInstance(storageType, {}, secrets);
-
-    try {
-        await storage.completeMultipartUpload(remotePath, uploadId, parts);
-        return res
-            .status(200)
-            .json({ message: "Multipart upload completed successfully" });
-    } catch (error) {
-        console.error("Error completing multipart upload:", error);
-        return res
-            .status(500)
-            .json({
-                error: "Internal Server Error",
-                message: "Failed to complete multipart upload",
-            });
-    }
-});
-
-fileApp.post("/upload/multipart/:path", async (req, res) => {
-    // Initiates an S3 multipart upload and returns the uploadId.
-    // Request body may include:
-    //   storage: "seaweed" | "s3" (default: "seaweed")
-    //   mimeType: string (default: guessed from path)
-    //   oid: organization ID (default: first valid org)
-
-    const validOids = req.user.orgIds || [];
-    validOids.push("personal_" + req.uid);
-
-    const { path } = req.params;
-    const opts = req.body || {};
-
-    const storageType = opts.storage || "seaweed";
-    const mimeType = opts.mimeType || guessMimeType(path);
-    const requestedOrgId = opts.oid || validOids[0];
-    const secrets = getSecrets(storageType);
-
-    if (!path) {
-        return res
-            .status(400)
-            .json({ error: "Bad Request", message: "Upload path is required" });
-    }
-
-    if (!requestedOrgId || !validOids.includes(requestedOrgId)) {
-        console.warn(
-            `User ${req.uid} attempted multipart upload to unauthorized org ${requestedOrgId}`
-        );
-        return res
-            .status(403)
-            .json({
-                error: "Forbidden",
-                message: "You do not have access to the specified organization",
-            });
-    }
-
-    const remotePath = `files/${requestedOrgId}/${path}`;
-    console.log(
-        `Initiating multipart upload for user ${req.uid} to org ${requestedOrgId} at path ${remotePath}`
-    );
-
-    const storage = Storage.getInstance(storageType, {}, secrets);
-
-    try {
-        const { uploadId } = await storage.createMultipartUpload(
-            remotePath,
-            mimeType
-        );
-        return res
-            .status(200)
-            .json({ uploadId, path, remotePath, mimeType, storageType });
-    } catch (error) {
-        console.error("Error initiating multipart upload:", error);
-        return res
-            .status(500)
-            .json({
-                error: "Internal Server Error",
-                message: "Failed to initiate multipart upload",
-            });
-    }
-});
-
-fileApp.post("/upload/part", async (req, res) => {
-    // Returns a presigned URL for uploading a single part of a multipart upload.
-    // Request body must include:
-    //   uploadId: string — the upload ID from /upload/multipart/:path
-    //   path: string — same path used when initiating the upload
-    //   partNumber: number — 1-indexed part number
-    //   oid: organization ID (default: first valid org)
-    //   storage: "seaweed" | "s3" (default: "seaweed")
-
-    const validOids = req.user.orgIds || [];
-    validOids.push("personal_" + req.uid);
-
-    const opts = req.body || {};
-    const {
-        uploadId,
-        path,
-        partNumber,
-        storage: storageType = "seaweed",
-    } = opts;
-    const requestedOrgId = opts.oid || validOids[0];
-    const secrets = getSecrets(storageType);
-
-    if (!uploadId || !path || !partNumber) {
-        return res
-            .status(400)
-            .json({
-                error: "Bad Request",
-                message: "uploadId, path, and partNumber are required",
-            });
-    }
-
-    if (!requestedOrgId || !validOids.includes(requestedOrgId)) {
-        console.warn(
-            `User ${req.uid} attempted part upload to unauthorized org ${requestedOrgId}`
-        );
-        return res
-            .status(403)
-            .json({
-                error: "Forbidden",
-                message: "You do not have access to the specified organization",
-            });
-    }
-
-    const remotePath = `files/${requestedOrgId}/${path}`;
-    const storage = Storage.getInstance(storageType, {}, secrets);
-
-    try {
-        const uploadUrl = await storage.createSignedPartUrl(
-            remotePath,
-            uploadId,
-            partNumber,
-            15 * 60
-        );
-        return res.status(200).json({ uploadUrl, partNumber });
-    } catch (error) {
-        console.error("Error generating part upload URL:", error);
-        return res
-            .status(500)
-            .json({
-                error: "Internal Server Error",
-                message: "Failed to generate part upload URL",
-            });
-    }
-});
-
 fileApp.post("/upload/:path", async (req, res) => {
-    // Returns a pre-signed URL allowing for upload to the specified path
-    // The user must be authenticated and a have valid org membership to upload
+    // Returns a pre-signed URL allowing for upload to the specified path.
     // Upload paths are prefixed with /files/{orgId}/...
     // Request body is JSON and may include:
-    //   opts: {
-    //     storage: "seaweed" | "s3" (default: "seaweed")
-    //     mimeType: string (default: guessed from path)
-    //     oid: organization ID to upload under (default: first valid org)
-    //   }
-    //
+    //   mimeType: string (default: guessed from path)
+    //   oid: organization ID to upload under (default: first valid org)
 
     const validOids = req.user.orgIds || [];
     validOids.push("personal_" + req.uid); // Always allow personal org
@@ -336,10 +126,8 @@ fileApp.post("/upload/:path", async (req, res) => {
     const { path } = req.params;
     const opts = req.body || {};
 
-    const storageType = opts.storage || "seaweed";
     const mimeType = opts.mimeType || guessMimeType(path);
     const requestedOrgId = opts.oid || validOids[0];
-    const secrets = getSecrets(storageType);
 
     if (!path) {
         console.warn("Upload path not specified");
@@ -349,7 +137,6 @@ fileApp.post("/upload/:path", async (req, res) => {
         });
     }
 
-    // Check that user has access to the requested org
     if (!requestedOrgId || !validOids.includes(requestedOrgId)) {
         console.warn(
             `User ${req.uid} attempted upload to unauthorized org ${requestedOrgId}, valid orgs are `,
@@ -361,15 +148,14 @@ fileApp.post("/upload/:path", async (req, res) => {
         });
     }
 
-    let remotePath = `files/${requestedOrgId}/${path}`;
+    const remotePath = `files/${requestedOrgId}/${path}`;
 
     console.log(
-        `Generating upload URL for user ${req.uid} to org ${requestedOrgId} at path ${remotePath} with mimeType ${mimeType} using storage ${storageType}`
+        `Generating upload URL for user ${req.uid} to org ${requestedOrgId} at path ${remotePath} with mimeType ${mimeType}`
     );
-    // Initialize storage object
-    let storage = Storage.getInstance(storageType, {}, secrets);
 
-    // Generate signed URL
+    const storage = Storage.getInstance("firebase");
+
     try {
         const uploadUrl = await storage.createSignedUrl(
             remotePath,
@@ -391,30 +177,32 @@ fileApp.post("/upload/:path", async (req, res) => {
     }
 });
 
-fileApp.post("/delete/:path", async (req, res) => {
+fileApp.post("/delete/:file_id", async (req, res) => {
     const validOids = req.user.orgIds || [];
     validOids.push("personal_" + req.uid); // Always allow personal org
 
-    const { path } = req.params;
-    const opts = req.body || {};
+    const { file_id } = req.params;
 
-    const storageType = opts.storage || "seaweed";
-    const requestedOrgId = opts.oid || validOids[0];
-    const secrets = getSecrets(storageType);
-
-    if (!path) {
-        console.warn("Delete path not specified");
+    if (!file_id) {
         return res.status(400).json({
             error: "Bad Request",
-            message: "Delete path is required",
+            message: "File ID is required",
         });
     }
 
-    // Check that user has access to the requested org
-    if (!requestedOrgId || !validOids.includes(requestedOrgId)) {
+    const files = new FilesData();
+    const file = await files.getById(file_id);
+
+    if (!file) {
+        return res.status(404).json({
+            error: "Not Found",
+            message: "File not found",
+        });
+    }
+
+    if (!validOids.includes(file.oid)) {
         console.warn(
-            `User ${req.uid} attempted upload to unauthorized org ${requestedOrgId}, valid orgs are `,
-            validOids
+            `User ${req.uid} attempted to delete file ${file_id} in unauthorized org ${file.oid}`
         );
         return res.status(403).json({
             error: "Forbidden",
@@ -422,25 +210,31 @@ fileApp.post("/delete/:path", async (req, res) => {
         });
     }
 
-    let remotePath = `files/${requestedOrgId}/${path}`;
-
-    console.log(
-        `Deleting file for user ${req.uid} in org ${requestedOrgId} at path ${remotePath} using storage ${storageType}`
-    );
-    // Initialize storage object
-    let storage = Storage.getInstance(storageType, {}, secrets);
-
-    // Delete the file
     try {
-        await storage.deleteFile(remotePath);
+        await files.update(file_id, { deleteRequested: Date.now() });
+
+        const jobs = new JobsData();
+        const jobId = await jobs.queueJob(
+            "file",
+            file_id,
+            "DeleteFootage",
+            req.uid,
+            file.oid
+        );
+
+        console.log(
+            `Queued delete job ${jobId} for file ${file_id} by user ${req.uid}`
+        );
+
         return res.status(200).json({
-            message: "File deleted successfully",
+            jobId,
+            message: "Delete job queued successfully",
         });
     } catch (error) {
-        console.error("Error deleting file:", error);
+        console.error("Error queuing delete job:", error);
         return res.status(500).json({
             error: "Internal Server Error",
-            message: "Failed to delete file",
+            message: "Failed to queue delete job",
         });
     }
 });
@@ -461,7 +255,7 @@ export const file = onRequest(
         memory: "512MiB",
         timeoutSeconds: 60,
         invoker: "public",
-        secrets: [storageAccessKeySeaweed, storageSecretKeySeaweed],
+        secrets: [],
     },
     functionApp
 );

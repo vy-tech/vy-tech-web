@@ -4,5 +4,16 @@
         "method": ["GET"],
         "responseHeader": ["Content-Type"],
         "maxAgeSeconds": 3600
+    },
+    {
+        "origin": ["https://dev.roarscore.ai", "https://vy.vision"],
+        "responseHeader": [
+            "Content-Type",
+            "Content-Length",
+            "ETag",
+            "x-goog-*"
+        ],
+        "method": ["POST", "PUT", "DELETE"],
+        "maxAgeSeconds": 3600
     }
 ]

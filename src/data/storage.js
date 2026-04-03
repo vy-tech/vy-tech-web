@@ -57,9 +57,6 @@ async function loadAwsSdk() {
             PutObjectCommand: s3.PutObjectCommand,
             ListObjectsV2Command: s3.ListObjectsV2Command,
             DeleteObjectCommand: s3.DeleteObjectCommand,
-            CreateMultipartUploadCommand: s3.CreateMultipartUploadCommand,
-            UploadPartCommand: s3.UploadPartCommand,
-            CompleteMultipartUploadCommand: s3.CompleteMultipartUploadCommand,
             getSignedUrl: presigner.getSignedUrl,
         };
         return _awsSdk;
@@ -115,27 +112,6 @@ class Storage {
 
     async deleteFile(_remotePath) {
         throw new Error("deleteFile() must be implemented by subclass");
-    }
-
-    async createMultipartUpload(_remotePath, _contentType = null) {
-        throw new Error(
-            "createMultipartUpload() must be implemented by subclass"
-        );
-    }
-
-    async createSignedPartUrl(
-        _remotePath,
-        _uploadId,
-        _partNumber,
-        _expiresIn = 3600
-    ) {
-        throw new Error(
-            "createSignedPartUrl() must be implemented by subclass"
-        );
-    }
-
-    async completeMultipartUpload(_remotePath, _uploadId, _parts) {
-        throw new Error("completeMultipartUpload() must be implemented by subclass");
     }
 
     guessMimeType(filePath) {
@@ -341,7 +317,7 @@ class Storage {
         filename,
         orgId = null,
         mimeType = null,
-        storageType = "seaweed"
+        storageType = "firebase"
     ) {
         mimeType = mimeType || file.type;
         filename = filename || file.name;
@@ -373,117 +349,13 @@ class Storage {
         return data.uploadUrl;
     }
 
-    // Calls the /api/file/upload/multipart endpoint to initiate a multipart upload.
-    // Returns { uploadId, path, remotePath, mimeType } for use with requestPartUrl.
-    async requestMultipartUploadUrl(
-        file,
-        destinationPath,
-        filename,
-        orgId = null,
-        mimeType = null,
-        storageType = "seaweed"
-    ) {
-        mimeType = mimeType || file.type;
-        filename = filename || file.name;
-
-        const body = {
-            storage: storageType,
-            mimeType,
-            oid: orgId,
-        };
-
-        const path = `${destinationPath}/${filename}`;
+    async requestDeleteFile(fileId) {
         const headers = await this.getAuthHeaders();
-        const endpoint = `/api/file/upload/multipart/${encodeURIComponent(path)}`;
+        const endpoint = `/api/file/delete/${encodeURIComponent(fileId)}`;
 
         const resp = await fetch(endpoint, {
             method: "POST",
             headers,
-            body: JSON.stringify(body),
-        });
-
-        if (!resp.ok) {
-            const errorData = await resp.json();
-            throw new Error(
-                `Failed to initiate multipart upload: ${errorData.message || resp.statusText}`
-            );
-        }
-
-        return await resp.json();
-    }
-
-    // Calls the /api/file/upload/part endpoint to get a presigned URL for a single part.
-    // path and oid must match those used to initiate the multipart upload.
-    async requestPartUrl(
-        uploadId,
-        path,
-        partNumber,
-        orgId = null,
-        storageType = "seaweed"
-    ) {
-        const headers = await this.getAuthHeaders();
-
-        const resp = await fetch("/api/file/upload/part", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-                uploadId,
-                path,
-                partNumber,
-                oid: orgId,
-                storage: storageType,
-            }),
-        });
-
-        if (!resp.ok) {
-            const errorData = await resp.json();
-            throw new Error(
-                `Failed to get part upload URL: ${errorData.message || resp.statusText}`
-            );
-        }
-
-        const data = await resp.json();
-        return data.uploadUrl;
-    }
-
-    // Completes a multipart upload. parts is an array of { PartNumber, ETag } objects
-    // collected from each uploadToSignedPartUrl call.
-    async requestCompleteMultipartUpload(uploadId, path, parts, orgId = null, storageType = "seaweed") {
-        const headers = await this.getAuthHeaders();
-
-        const resp = await fetch("/api/file/upload/multipart/complete", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({ uploadId, path, parts, oid: orgId, storage: storageType }),
-        });
-
-        if (!resp.ok) {
-            const errorData = await resp.json();
-            throw new Error(
-                `Failed to complete multipart upload: ${errorData.message || resp.statusText}`
-            );
-        }
-    }
-
-    async requestDeleteFile(
-        filename,
-        destinationPath,
-        orgId = null,
-        storageType = "seaweed"
-    ) {
-        const path = `${destinationPath}/${filename}`;
-        const headers = await this.getAuthHeaders();
-        const endpoint = `/api/file/delete/${encodeURIComponent(path)}`;
-
-        const body = {
-            storage: storageType,
-            oid: orgId,
-        };
-
-        const resp = await fetch(endpoint, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(body),
         });
 
         if (!resp.ok) {
@@ -492,8 +364,6 @@ class Storage {
                 `Failed to delete file: ${errorData.message || resp.statusText}`
             );
         }
-
-        return;
     }
 
     // ── Upload via presigned URL (browser + Node.js) ─────────────────────────
@@ -553,52 +423,6 @@ class Storage {
         });
     }
 
-    uploadToSignedPartUrl(
-        presignedUrl,
-        chunk,
-        progressCallback = null,
-        _offset = null,
-        _totalSize = null
-    ) {
-        return new Promise((resolve, reject) => {
-            if (typeof XMLHttpRequest !== "undefined") {
-                const xhr = new XMLHttpRequest();
-                xhr.open("PUT", presignedUrl);
-
-                if (progressCallback) {
-                    xhr.upload.onprogress = (event) => {
-                        if (event.lengthComputable)
-                            progressCallback(
-                                (event.loaded / event.total) * 100
-                            );
-                    };
-                }
-
-                xhr.onload = () => {
-                    if (xhr.status >= 200 && xhr.status < 300) {
-                        resolve(xhr.getResponseHeader("ETag"));
-                    } else {
-                        reject(
-                            new Error(`HTTP ${xhr.status}: ${xhr.statusText}`)
-                        );
-                    }
-                };
-                xhr.onerror = () =>
-                    reject(new Error("Network error during part upload"));
-                xhr.send(chunk);
-            } else {
-                fetch(presignedUrl, { method: "PUT", body: chunk })
-                    .then((resp) => {
-                        if (!resp.ok)
-                            throw new Error(
-                                `HTTP ${resp.status}: ${resp.statusText}`
-                            );
-                        resolve(resp.headers.get("ETag"));
-                    })
-                    .catch(reject);
-            }
-        });
-    }
 }
 
 // ── S3Storage ────────────────────────────────────────────────────────────────
@@ -699,53 +523,6 @@ class S3Storage extends Storage {
         console.log(`File ${remotePath} deleted from ${this.storageType}`);
     }
 
-    async createMultipartUpload(remotePath, contentType = null) {
-        await this._ensureClient();
-        const { CreateMultipartUploadCommand } = await loadAwsSdk();
-
-        const [bucket, key] = this.getBucketAndPrefix(remotePath);
-        const params = { Bucket: bucket, Key: key };
-        if (contentType) params.ContentType = contentType;
-
-        const response = await this._s3Client.send(
-            new CreateMultipartUploadCommand(params)
-        );
-        return { uploadId: response.UploadId, key };
-    }
-
-    async createSignedPartUrl(
-        remotePath,
-        uploadId,
-        partNumber,
-        expiresIn = 3600
-    ) {
-        await this._ensureClient();
-        const { UploadPartCommand, getSignedUrl } = await loadAwsSdk();
-
-        const [bucket, key] = this.getBucketAndPrefix(remotePath);
-        const command = new UploadPartCommand({
-            Bucket: bucket,
-            Key: key,
-            UploadId: uploadId,
-            PartNumber: partNumber,
-        });
-        return await getSignedUrl(this._s3Client, command, { expiresIn });
-    }
-
-    async completeMultipartUpload(remotePath, uploadId, parts) {
-        await this._ensureClient();
-        const { CompleteMultipartUploadCommand } = await loadAwsSdk();
-
-        const [bucket, key] = this.getBucketAndPrefix(remotePath);
-        await this._s3Client.send(
-            new CompleteMultipartUploadCommand({
-                Bucket: bucket,
-                Key: key,
-                UploadId: uploadId,
-                MultipartUpload: { Parts: parts },
-            })
-        );
-    }
 }
 
 // ── MinioStorage ─────────────────────────────────────────────────────────────
@@ -870,111 +647,6 @@ class FirebaseStorage extends Storage {
         console.log(`File ${remotePath} deleted from Firebase Storage`);
     }
 
-    async createMultipartUpload(remotePath, contentType = null) {
-        assertAdminSdk("FirebaseStorage.createMultipartUpload");
-        const adminStorage = global._vy_storage_functions.getStorage();
-        const bucket = adminStorage.bucket();
-        const file = bucket.file(remotePath);
-        const [sessionUri] = await file.createResumableUpload({
-            metadata: {
-                ...(contentType ? { contentType } : {}),
-            },
-        });
-        return { uploadId: sessionUri, key: remotePath };
-    }
-
-    async createSignedPartUrl(
-        _remotePath,
-        uploadId,
-        _partNumber,
-        _expiresIn = 3600
-    ) {
-        // For GCS resumable uploads, the uploadId IS the session URI.
-        // The same URI is used for all chunks — partNumber and expiresIn are ignored.
-        return uploadId;
-    }
-
-    uploadToSignedPartUrl(
-        sessionUri,
-        chunk,
-        progressCallback = null,
-        offset = 0,
-        totalSize = null
-    ) {
-        const chunkSize = chunk.size || chunk.byteLength || chunk.length;
-        const rangeEnd = offset + chunkSize - 1;
-        const total = totalSize != null ? totalSize : "*";
-        const contentRange = `bytes ${offset}-${rangeEnd}/${total}`;
-
-        return new Promise((resolve, reject) => {
-            if (typeof XMLHttpRequest !== "undefined") {
-                const xhr = new XMLHttpRequest();
-                xhr.open("PUT", sessionUri);
-                xhr.setRequestHeader("Content-Range", contentRange);
-
-                if (progressCallback) {
-                    xhr.upload.onprogress = (event) => {
-                        if (event.lengthComputable)
-                            progressCallback(
-                                (event.loaded / event.total) * 100
-                            );
-                    };
-                }
-
-                xhr.onload = () => {
-                    // GCS returns 200/201 on final chunk, 308 on intermediate chunks
-                    if (
-                        xhr.status === 200 ||
-                        xhr.status === 201 ||
-                        xhr.status === 308
-                    ) {
-                        resolve(null);
-                    } else {
-                        reject(
-                            new Error(`HTTP ${xhr.status}: ${xhr.statusText}`)
-                        );
-                    }
-                };
-                xhr.onerror = () =>
-                    reject(new Error("Network error during part upload"));
-                xhr.send(chunk);
-            } else {
-                fetch(sessionUri, {
-                    method: "PUT",
-                    body: chunk,
-                    headers: { "Content-Range": contentRange },
-                })
-                    .then((resp) => {
-                        if (
-                            resp.status === 200 ||
-                            resp.status === 201 ||
-                            resp.status === 308
-                        ) {
-                            resolve(null);
-                        } else {
-                            throw new Error(
-                                `HTTP ${resp.status}: ${resp.statusText}`
-                            );
-                        }
-                    })
-                    .catch(reject);
-            }
-        });
-    }
-
-    async completeMultipartUpload(remotePath, _uploadId, _parts) {
-        // GCS resumable uploads auto-complete when the final chunk is sent.
-        // Verify the file actually exists.
-        assertAdminSdk("FirebaseStorage.completeMultipartUpload");
-        const adminStorage = global._vy_storage_functions.getStorage();
-        const bucket = adminStorage.bucket();
-        const [exists] = await bucket.file(remotePath).exists();
-        if (!exists) {
-            throw new Error(
-                `Upload verification failed: file ${remotePath} does not exist in Firebase Storage`
-            );
-        }
-    }
 }
 
 // ── FileSystemStorage ─────────────────────────────────────────────────────────
