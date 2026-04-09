@@ -1,8 +1,8 @@
-# Vy API v1
+# Videos
 
 ## Overview
 
-The Vy API v1 allows programmatic access to video upload and processing functionality. All requests must be authenticated with an API key scoped to your organization.
+The Videos API lets you upload, process, and retrieve video content programmatically. All requests must be authenticated with an API key scoped to your organization.
 
 Base URL: `/api/v1`
 
@@ -10,9 +10,7 @@ Base URL: `/api/v1`
 
 ## Authentication
 
-All endpoints require an API key. Keys are generated in the Vy settings dashboard and are scoped to a specific organization.
-
-Include your key using either method:
+Include your API key using either method:
 
 ```
 X-API-Key: vyk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -24,49 +22,75 @@ or
 Authorization: Bearer vyk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-Keys begin with the prefix `vyk_`. A key is shown only once when created and cannot be retrieved again.
-
-**Error response when key is missing or invalid:**
-
-```json
-{ "error": "Unauthorized", "message": "Invalid API key" }
-```
-
----
-
-## Error format
-
-All error responses follow this shape:
-
-```json
-{
-    "error": "Error Type",
-    "message": "Human-readable description"
-}
-```
-
-| Status | Meaning                                                  |
-| ------ | -------------------------------------------------------- |
-| 400    | Bad request — missing or invalid parameters              |
-| 401    | Unauthorized — API key missing, invalid, or expired      |
-| 403    | Forbidden — resource belongs to a different organization |
-| 404    | Not found                                                |
-| 500    | Internal server error                                    |
-| 501    | Not yet implemented                                      |
-
 ---
 
 ## Endpoints
 
-### GET /health
+### GET /videos
 
-Health check. Does not require authentication.
+Lists all videos for the authenticated organization with minimal metadata.
 
-**Response:**
+**Response `200`:**
 
 ```json
-{ "status": "ok" }
+[
+    {
+        "id": "0ABCxyz...",
+        "filename": "game.mp4",
+        "token": "abc123",
+        "hierarchy": "orgtoken:video:abc123",
+        "created": "2026-04-09T12:00:00.000Z",
+        "updated": "2026-04-09T12:05:00.000Z"
+    }
+]
 ```
+
+---
+
+### GET /video/:id
+
+Returns the processed results for a video, including playback playlists, chunks with analysis data, and a summary URL.
+
+The `:id` parameter can be either a document ID or a file token. When a document ID match is not found, the endpoint falls back to a hierarchy-based lookup using the file token.
+
+**Response `200`:**
+
+```json
+{
+    "id": "0ABCxyz...",
+    "filename": "game.mp4",
+    "hierarchy": "orgtoken:video:abc123",
+    "created": "2026-04-09T12:00:00.000Z",
+    "updated": "2026-04-09T12:05:00.000Z",
+    "playlists": {
+        "360p": "/playlist/orgtoken-video-abc123-360p.m3u8",
+        "720p": "/playlist/orgtoken-video-abc123-720p.m3u8",
+        "1080p": "/playlist/orgtoken-video-abc123-1080p.m3u8",
+        "4k": "/playlist/orgtoken-video-abc123-4k.m3u8"
+    },
+    "chunks": [
+        {
+            "id": "chunk1",
+            "date": "20260409",
+            "minuteOfDay": 720,
+            "duration": 60,
+            "startTime": 0,
+            "playbackMetadata": {
+                "segments": [],
+                "durations": [],
+                "bitrates": [],
+                "qualities": [],
+                "prefix": "..."
+            },
+            "expressionsUrl": "/api/v1/fetch/1/path/to/expressions.json",
+            "demographicsUrl": "/api/v1/fetch/1/path/to/demographics.json"
+        }
+    ],
+    "summaryUrl": "/api/v1/fetch/1/summaries/.../summary-....json"
+}
+```
+
+**Errors:** `404` if the file is not found; `403` if it belongs to a different organization; `400` if the file does not have processing results.
 
 ---
 
@@ -84,14 +108,14 @@ Uploading a video is a two-step process: request a signed upload URL, PUT the fi
 
 #### POST /video/upload/request
 
-Returns a signed upload URL and an upload token. The signed URL allows you to PUT the entire file directly to storage. The upload token is used in the complete step.
+Returns a signed upload URL and an upload token.
 
 **Request body:**
 
 | Field      | Type   | Required | Description                                             |
 | ---------- | ------ | -------- | ------------------------------------------------------- |
 | `filename` | string | yes      | Original filename including extension (e.g. `game.mp4`) |
-| `mimeType` | string | no       | MIME type. If omitted, guessed from the file extension. |
+| `mimeType` | string | no       | MIME type. If omitted, guessed from the file extension.  |
 
 Supported video extensions: `mp4`, `mov`, `avi`, `m4v`, `mkv`
 
@@ -180,7 +204,7 @@ Returns the current status of a video file and its associated processing job(s).
 
 ```js
 const API_KEY = "vyk_...";
-const BASE_URL = "https://vy.vision/v1/api/v1";
+const BASE_URL = "https://app.vy.vision/api/v1";
 
 async function uploadVideo(file) {
     const headers = {

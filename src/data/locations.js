@@ -29,6 +29,11 @@ class LocationsData {
         return await database.query(COLLECTION, { oid: { op: "==", value: oid } });
     }
 
+    async getByToken(oid, token) {
+        const results = await database.query(COLLECTION, { oid, token });
+        return results.length > 0 ? results[0] : null;
+    }
+
     async create(oid, data) {
         const location = { oid, ...data };
         return await database.set(COLLECTION, location);

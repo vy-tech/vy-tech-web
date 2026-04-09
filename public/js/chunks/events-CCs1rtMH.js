@@ -8661,6 +8661,10 @@ class EventsData {
         }
     }
 
+    async getById(id) {
+        return await database.get("events", id) || null;
+    }
+
     async getByHierarchy(hierarchy) {
         if (hierarchy == null) {
             this.event = null;
@@ -8696,6 +8700,13 @@ class EventsData {
 
         this.event = null;
         return null;
+    }
+
+    async getByOrg(oid, { status, location } = {}) {
+        const filters = { oid };
+        if (status) filters.status = status;
+        if (location) filters.location = location;
+        return await database.query("events", filters, "begin");
     }
 
     async getAvailable() {
@@ -8740,4 +8751,4 @@ class EventsData {
 const eventsData = new EventsData();
 
 export { EventsData as E, Hierarchy as H, eventsData as e, timeUtil as t };
-//# sourceMappingURL=events-B6lkNh6l.js.map
+//# sourceMappingURL=events-CCs1rtMH.js.map

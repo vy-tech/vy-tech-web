@@ -4,7 +4,7 @@ import './index.esm2017-Y6lvFaM5.js';
 import van from './van-CscOHmlp.js';
 import { M as Modal } from './van-ui-DNNh7cjk.js';
 import { eventBus } from './eventbus-CgpxZhAr.js';
-import { H as Hierarchy, e as eventsData } from './events-B6lkNh6l.js';
+import { H as Hierarchy, e as eventsData } from './events-CCs1rtMH.js';
 
 class Geometry {
     boxesAreSame(box1, box2, threshold = 0.4) {
@@ -3096,4 +3096,4 @@ class AnnotationsData {
 }
 
 export { AnnotationsData as A, ProfilesData as P, Summarizer as S, activeBoxManager as a, scoring as b, storage as c, demographics as d, profilesData as e, geomUtil as g, progress as p, summarizer as s };
-//# sourceMappingURL=annotations-BKgOeBiQ.js.map
+//# sourceMappingURL=annotations-CuOXiAdX.js.map

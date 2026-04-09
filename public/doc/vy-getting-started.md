@@ -103,5 +103,6 @@ Authorization: Bearer vyk_...
 
 ## Next steps
 
-- See the full [API Reference](/docs#api-reference) for detailed endpoint documentation, error codes, and job status values.
+- See the [Videos](/docs#videos) tab for upload, processing, and retrieval endpoints.
+- See the [Events & Locations](/docs#events-locations) tab for querying locations and camera events.
 - Upload your first video and poll `/api/v1/video/status/:fileId` to watch processing progress.
