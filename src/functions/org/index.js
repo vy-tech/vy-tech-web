@@ -179,6 +179,18 @@ orgApp.delete("/:orgId", async (req, res) => {
 orgApp.post("/create/personal", async (req, res) => {
     try {
         const orgsData = new OrganizationsData();
+
+        // Check for an existing personal org to prevent duplicates
+        const existing = await orgsData.getPersonalOrgByUser(req.uid);
+        if (existing) {
+            await syncUserOrgClaims(req.uid);
+            return res.status(200).json({
+                success: true,
+                message: "Personal organization already exists",
+                organization: existing,
+            });
+        }
+
         const user = await getAuth().getUser(req.uid);
         const token = await orgsData.ensureUniqueToken(user.email);
 

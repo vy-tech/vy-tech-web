@@ -165,6 +165,16 @@ function _errorWithCustomMessage(auth, code, message) {
 function _serverAppCurrentUserOperationNotSupportedError(auth) {
     return _errorWithCustomMessage(auth, "operation-not-supported-in-this-environment" /* AuthErrorCode.OPERATION_NOT_SUPPORTED */, 'Operations that alter the current user are not supported in conjunction with FirebaseServerApp');
 }
+function _assertInstanceOf(auth, object, instance) {
+    const constructorInstance = instance;
+    if (!(object instanceof constructorInstance)) {
+        if (constructorInstance.name !== object.constructor.name) {
+            _fail(auth, "argument-error" /* AuthErrorCode.ARGUMENT_ERROR */);
+        }
+        throw _errorWithCustomMessage(auth, "argument-error" /* AuthErrorCode.ARGUMENT_ERROR */, `Type of ${object.constructor.name} does not match expected instance.` +
+            `Did you pass a reference from a different Auth SDK?`);
+    }
+}
 function createErrorInternal(authOrCode, ...rest) {
     if (typeof authOrCode !== 'string') {
         const code = rest[0];
@@ -5917,6 +5927,47 @@ class AbstractPopupRedirectOperation {
  */
 const _POLL_WINDOW_CLOSE_TIMEOUT = new Delay(2000, 10000);
 /**
+ * Authenticates a Firebase client using a popup-based OAuth authentication flow.
+ *
+ * @remarks
+ * If succeeds, returns the signed in user along with the provider's credential. If sign in was
+ * unsuccessful, returns an error object containing additional information about the error.
+ *
+ * This method does not work in a Node.js environment or with {@link Auth} instances created with a
+ * {@link @firebase/app#FirebaseServerApp}.
+ *
+ * @example
+ * ```javascript
+ * // Sign in using a popup.
+ * const provider = new FacebookAuthProvider();
+ * const result = await signInWithPopup(auth, provider);
+ *
+ * // The signed-in user info.
+ * const user = result.user;
+ * // This gives you a Facebook Access Token.
+ * const credential = provider.credentialFromResult(auth, result);
+ * const token = credential.accessToken;
+ * ```
+ *
+ * @param auth - The {@link Auth} instance.
+ * @param provider - The provider to authenticate. The provider has to be an {@link OAuthProvider}.
+ * Non-OAuth providers like {@link EmailAuthProvider} will throw an error.
+ * @param resolver - An instance of {@link PopupRedirectResolver}, optional
+ * if already supplied to {@link initializeAuth} or provided by {@link getAuth}.
+ *
+ * @public
+ */
+async function signInWithPopup(auth, provider, resolver) {
+    if (_isFirebaseServerApp(auth.app)) {
+        return Promise.reject(_createError(auth, "operation-not-supported-in-this-environment" /* AuthErrorCode.OPERATION_NOT_SUPPORTED */));
+    }
+    const authInternal = _castAuth(auth);
+    _assertInstanceOf(auth, provider, FederatedAuthProvider);
+    const resolverInternal = _withDefaultResolver(authInternal, resolver);
+    const action = new PopupOperation(authInternal, "signInViaPopup" /* AuthEventType.SIGN_IN_VIA_POPUP */, provider, resolverInternal);
+    return action.executeNotNull();
+}
+/**
  * Popup event manager. Handles the popup's entire lifecycle; listens to auth
  * events
  *
@@ -7139,6 +7190,14 @@ class OrganizationsData {
         });
     }
 
+    async getPersonalOrgByUser(userId) {
+        const orgs = await database.query(COLLECTION, {
+            uid: userId,
+            isPersonal: true,
+        });
+        return orgs && orgs.length > 0 ? orgs[0] : null;
+    }
+
     // =========================================================================
     // CRUD Methods
     // =========================================================================
@@ -7216,7 +7275,13 @@ class OrganizationsData {
             if (poid) {
                 existing = await database.get(COLLECTION, poid);
             } else {
-                existing = await database.query(COLLECTION, { uid: userId });
+                // Query by membership — this works with Firestore security rules
+                // that gate reads on the members array
+                const userOrgs = await this.getByUser(userId);
+                const personalOrg = userOrgs?.find((o) => o.isPersonal);
+                if (personalOrg) {
+                    existing = personalOrg;
+                }
             }
         } catch (error) {
             console.error("Error checking for personal organization:", error);
@@ -7230,6 +7295,10 @@ class OrganizationsData {
                 return existing[0];
             }
         } else if (existing) {
+            if (!poid) {
+                // If we didn't have a poid re-sync
+                apiUtil.call("/api/org/sync", {}, "POST"); // Fire and forget
+            }
             return existing;
         }
 
@@ -7502,5 +7571,5 @@ if (typeof window !== "undefined") {
     window._vy_orgContext = orgContext;
 }
 
-export { OrganizationsData as O, __awaiter as _, apiUtil as a, signOut as b, __generator as c, __values as d, getAuth as g, orgContext as o, signInWithEmailAndPassword as s };
-//# sourceMappingURL=orgContext-bT4952H3.js.map
+export { GoogleAuthProvider as G, OrganizationsData as O, __awaiter as _, apiUtil as a, signInWithPopup as b, signOut as c, __generator as d, __values as e, getAuth as g, orgContext as o, signInWithEmailAndPassword as s };
+//# sourceMappingURL=orgContext-Dajhuuvi.js.map

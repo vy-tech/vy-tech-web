@@ -1,10 +1,10 @@
 import { d as database, g as getApp } from './db-s3IORrbE.js';
-import { g as getAuth } from './orgContext-bT4952H3.js';
+import { g as getAuth } from './orgContext-Dajhuuvi.js';
 import './index.esm2017-Y6lvFaM5.js';
 import van from './van-CscOHmlp.js';
 import { M as Modal } from './van-ui-DNNh7cjk.js';
 import { eventBus } from './eventbus-CgpxZhAr.js';
-import { H as Hierarchy, e as eventsData } from './events-Iu55q3hS.js';
+import { H as Hierarchy, e as eventsData } from './events-B6lkNh6l.js';
 
 class Geometry {
     boxesAreSame(box1, box2, threshold = 0.4) {
@@ -988,7 +988,7 @@ class Score {
         }
 
         for (const row of rows) {
-            row.time = row.frame / 20 + timeOffset;
+            row.time = row.frame / (row.fps || 20.0) + timeOffset;
 
             this.computeRowScore(row, emotions, this.softmaxAlpha);
         }
@@ -1777,7 +1777,7 @@ async function loadAwsSdk() {
     if (_awsSdk) return _awsSdk;
     try {
         const [s3, presigner] = await Promise.all([
-            import('./index-CnQGLK2j.js').then(function (n) { return n.i; }),
+            import('./index-Bw-D7eG4.js').then(function (n) { return n.i; }),
             import('./index-BYCClvEI.js'),
         ]);
         _awsSdk = {
@@ -2636,6 +2636,7 @@ class Summarizer {
         }
 
         scoring.resetWindow();
+        await scoring.loadWindowFromSchedule(0);
         let scores = {};
 
         console.log("Creating summary...");
@@ -3095,4 +3096,4 @@ class AnnotationsData {
 }
 
 export { AnnotationsData as A, ProfilesData as P, Summarizer as S, activeBoxManager as a, scoring as b, storage as c, demographics as d, profilesData as e, geomUtil as g, progress as p, summarizer as s };
-//# sourceMappingURL=annotations-B_BqLu7P.js.map
+//# sourceMappingURL=annotations-BKgOeBiQ.js.map

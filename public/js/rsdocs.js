@@ -1,6 +1,6 @@
 import van from './chunks/van-CscOHmlp.js';
-import { B } from './chunks/marked.esm-DDAYIbNt.js';
 import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
+import { B } from './chunks/marked.esm-DDAYIbNt.js';
 
 const marked = new B();
 

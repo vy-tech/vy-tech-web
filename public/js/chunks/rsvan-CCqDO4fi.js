@@ -1,4 +1,5 @@
 import van from './van-CscOHmlp.js';
+import { eventBus } from './eventbus-CgpxZhAr.js';
 
 const rsv = {
     tags: {
@@ -12,7 +13,7 @@ const rsv = {
                 attrs.onclick ||
                 (() => {
                     console.log(`Firing ${attrs.name}Click event`);
-                    events.dispatchEvent(new Event(`${attrs.name}Click`));
+                    eventBus.fire(`${attrs.name}Click`);
                 });
 
             return van.tags.button(attrs, ...children);
@@ -21,4 +22,4 @@ const rsv = {
 };
 
 export { rsv as r };
-//# sourceMappingURL=rsvan-DFHMNjSA.js.map
+//# sourceMappingURL=rsvan-CCqDO4fi.js.map

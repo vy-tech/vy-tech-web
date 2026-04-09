@@ -1,4 +1,5 @@
 import van from "vanjs-core";
+import { eventBus } from "./eventbus.js";
 
 const rsv = {
     tags: {
@@ -12,7 +13,7 @@ const rsv = {
                 attrs.onclick ||
                 (() => {
                     console.log(`Firing ${attrs.name}Click event`);
-                    events.dispatchEvent(new Event(`${attrs.name}Click`));
+                    eventBus.fire(`${attrs.name}Click`);
                 });
 
             return van.tags.button(attrs, ...children);

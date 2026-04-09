@@ -1,11 +1,11 @@
 import van from './chunks/van-CscOHmlp.js';
 import { M as Modal, T as Tabs } from './chunks/van-ui-DNNh7cjk.js';
 import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
-import { P as ProfilesData, A as AnnotationsData, p as progress, s as summarizer, a as activeBoxManager, g as geomUtil, b as scoring, d as demographics, c as storage, e as profilesData } from './chunks/annotations-B_BqLu7P.js';
-import { e as events } from './chunks/events-BAtvCXIc.js';
+import { P as ProfilesData, A as AnnotationsData, p as progress, s as summarizer, a as activeBoxManager, g as geomUtil, b as scoring, d as demographics, c as storage, e as profilesData } from './chunks/annotations-BKgOeBiQ.js';
+import { e as events } from './chunks/events-DDBRHUEM.js';
 import { d as database, s as serverTimestamp } from './chunks/db-s3IORrbE.js';
-import { H as Hierarchy, t as timeUtil } from './chunks/events-Iu55q3hS.js';
-import { o as orgContext, a as apiUtil } from './chunks/orgContext-bT4952H3.js';
+import { H as Hierarchy, t as timeUtil } from './chunks/events-B6lkNh6l.js';
+import { o as orgContext, a as apiUtil } from './chunks/orgContext-Dajhuuvi.js';
 import './chunks/index.esm2017-Y6lvFaM5.js';
 
 class Profiles extends ProfilesData {
@@ -3555,7 +3555,7 @@ class Reports {
         for (const emotion of box.row.emotions) {
             const score = emotion.score || 0;
 
-            if (!emotion.coreName) continue;
+            //if (!emotion.coreName) continue;
 
             html +=
                 `<tr><td>${emotion.name}</td>` +

@@ -10005,7 +10005,7 @@ async function initFirebaseStorage() {
         _firebaseStorageInstance = _firebaseStorageFunctions.getStorage();
     } else {
         const { getStorage, ref, uploadString, getDownloadURL } =
-            await import('./index.esm-D4e2IzJc.js');
+            await import('./index.esm-bLJ4CFd7.js');
         _firebaseStorageFunctions = {
             getStorage,
             ref,
@@ -11081,6 +11081,14 @@ class OrganizationsData {
         });
     }
 
+    async getPersonalOrgByUser(userId) {
+        const orgs = await database.query(COLLECTION, {
+            uid: userId,
+            isPersonal: true,
+        });
+        return orgs && orgs.length > 0 ? orgs[0] : null;
+    }
+
     // =========================================================================
     // CRUD Methods
     // =========================================================================
@@ -11158,7 +11166,13 @@ class OrganizationsData {
             if (poid) {
                 existing = await database.get(COLLECTION, poid);
             } else {
-                existing = await database.query(COLLECTION, { uid: userId });
+                // Query by membership — this works with Firestore security rules
+                // that gate reads on the members array
+                const userOrgs = await this.getByUser(userId);
+                const personalOrg = userOrgs?.find((o) => o.isPersonal);
+                if (personalOrg) {
+                    existing = personalOrg;
+                }
             }
         } catch (error) {
             console.error("Error checking for personal organization:", error);
@@ -11172,6 +11186,10 @@ class OrganizationsData {
                 return existing[0];
             }
         } else if (existing) {
+            if (!poid) {
+                // If we didn't have a poid re-sync
+                apiUtil.call("/api/org/sync", {}, "POST"); // Fire and forget
+            }
             return existing;
         }
 
@@ -11833,4 +11851,4 @@ const file = onRequest(
 );
 
 export { Component as C, FirebaseError as F, SDK_VERSION as S, _getProvider as _, getModularInstance as a, getDefaultEmulatorHostnameAndPort as b, createMockUserToken as c, _isFirebaseServerApp as d, _registerComponent as e, fileApp as f, getApp$1 as g, file as h, isCloudWorkstation as i, pingServer as p, registerVersion as r, updateEmulatorBanner as u };
-//# sourceMappingURL=index-BGJ5NL32.js.map
+//# sourceMappingURL=index-BK7Sg0oS.js.map

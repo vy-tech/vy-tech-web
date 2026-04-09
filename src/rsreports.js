@@ -594,7 +594,7 @@ class Reports {
         for (const emotion of box.row.emotions) {
             const score = emotion.score || 0;
 
-            if (!emotion.coreName) continue;
+            //if (!emotion.coreName) continue;
 
             html +=
                 `<tr><td>${emotion.name}</td>` +

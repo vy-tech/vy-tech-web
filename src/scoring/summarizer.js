@@ -56,6 +56,7 @@ class Summarizer {
         }
 
         scoring.resetWindow();
+        await scoring.loadWindowFromSchedule(0);
         let scores = {};
 
         console.log("Creating summary...");

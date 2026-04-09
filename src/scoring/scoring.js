@@ -194,7 +194,7 @@ class Score {
         }
 
         for (const row of rows) {
-            row.time = row.frame / 20 + timeOffset;
+            row.time = row.frame / (row.fps || 20.0) + timeOffset;
 
             this.computeRowScore(row, emotions, this.softmaxAlpha);
         }

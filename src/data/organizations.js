@@ -40,6 +40,14 @@ class OrganizationsData {
         });
     }
 
+    async getPersonalOrgByUser(userId) {
+        const orgs = await database.query(COLLECTION, {
+            uid: userId,
+            isPersonal: true,
+        });
+        return orgs && orgs.length > 0 ? orgs[0] : null;
+    }
+
     // =========================================================================
     // CRUD Methods
     // =========================================================================
@@ -117,7 +125,13 @@ class OrganizationsData {
             if (poid) {
                 existing = await database.get(COLLECTION, poid);
             } else {
-                existing = await database.query(COLLECTION, { uid: userId });
+                // Query by membership — this works with Firestore security rules
+                // that gate reads on the members array
+                const userOrgs = await this.getByUser(userId);
+                const personalOrg = userOrgs?.find((o) => o.isPersonal);
+                if (personalOrg) {
+                    existing = personalOrg;
+                }
             }
         } catch (error) {
             console.error("Error checking for personal organization:", error);
@@ -131,6 +145,10 @@ class OrganizationsData {
                 return existing[0];
             }
         } else if (existing) {
+            if (!poid) {
+                // If we didn't have a poid re-sync
+                apiUtil.call("/api/org/sync", {}, "POST"); // Fire and forget
+            }
             return existing;
         }
 

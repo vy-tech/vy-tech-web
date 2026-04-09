@@ -1,11 +1,10 @@
-import { g as getApp, a as getModularInstance, _ as _getProvider, b as getDefaultEmulatorHostnameAndPort, i as isCloudWorkstation, p as pingServer, u as updateEmulatorBanner, c as createMockUserToken, d as _isFirebaseServerApp, F as FirebaseError, e as _registerComponent, C as Component, r as registerVersion, S as SDK_VERSION } from './index-CiFvEEie.js';
+import { g as getApp, a as getModularInstance, _ as _getProvider, b as getDefaultEmulatorHostnameAndPort, i as isCloudWorkstation, p as pingServer, u as updateEmulatorBanner, c as createMockUserToken, d as _isFirebaseServerApp, F as FirebaseError, e as _registerComponent, C as Component, r as registerVersion, S as SDK_VERSION } from './index-BK7Sg0oS.js';
 import 'firebase-admin/app';
 import 'firebase-admin/firestore';
 import 'firebase-admin/storage';
 import 'express';
 import 'firebase-functions/v2/https';
-import 'firebase-functions/params';
-import 'crypto';
+import 'firebase-admin/auth';
 
 /**
  * @license
@@ -2314,4 +2313,4 @@ function registerStorage() {
 registerStorage();
 
 export { StorageError, StorageErrorCode, StringFormat, FbsBlob as _FbsBlob, Location as _Location, dataFromString as _dataFromString, invalidArgument as _invalidArgument, invalidRootOperation as _invalidRootOperation, connectStorageEmulator, getDownloadURL, getStorage, ref, uploadString };
-//# sourceMappingURL=index.esm-DppwL8da.js.map
+//# sourceMappingURL=index.esm-bLJ4CFd7.js.map
