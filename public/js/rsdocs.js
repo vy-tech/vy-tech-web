@@ -10,7 +10,12 @@ const TABS = [
         label: "Getting Started",
         url: "/doc/vy-getting-started.md",
     },
-    { id: "api-reference", label: "API Reference", url: "/doc/vy-api-v1.md" },
+    { id: "videos", label: "Videos", url: "/doc/vy-videos.md" },
+    {
+        id: "events-locations",
+        label: "Events & Locations",
+        url: "/doc/vy-events-locations.md",
+    },
 ];
 
 class Docs {

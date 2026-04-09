@@ -1,6 +1,6 @@
 import van from './van-CscOHmlp.js';
 import { eventBus } from './eventbus-CgpxZhAr.js';
-import { E as EventsData, H as Hierarchy } from './events-B6lkNh6l.js';
+import { E as EventsData, H as Hierarchy } from './events-CCs1rtMH.js';
 
 class Events extends EventsData {
     constructor() {
@@ -218,4 +218,4 @@ class Events extends EventsData {
 const events = new Events();
 
 export { events as e };
-//# sourceMappingURL=events-DDBRHUEM.js.map
+//# sourceMappingURL=events-DirrCTNX.js.map
