@@ -7405,33 +7405,40 @@ class OrganizationsData {
 
 const STORAGE_KEY = "vy_current_org_id";
 
+// Platform-specific dependencies are loaded via non-top-level dynamic imports
+// so the emitted module graph stays free of top-level await (Firebase Functions
+// loads bundled code via require(), which rejects ESM graphs containing TLA).
+let van = null;
+let AsyncLocalStorage = null;
+
 // ── BrowserOrgContext ───────────────────────────────────────────────────────
 // Full-featured org context for browser environments. Uses VanJS reactive
 // state and localStorage for persistence.
 
-let van = null;
-let AsyncLocalStorage = null;
-
-if (typeof window !== "undefined") {
-    van = (await import('./van-CscOHmlp.js')).default;
-} else {
-    AsyncLocalStorage = (await import('node:async_hooks')).AsyncLocalStorage;
-}
-
 class BrowserOrgContext {
     constructor() {
         this.orgsData = new OrganizationsData();
-
-        this.currentOrgId = van.state(null);
-        this.currentOrg = van.state(null);
-        this.userOrgs = van.state([]);
-        this.isLoading = van.state(true);
-
         this.userId = null;
+        // Reactive state fields are created lazily in init() once van is loaded.
+        this.currentOrgId = null;
+        this.currentOrg = null;
+        this.userOrgs = null;
+        this.isLoading = null;
     }
 
     async init(user) {
         console.log("init org context with user:", user);
+
+        if (!van) {
+            van = (await import('./van-CscOHmlp.js')).default;
+        }
+        if (!this.currentOrgId) {
+            this.currentOrgId = van.state(null);
+            this.currentOrg = van.state(null);
+            this.userOrgs = van.state([]);
+            this.isLoading = van.state(true);
+        }
+
         this.userId = user.uid;
 
         this.isLoading.val = true;
@@ -7462,7 +7469,7 @@ class BrowserOrgContext {
     }
 
     getCurrentOrgId() {
-        let orgId = this.currentOrgId.val;
+        let orgId = this.currentOrgId?.val ?? null;
 
         if (!orgId) {
             orgId = localStorage.getItem(STORAGE_KEY);
@@ -7472,7 +7479,7 @@ class BrowserOrgContext {
     }
 
     getCurrentOrg() {
-        return this.currentOrg.val;
+        return this.currentOrg?.val ?? null;
     }
 
     async setCurrentOrg(orgId, fireEvent = true) {
@@ -7524,7 +7531,7 @@ class BrowserOrgContext {
     }
 
     isInOrg(orgId) {
-        return this.userOrgs.val.some((o) => o.id === orgId);
+        return this.userOrgs?.val?.some((o) => o.id === orgId) ?? false;
     }
 }
 
@@ -7535,24 +7542,37 @@ class BrowserOrgContext {
 
 class ServerOrgContext {
     constructor() {
-        this._als = new AsyncLocalStorage();
+        // _als is created lazily on first run() call to avoid needing
+        // AsyncLocalStorage at module load time.
+        this._als = null;
+    }
+
+    async _ensureAls() {
+        if (!this._als) {
+            if (!AsyncLocalStorage) {
+                AsyncLocalStorage = (await import('node:async_hooks'))
+                    .AsyncLocalStorage;
+            }
+            this._als = new AsyncLocalStorage();
+        }
     }
 
     /** Executes `fn` with the given org context available to all downstream code. */
-    run(context, fn) {
+    async run(context, fn) {
+        await this._ensureAls();
         return this._als.run(context, fn);
     }
 
     getCurrentOrgId() {
-        return this._als.getStore()?.orgId ?? null;
+        return this._als?.getStore()?.orgId ?? null;
     }
 
     getCurrentOrg() {
-        return this._als.getStore()?.org ?? null;
+        return this._als?.getStore()?.org ?? null;
     }
 
     get userId() {
-        return this._als.getStore()?.userId ?? null;
+        return this._als?.getStore()?.userId ?? null;
     }
 
     isInOrg(orgId) {
@@ -7572,4 +7592,4 @@ if (typeof window !== "undefined") {
 }
 
 export { GoogleAuthProvider as G, OrganizationsData as O, __awaiter as _, apiUtil as a, signInWithPopup as b, signOut as c, __generator as d, __values as e, getAuth as g, orgContext as o, signInWithEmailAndPassword as s };
-//# sourceMappingURL=orgContext-Dajhuuvi.js.map
+//# sourceMappingURL=orgContext-CXpKVdn1.js.map

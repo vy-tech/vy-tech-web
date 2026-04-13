@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { getSecrets } from "../helpers.js";
 import { Storage } from "../../../data/storage.js";
 
 const router = Router();
@@ -17,7 +18,11 @@ router.get("/:storage/*pathParts", async (req, res) => {
     const storageType = storageMap[storage] || storage;
 
     try {
-        const storageInstance = Storage.getInstance(storageType);
+        const storageInstance = Storage.getInstance(
+            storageType,
+            {},
+            getSecrets().storageSecrets[storageType]
+        );
         const url = await storageInstance.createSignedUrl(path, "GET", 3600);
         res.set("Cache-Control", "public, max-age=3600");
         res.set("Location", url);

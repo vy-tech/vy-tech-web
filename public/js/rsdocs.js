@@ -16,6 +16,11 @@ const TABS = [
         label: "Events & Locations",
         url: "/doc/vy-events-locations.md",
     },
+    {
+        id: "annotations",
+        label: "Annotations",
+        url: "/doc/vy-annotations.md",
+    },
 ];
 
 class Docs {

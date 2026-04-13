@@ -1,5 +1,11 @@
 # Change History
 
+## 2026-04-13
+Fixed `ERR_REQUIRE_ASYNC_MODULE` on Firebase Functions deploy. `src/data/orgContext.js` had top-level `await import(...)` for `vanjs-core` / `node:async_hooks`, which rollup preserved as TLA in the v1 bundle and broke Firebase's `require()`-based function loader. Moved both imports to lazy loads inside `BrowserOrgContext.init()` and `ServerOrgContext.run()` (via a new `_ensureAls()` helper), deferring reactive-state and `AsyncLocalStorage` instantiation to first use. `orgContext.run()` is now async, so `src/functions/v1/middleware.js` awaits it.
+
+## 2026-04-10
+Added annotation endpoints to the v1 API. Event annotations can be fetched by document ID (`GET /event/:id/annotations`) or by location token and date (`GET /event/:location_token/:date/annotations`). Video annotations can be fetched by file ID or token (`GET /video/:id/annotations`). Each annotation includes computed `minuteOfDay` and `offsetSeconds` fields derived from chunk timing data, along with `videoSeconds` (seconds from video start). Added "Annotations" documentation tab.
+
 ## 2026-04-09
 Restructured API documentation from a single "API Reference" tab into three tabs: Getting Started, Videos, and Events & Locations. Documented the new `GET /videos`, `GET /video/:id`, `GET /locations`, `GET /events`, and event detail endpoints. Removed the old monolithic `vy-api-v1.md`.
 

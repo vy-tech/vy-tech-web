@@ -6,7 +6,12 @@ import { UploadsData } from "../../../data/uploads.js";
 import { ChunksData } from "../../../data/chunk.js";
 import Hierarchy from "../../../util/hierarchy.js";
 import { orgContext } from "../../../data/orgContext.js";
-import { getUploadStorage, guessMimeType, getFetchUrl } from "../helpers.js";
+import {
+    getUploadStorage,
+    guessMimeType,
+    getFetchUrl,
+    buildAnnotationsResponse,
+} from "../helpers.js";
 
 const router = Router();
 
@@ -222,6 +227,57 @@ router.get("/status/:id", async (req, res) => {
     }
 });
 
+// Get annotations for a video by file ID or file token
+router.get("/:id/annotations", async (req, res) => {
+    const id = req.params.id;
+
+    if (!id) {
+        return res
+            .status(400)
+            .json({ error: "Bad Request", message: "File ID is required" });
+    }
+
+    try {
+        const files = new FilesData();
+        let file = await files.getById(id);
+
+        if (!file) {
+            const org = orgContext.getCurrentOrg();
+            const orgToken = org?.token || req.apiKey.oid;
+            file = await files.getByHierarchy(`${orgToken}:video:${id}`);
+        }
+
+        if (!file) {
+            return res
+                .status(404)
+                .json({ error: "Not Found", message: "File not found" });
+        }
+
+        if (file.oid !== req.apiKey.oid) {
+            return res.status(403).json({
+                error: "Forbidden",
+                message: "You do not have access to this file",
+            });
+        }
+
+        if (!file.hierarchy) {
+            return res.status(400).json({
+                error: "Bad Request",
+                message: "File does not have processing results",
+            });
+        }
+
+        const result = await buildAnnotationsResponse(file.hierarchy);
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error("Error fetching annotations:", error);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to fetch annotations",
+        });
+    }
+});
+
 // Gets the results of a processed video
 router.get("/:id", async (req, res) => {
     const id = req.params.id;
@@ -280,6 +336,7 @@ router.get("/:id", async (req, res) => {
             },
             expressionsUrl: getFetchUrl(chunk.storage, chunk.expressionsPath),
             demographicsUrl: getFetchUrl(chunk.storage, chunk.demographicsPath),
+            videoUrl: getFetchUrl(chunk.storage, chunk.path),
         }));
 
         const summaryPath =

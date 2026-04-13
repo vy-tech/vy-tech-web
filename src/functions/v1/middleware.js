@@ -56,7 +56,7 @@ export async function requireApiKey(req, res, next) {
         const orgsData = new OrganizationsData();
         const org = await orgsData.getById(apiKey.oid);
 
-        orgContext.run(
+        await orgContext.run(
             {
                 orgId: apiKey.oid,
                 org: org || { id: apiKey.oid },

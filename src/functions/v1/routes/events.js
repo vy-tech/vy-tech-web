@@ -4,7 +4,7 @@ import { EventsData } from "../../../data/events.js";
 import { LocationsData } from "../../../data/locations.js";
 import { ChunksData } from "../../../data/chunk.js";
 import Hierarchy from "../../../util/hierarchy.js";
-import { getFetchUrl } from "../helpers.js";
+import { getFetchUrl, buildAnnotationsResponse } from "../helpers.js";
 
 const router = Router();
 
@@ -23,7 +23,10 @@ router.get("/", async (req, res) => {
             if (/^\w{20}$/.test(locationParam)) {
                 location = await locationsData.getById(locationParam);
                 if (!location) {
-                    location = await locationsData.getByToken(oid, locationParam);
+                    location = await locationsData.getByToken(
+                        oid,
+                        locationParam
+                    );
                 }
             } else {
                 location = await locationsData.getByToken(oid, locationParam);
@@ -39,7 +42,10 @@ router.get("/", async (req, res) => {
         }
 
         const eventsData = new EventsData();
-        const events = await eventsData.getByOrg(oid, { status, location: locationId });
+        const events = await eventsData.getByOrg(oid, {
+            status,
+            location: locationId,
+        });
 
         const results = events.map((event) => ({
             id: event.id,
@@ -84,6 +90,7 @@ async function buildEventDetailResponse(event, camera) {
         },
         expressionsUrl: getFetchUrl(chunk.storage, chunk.expressionsPath),
         demographicsUrl: getFetchUrl(chunk.storage, chunk.demographicsPath),
+        videoUrl: getFetchUrl(chunk.storage, chunk.path),
     }));
 
     const summaryPath =
@@ -111,6 +118,46 @@ async function buildEventDetailResponse(event, camera) {
     };
 }
 
+// Must be registered before /:location_token/:date{/:camera} to avoid
+// "annotations" being captured as the camera parameter.
+router.get("/:location_token/:date/annotations", async (req, res, next) => {
+    const { location_token, date } = req.params;
+
+    if (!/^\d{8}$/.test(date)) {
+        return next();
+    }
+
+    try {
+        const eventsData = new EventsData();
+        const event = await eventsData.getByHierarchy(
+            `${location_token}:${date}`
+        );
+
+        if (!event) {
+            return res.status(404).json({
+                error: "Not Found",
+                message: "Event not found",
+            });
+        }
+
+        if (event.oid !== req.apiKey.oid) {
+            return res.status(403).json({
+                error: "Forbidden",
+                message: "You do not have access to this event",
+            });
+        }
+
+        const result = await buildAnnotationsResponse(event.hierarchy);
+        return res.status(200).json(result);
+    } catch (err) {
+        console.error("Error fetching annotations:", err);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to fetch annotations",
+        });
+    }
+});
+
 // Get event detail by location token and date
 router.get("/:location_token/:date{/:camera}", async (req, res, next) => {
     const { location_token, date, camera } = req.params;
@@ -121,7 +168,9 @@ router.get("/:location_token/:date{/:camera}", async (req, res, next) => {
 
     try {
         const eventsData = new EventsData();
-        const event = await eventsData.getByHierarchy(`${location_token}:${date}`);
+        const event = await eventsData.getByHierarchy(
+            `${location_token}:${date}`
+        );
 
         if (!event) {
             return res.status(404).json({
@@ -144,6 +193,40 @@ router.get("/:location_token/:date{/:camera}", async (req, res, next) => {
         return res.status(500).json({
             error: "Internal Server Error",
             message: "Failed to fetch event",
+        });
+    }
+});
+
+// Must be registered before /:id{/:camera} to avoid
+// "annotations" being captured as the camera parameter.
+router.get("/:id/annotations", async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const eventsData = new EventsData();
+        const event = await eventsData.getById(id);
+
+        if (!event) {
+            return res.status(404).json({
+                error: "Not Found",
+                message: "Event not found",
+            });
+        }
+
+        if (event.oid !== req.apiKey.oid) {
+            return res.status(403).json({
+                error: "Forbidden",
+                message: "You do not have access to this event",
+            });
+        }
+
+        const result = await buildAnnotationsResponse(event.hierarchy);
+        return res.status(200).json(result);
+    } catch (err) {
+        console.error("Error fetching annotations:", err);
+        return res.status(500).json({
+            error: "Internal Server Error",
+            message: "Failed to fetch annotations",
         });
     }
 });
