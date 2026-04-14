@@ -37,7 +37,12 @@ class Heatmap {
             const x = Math.floor(((e.clientX - rect.left) / rect.width) * 3840);
             const y = Math.floor(((e.clientY - rect.top) / rect.height) * 2160);
 
-            eventBus.fire("heatmap.mousemove", { x: x, y: y });
+            eventBus.fire("heatmap.mousemove", {
+                x: x,
+                y: y,
+                clientX: e.clientX,
+                clientY: e.clientY,
+            });
         });
 
         return this.canvas;

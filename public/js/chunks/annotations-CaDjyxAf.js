@@ -1,10 +1,10 @@
 import { d as database, g as getApp } from './db-s3IORrbE.js';
-import { g as getAuth } from './orgContext-CXpKVdn1.js';
+import { g as getAuth } from './orgContext-BzAEkigY.js';
 import './index.esm2017-Y6lvFaM5.js';
-import van from './van-CscOHmlp.js';
-import { M as Modal } from './van-ui-DNNh7cjk.js';
+import { v as van } from './van-t8DywzvC.js';
+import { M as Modal } from './van-ui-YSP0ZuSh.js';
 import { eventBus } from './eventbus-CgpxZhAr.js';
-import { H as Hierarchy, e as eventsData } from './events-3E2NjnhN.js';
+import { H as Hierarchy, e as eventsData } from './events-C7yf_3nD.js';
 
 class Geometry {
     boxesAreSame(box1, box2, threshold = 0.4) {
@@ -1041,7 +1041,7 @@ class Score {
         row.cores = {};
         for (const emotion of row.emotions) {
             const weight = profile[emotion.name];
-            if (typeof weight !== "number" || weight === 0) continue;
+            if (typeof weight !== "number") continue;
 
             // Signed reaction: detector score (0..1) times profile weight (can be ±) and scaled to ~0..±2000
             const r = emotion.score * weight * 1000;
@@ -1777,7 +1777,7 @@ async function loadAwsSdk() {
     if (_awsSdk) return _awsSdk;
     try {
         const [s3, presigner] = await Promise.all([
-            import('./index-DuUTeNff.js').then(function (n) { return n.i; }),
+            import('./index-JwcJYyzR.js').then(function (n) { return n.i; }),
             import('./index-BYCClvEI.js'),
         ]);
         _awsSdk = {
@@ -3096,4 +3096,4 @@ class AnnotationsData {
 }
 
 export { AnnotationsData as A, ProfilesData as P, Summarizer as S, activeBoxManager as a, scoring as b, storage as c, demographics as d, profilesData as e, geomUtil as g, progress as p, summarizer as s };
-//# sourceMappingURL=annotations-DpdAHOFW.js.map
+//# sourceMappingURL=annotations-CaDjyxAf.js.map

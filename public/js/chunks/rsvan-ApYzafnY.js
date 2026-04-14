@@ -1,4 +1,4 @@
-import van from './van-CscOHmlp.js';
+import { v as van } from './van-t8DywzvC.js';
 import { eventBus } from './eventbus-CgpxZhAr.js';
 
 const rsv = {
@@ -22,4 +22,4 @@ const rsv = {
 };
 
 export { rsv as r };
-//# sourceMappingURL=rsvan-CCqDO4fi.js.map
+//# sourceMappingURL=rsvan-ApYzafnY.js.map

@@ -1,6 +1,7 @@
-import { t as toUtf8 } from './index-DuUTeNff.js';
+import { t as toUtf8 } from './index-JwcJYyzR.js';
 import { f as fromUtf8 } from './SignatureV4MultiRegion-DiJigTAW.js';
-import './orgContext-CXpKVdn1.js';
+import './orgContext-BzAEkigY.js';
+import './van-t8DywzvC.js';
 import './db-s3IORrbE.js';
 import './index.esm2017-Y6lvFaM5.js';
 
@@ -259,4 +260,4 @@ class EventStreamSerde {
 }
 
 export { EventStreamSerde };
-//# sourceMappingURL=index-OnD1CYsL.js.map
+//# sourceMappingURL=index-DQlemxa3.js.map

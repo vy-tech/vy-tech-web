@@ -139,5 +139,5 @@ var van = {
   add, state, derive,
 };
 
-export { van as default };
-//# sourceMappingURL=van-CscOHmlp.js.map
+export { van as v };
+//# sourceMappingURL=van-t8DywzvC.js.map

@@ -17,6 +17,7 @@ import { Hierarchy } from "./util/hierarchy.js";
 import { timeUtil } from "./util/time.js";
 
 import { heatmap } from "./viz/heatmap.js";
+import { heatmapDetail } from "./viz/heatmapDetail.js";
 import { cameramap } from "./viz/cameramap.js";
 import { ekg } from "./viz/ekg.js";
 import { spider } from "./viz/spider.js";
@@ -48,6 +49,21 @@ class Reports {
         this.wallclockStartTimeUTC = null;
     }
 
+    updateLocationBar() {
+        // Rewrite the URL to reflect the current hierarchy so the page can be
+        // reloaded or shared as a permalink. Uses replaceState so we don't
+        // push a new history entry on every click (and so we don't have to
+        // handle popstate). Preserves the first two path segments (e.g.
+        // "/reports") — see getHierarchyFromPath() which expects the
+        // hierarchy to begin at parts[2].
+        const parts = window.location.pathname.split("/");
+        const prefix = parts.slice(0, 2).join("/");
+        const url = this.hierarchy
+            ? `${prefix}/${this.hierarchy.toString("/")}`
+            : prefix;
+        window.history.replaceState({}, "", url + window.location.hash);
+    }
+
     async changeHierarchy(hierarchy) {
         console.log("Changing hierarchy to:", hierarchy);
 
@@ -76,6 +92,7 @@ class Reports {
 
         this.resetTitle();
         this.loadSource();
+        this.updateLocationBar();
 
         eventBus.fire("ui.hierarchyChanged", {
             hierarchy: this.hierarchy,
@@ -269,6 +286,10 @@ class Reports {
     getCenterColumnElements() {
         const { div, main, video, canvas, button } = van.tags;
 
+        // heatmapDetail appends itself to document.body so it can float above
+        // the video.js control bar (escapes the video player stacking context).
+        heatmapDetail.createElement();
+
         // Video plus bottom metadata
         return div(
             {
@@ -303,11 +324,6 @@ class Reports {
                     id: "report-mode-view",
                     class: "text-sm text-gray-700",
                 },
-
-                div({
-                    id: "report-box-debug",
-                    class: "hidden text-sm text-gray-700 bg-white p-2 border",
-                }),
 
                 div({ class: "" }, summaryGraph.createElement()),
 
@@ -564,16 +580,6 @@ class Reports {
             }
         });
 
-        eventBus.addEventListener("heatmap.mousemove", (e) => {
-            const box = this.score.boxAt(e.detail.x, e.detail.y);
-
-            if (box) {
-                // Highlight the box or perform any action
-                this.showBoxDebug(box);
-            } else {
-                this.hideBoxDebug();
-            }
-        });
     }
 
     addCameraMapListeners() {
@@ -582,46 +588,6 @@ class Reports {
         });
     }
 
-    showBoxDebug(box) {
-        const debugDiv = document.getElementById("report-box-debug");
-        debugDiv.classList.remove("hidden");
-
-        const profile = profiles.profile.emotions;
-
-        let html =
-            '<table class="w-full"><tr><th>Emotion</th><th>Core</th><th>Confidence</th><th>Profile</th><th>Score</th></tr>';
-
-        for (const emotion of box.row.emotions) {
-            const score = emotion.score || 0;
-
-            //if (!emotion.coreName) continue;
-
-            html +=
-                `<tr><td>${emotion.name}</td>` +
-                `<td>${emotion.coreName}</td>` +
-                `<td>${emotion.confidence.toFixed(4)}</td>` +
-                `<td>${profile[emotion.name]}</td>` +
-                `<td>${score.toFixed(0)}</td></tr>`;
-        }
-        html +=
-            `<tr><td colspan="4">t=${box.row.time.toFixed(4)}s</td>` +
-            `<td><b>${box.row.score.toFixed(0)}</b></td></tr>`;
-        html += "</table>";
-
-        html += `<table class="w-full mt-2"><tr><th>Core</th><th>Score</th></tr>`;
-        for (let coreName in box.row.cores) {
-            const coreScore = box.row.cores[coreName].score.toFixed(0);
-            html += `<tr><td>${coreName}</td><td>${coreScore}</td></tr>`;
-        }
-        html += "</table>";
-
-        debugDiv.innerHTML = html;
-    }
-
-    hideBoxDebug() {
-        const debugDiv = document.getElementById("report-box-debug");
-        debugDiv.classList.add("hidden");
-    }
 }
 
 const reports = new Reports();

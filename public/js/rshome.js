@@ -1,4 +1,4 @@
-import van from './chunks/van-CscOHmlp.js';
+import { v as van } from './chunks/van-t8DywzvC.js';
 import { d as database } from './chunks/db-s3IORrbE.js';
 
 class Home {

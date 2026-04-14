@@ -1,5 +1,17 @@
 # Change History
 
+## 2026-04-14
+Reports page URL now reflects the current selection. `Reports.changeHierarchy()` calls a new `updateLocationBar()` helper that rewrites `window.location` via `history.replaceState` using the same path format `getHierarchyFromPath()` already parses (preserves the first two path segments, appends `hierarchy.toString("/")`). `replaceState` avoids polluting history and sidesteps `popstate` handling — the URL is purely a permalink/reload target, not a navigation step.
+
+## 2026-04-14
+Moved the `heatmapDetail` floating tooltip out of the report DOM tree and into `document.body` (inside `HeatmapDetail.createElement()`). The tooltip was trapped inside the video.js stacking context and couldn't float above `vjs-control-bar` (`z-index: 1000 !important`) no matter how high its own z-index went. Also bumped its class to `z-[10000]` and added a small `pt-2` to the Weighted Avg row in the emotions table.
+
+## 2026-04-14
+Promoted the temporary `showBoxDebug`/`hideBoxDebug` heatmap overlay in `src/rsreports.js` to a proper viz component at `src/viz/heatmapDetail.js`. The new `HeatmapDetail` class subscribes to `heatmap.mousemove` directly, builds its emotions table with VanJS tags instead of `innerHTML`, and renders as a compact `position: fixed` tooltip that tracks the cursor (flipping near viewport edges). Cores breakdown removed. `src/viz/heatmap.js` now also forwards `clientX`/`clientY` on the mousemove event so the tooltip can position itself.
+
+## 2026-04-13
+Follow-up on the TLA fix: reverted `vanjs-core` to a static import in `src/data/orgContext.js` and restored eager `van.state` field creation in the `BrowserOrgContext` constructor. The lazy load introduced a race — `src/ui/topbar.js` builds its DOM synchronously at module load (via `rsnav` → `nav.addElements()` → `topBar.addElements()`) and reads `orgContext.currentOrg.val` / `userOrgs.val` / `isLoading.val` / `currentOrgId.val` inside van render closures, which would crash reading `.val` of `null` before auth fired `orgContext.init(user)`. vanjs-core is safe to module-load in Node (no DOM side-effects), so the server v1 bundle tolerates it. `ServerOrgContext` still lazy-loads `node:async_hooks` to keep the module graph free of top-level await.
+
 ## 2026-04-13
 Fixed `ERR_REQUIRE_ASYNC_MODULE` on Firebase Functions deploy. `src/data/orgContext.js` had top-level `await import(...)` for `vanjs-core` / `node:async_hooks`, which rollup preserved as TLA in the v1 bundle and broke Firebase's `require()`-based function loader. Moved both imports to lazy loads inside `BrowserOrgContext.init()` and `ServerOrgContext.run()` (via a new `_ensureAls()` helper), deferring reactive-state and `AsyncLocalStorage` instantiation to first use. `orgContext.run()` is now async, so `src/functions/v1/middleware.js` awaits it.
 

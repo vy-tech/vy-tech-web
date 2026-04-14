@@ -1,11 +1,11 @@
-import van from './chunks/van-CscOHmlp.js';
-import { M as Modal, T as Tabs } from './chunks/van-ui-DNNh7cjk.js';
+import { v as van } from './chunks/van-t8DywzvC.js';
+import { M as Modal, T as Tabs } from './chunks/van-ui-YSP0ZuSh.js';
 import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
-import { P as ProfilesData, A as AnnotationsData, p as progress, s as summarizer, a as activeBoxManager, g as geomUtil, b as scoring, d as demographics, c as storage, e as profilesData } from './chunks/annotations-DpdAHOFW.js';
-import { e as events } from './chunks/events-BlYsObcV.js';
+import { P as ProfilesData, A as AnnotationsData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as storage, e as profilesData } from './chunks/annotations-CaDjyxAf.js';
+import { e as events } from './chunks/events-0vYhdN4u.js';
 import { d as database, s as serverTimestamp } from './chunks/db-s3IORrbE.js';
-import { H as Hierarchy, t as timeUtil } from './chunks/events-3E2NjnhN.js';
-import { o as orgContext, a as apiUtil } from './chunks/orgContext-CXpKVdn1.js';
+import { H as Hierarchy, t as timeUtil } from './chunks/events-C7yf_3nD.js';
+import { o as orgContext, a as apiUtil } from './chunks/orgContext-BzAEkigY.js';
 import './chunks/index.esm2017-Y6lvFaM5.js';
 
 class Profiles extends ProfilesData {
@@ -915,7 +915,12 @@ class Heatmap {
             const x = Math.floor(((e.clientX - rect.left) / rect.width) * 3840);
             const y = Math.floor(((e.clientY - rect.top) / rect.height) * 2160);
 
-            eventBus.fire("heatmap.mousemove", { x: x, y: y });
+            eventBus.fire("heatmap.mousemove", {
+                x: x,
+                y: y,
+                clientX: e.clientX,
+                clientY: e.clientY,
+            });
         });
 
         return this.canvas;
@@ -984,6 +989,104 @@ class Heatmap {
 }
 
 const heatmap = new Heatmap();
+
+const { div, table, tr, th, td, span } = van.tags;
+
+class HeatmapDetail {
+    constructor() {
+        this.container = null;
+        this.body = null;
+
+        eventBus.addEventListener("heatmap.mousemove", (e) => {
+            const box = scoring.boxAt(e.detail.x, e.detail.y);
+            if (box) {
+                this.show(box, e.detail.clientX, e.detail.clientY);
+            } else {
+                this.hide();
+            }
+        });
+    }
+
+    createElement(options = {}) {
+        this.body = div();
+        const merged = {
+            id: "heatmap-detail",
+            class:
+                "hidden fixed z-[10000] pointer-events-none " +
+                "text-xs text-gray-700 bg-white p-2 border " +
+                "rounded shadow-lg",
+            ...options,
+        };
+        this.container = div(merged, this.body);
+        // Appended to <body> so it escapes any ancestor stacking context and
+        // can float above the video.js control bar (z-index: 1000 !important).
+        // A high z-index alone isn't enough if a parent forms its own stacking
+        // context (transform, opacity, z-index, filter, etc.).
+        document.body.appendChild(this.container);
+        return this.container;
+    }
+
+    show(box, clientX, clientY) {
+        const emotionRows = [];
+        for (const emotion of box.row.emotions) {
+            const score = emotion.score || 0;
+            if (!score) continue;
+            emotionRows.push(
+                tr(
+                    td({ class: "w-32" }, emotion.name),
+                    td({ class: "w-16 text-right" }, emotion.confidence.toFixed(2)),
+                    td({ class: "w-12 text-right" }, score.toFixed(0)),
+                ),
+            );
+        }
+
+        let content;
+        if (emotionRows.length === 0) {
+            content = div(
+                { class: "italic text-gray-500" },
+                "No contributing emotions",
+            );
+        } else {
+            content = table(
+                { class: "table-fixed" },
+                tr(
+                    th({ class: "w-32 text-left" }, "Emotion"),
+                    th({ class: "w-16 text-right" }, "Conf"),
+                    th({ class: "w-12 text-right" }, "Score"),
+                ),
+                ...emotionRows,
+                tr({ },
+                    td({ class: "text-right pt-2", colspan: "2" }, "Weighted Avg."),
+                    td(
+                        {
+                            class: "text-right pt-2",
+                        },
+                        span({ class: "font-bold" }, box.row.score.toFixed(0)),
+                    ),
+                ),
+            );
+        }
+
+        this.body.replaceChildren(content);
+
+        const offset = 14;
+        const w = this.container.offsetWidth || 240;
+        const h = this.container.offsetHeight || 120;
+        let left = clientX + offset;
+        let top = clientY + offset;
+        if (left + w > window.innerWidth) left = clientX - w - offset;
+        if (top + h > window.innerHeight) top = clientY - h - offset;
+        this.container.style.left = `${left}px`;
+        this.container.style.top = `${top}px`;
+        this.container.classList.remove("hidden");
+    }
+
+    hide() {
+        if (this.container) this.container.classList.add("hidden");
+    }
+}
+
+const heatmapDetail = new HeatmapDetail();
 
 class CameraMap {
     constructor() {
@@ -3009,6 +3112,21 @@ class Reports {
         this.wallclockStartTimeUTC = null;
     }
 
+    updateLocationBar() {
+        // Rewrite the URL to reflect the current hierarchy so the page can be
+        // reloaded or shared as a permalink. Uses replaceState so we don't
+        // push a new history entry on every click (and so we don't have to
+        // handle popstate). Preserves the first two path segments (e.g.
+        // "/reports") — see getHierarchyFromPath() which expects the
+        // hierarchy to begin at parts[2].
+        const parts = window.location.pathname.split("/");
+        const prefix = parts.slice(0, 2).join("/");
+        const url = this.hierarchy
+            ? `${prefix}/${this.hierarchy.toString("/")}`
+            : prefix;
+        window.history.replaceState({}, "", url + window.location.hash);
+    }
+
     async changeHierarchy(hierarchy) {
         console.log("Changing hierarchy to:", hierarchy);
 
@@ -3037,6 +3155,7 @@ class Reports {
 
         this.resetTitle();
         this.loadSource();
+        this.updateLocationBar();
 
         eventBus.fire("ui.hierarchyChanged", {
             hierarchy: this.hierarchy,
@@ -3230,6 +3349,10 @@ class Reports {
     getCenterColumnElements() {
         const { div, main, video, canvas, button } = van.tags;
 
+        // heatmapDetail appends itself to document.body so it can float above
+        // the video.js control bar (escapes the video player stacking context).
+        heatmapDetail.createElement();
+
         // Video plus bottom metadata
         return div(
             {
@@ -3264,11 +3387,6 @@ class Reports {
                     id: "report-mode-view",
                     class: "text-sm text-gray-700",
                 },
-
-                div({
-                    id: "report-box-debug",
-                    class: "hidden text-sm text-gray-700 bg-white p-2 border",
-                }),
 
                 div({ class: "" }, summaryGraph.createElement()),
 
@@ -3525,16 +3643,6 @@ class Reports {
             }
         });
 
-        eventBus.addEventListener("heatmap.mousemove", (e) => {
-            const box = this.score.boxAt(e.detail.x, e.detail.y);
-
-            if (box) {
-                // Highlight the box or perform any action
-                this.showBoxDebug(box);
-            } else {
-                this.hideBoxDebug();
-            }
-        });
     }
 
     addCameraMapListeners() {
@@ -3543,46 +3651,6 @@ class Reports {
         });
     }
 
-    showBoxDebug(box) {
-        const debugDiv = document.getElementById("report-box-debug");
-        debugDiv.classList.remove("hidden");
-
-        const profile = profiles.profile.emotions;
-
-        let html =
-            '<table class="w-full"><tr><th>Emotion</th><th>Core</th><th>Confidence</th><th>Profile</th><th>Score</th></tr>';
-
-        for (const emotion of box.row.emotions) {
-            const score = emotion.score || 0;
-
-            //if (!emotion.coreName) continue;
-
-            html +=
-                `<tr><td>${emotion.name}</td>` +
-                `<td>${emotion.coreName}</td>` +
-                `<td>${emotion.confidence.toFixed(4)}</td>` +
-                `<td>${profile[emotion.name]}</td>` +
-                `<td>${score.toFixed(0)}</td></tr>`;
-        }
-        html +=
-            `<tr><td colspan="4">t=${box.row.time.toFixed(4)}s</td>` +
-            `<td><b>${box.row.score.toFixed(0)}</b></td></tr>`;
-        html += "</table>";
-
-        html += `<table class="w-full mt-2"><tr><th>Core</th><th>Score</th></tr>`;
-        for (let coreName in box.row.cores) {
-            const coreScore = box.row.cores[coreName].score.toFixed(0);
-            html += `<tr><td>${coreName}</td><td>${coreScore}</td></tr>`;
-        }
-        html += "</table>";
-
-        debugDiv.innerHTML = html;
-    }
-
-    hideBoxDebug() {
-        const debugDiv = document.getElementById("report-box-debug");
-        debugDiv.classList.add("hidden");
-    }
 }
 
 const reports = new Reports();

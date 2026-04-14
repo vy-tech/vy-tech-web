@@ -1,4 +1,4 @@
-import van from './chunks/van-CscOHmlp.js';
+import { v as van } from './chunks/van-t8DywzvC.js';
 import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
 import { B } from './chunks/marked.esm-DDAYIbNt.js';
 

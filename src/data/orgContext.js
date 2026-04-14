@@ -1,11 +1,11 @@
+import van from "vanjs-core";
 import { OrganizationsData } from "./organizations.js";
 
 const STORAGE_KEY = "vy_current_org_id";
 
-// Platform-specific dependencies are loaded via non-top-level dynamic imports
-// so the emitted module graph stays free of top-level await (Firebase Functions
-// loads bundled code via require(), which rejects ESM graphs containing TLA).
-let van = null;
+// node:async_hooks is loaded lazily inside ServerOrgContext so the module graph
+// stays free of top-level await (Firebase Functions loads via require(), which
+// rejects ESM graphs containing TLA).
 let AsyncLocalStorage = null;
 
 // ── BrowserOrgContext ───────────────────────────────────────────────────────
@@ -15,26 +15,15 @@ let AsyncLocalStorage = null;
 class BrowserOrgContext {
     constructor() {
         this.orgsData = new OrganizationsData();
+        this.currentOrgId = van.state(null);
+        this.currentOrg = van.state(null);
+        this.userOrgs = van.state([]);
+        this.isLoading = van.state(true);
         this.userId = null;
-        // Reactive state fields are created lazily in init() once van is loaded.
-        this.currentOrgId = null;
-        this.currentOrg = null;
-        this.userOrgs = null;
-        this.isLoading = null;
     }
 
     async init(user) {
         console.log("init org context with user:", user);
-
-        if (!van) {
-            van = (await import("vanjs-core")).default;
-        }
-        if (!this.currentOrgId) {
-            this.currentOrgId = van.state(null);
-            this.currentOrg = van.state(null);
-            this.userOrgs = van.state([]);
-            this.isLoading = van.state(true);
-        }
 
         this.userId = user.uid;
 
@@ -66,7 +55,7 @@ class BrowserOrgContext {
     }
 
     getCurrentOrgId() {
-        let orgId = this.currentOrgId?.val ?? null;
+        let orgId = this.currentOrgId.val;
 
         if (!orgId) {
             orgId = localStorage.getItem(STORAGE_KEY);
@@ -76,7 +65,7 @@ class BrowserOrgContext {
     }
 
     getCurrentOrg() {
-        return this.currentOrg?.val ?? null;
+        return this.currentOrg.val;
     }
 
     async setCurrentOrg(orgId, fireEvent = true) {
@@ -128,7 +117,7 @@ class BrowserOrgContext {
     }
 
     isInOrg(orgId) {
-        return this.userOrgs?.val?.some((o) => o.id === orgId) ?? false;
+        return this.userOrgs.val.some((o) => o.id === orgId);
     }
 }
 

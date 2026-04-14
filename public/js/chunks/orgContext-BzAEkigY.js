@@ -1,3 +1,4 @@
+import { v as van } from './van-t8DywzvC.js';
 import { d as database } from './db-s3IORrbE.js';
 import { L as Logger, g as getExperimentalSetting, i as isMobileCordova, a as isReactNative, _ as _registerComponent, C as Component, r as registerVersion, b as isBrowserExtension, S as SDK_VERSION, E as ErrorFactory, c as _isFirebaseServerApp, d as getModularInstance, e as getUA, f as createSubscribe, h as LogLevel, F as FirebaseError, j as base64Decode, q as querystring, k as isCloudWorkstation, l as getApp, m as _getProvider, n as getDefaultEmulatorHost, o as deepEqual, p as pingServer, u as updateEmulatorBanner, s as isIE, t as isEmpty, v as querystringDecode, w as extractQuerystring, x as isCloudflareWorker } from './index.esm2017-Y6lvFaM5.js';
 
@@ -7405,10 +7406,9 @@ class OrganizationsData {
 
 const STORAGE_KEY = "vy_current_org_id";
 
-// Platform-specific dependencies are loaded via non-top-level dynamic imports
-// so the emitted module graph stays free of top-level await (Firebase Functions
-// loads bundled code via require(), which rejects ESM graphs containing TLA).
-let van = null;
+// node:async_hooks is loaded lazily inside ServerOrgContext so the module graph
+// stays free of top-level await (Firebase Functions loads via require(), which
+// rejects ESM graphs containing TLA).
 let AsyncLocalStorage = null;
 
 // ── BrowserOrgContext ───────────────────────────────────────────────────────
@@ -7418,26 +7418,15 @@ let AsyncLocalStorage = null;
 class BrowserOrgContext {
     constructor() {
         this.orgsData = new OrganizationsData();
+        this.currentOrgId = van.state(null);
+        this.currentOrg = van.state(null);
+        this.userOrgs = van.state([]);
+        this.isLoading = van.state(true);
         this.userId = null;
-        // Reactive state fields are created lazily in init() once van is loaded.
-        this.currentOrgId = null;
-        this.currentOrg = null;
-        this.userOrgs = null;
-        this.isLoading = null;
     }
 
     async init(user) {
         console.log("init org context with user:", user);
-
-        if (!van) {
-            van = (await import('./van-CscOHmlp.js')).default;
-        }
-        if (!this.currentOrgId) {
-            this.currentOrgId = van.state(null);
-            this.currentOrg = van.state(null);
-            this.userOrgs = van.state([]);
-            this.isLoading = van.state(true);
-        }
 
         this.userId = user.uid;
 
@@ -7469,7 +7458,7 @@ class BrowserOrgContext {
     }
 
     getCurrentOrgId() {
-        let orgId = this.currentOrgId?.val ?? null;
+        let orgId = this.currentOrgId.val;
 
         if (!orgId) {
             orgId = localStorage.getItem(STORAGE_KEY);
@@ -7479,7 +7468,7 @@ class BrowserOrgContext {
     }
 
     getCurrentOrg() {
-        return this.currentOrg?.val ?? null;
+        return this.currentOrg.val;
     }
 
     async setCurrentOrg(orgId, fireEvent = true) {
@@ -7531,7 +7520,7 @@ class BrowserOrgContext {
     }
 
     isInOrg(orgId) {
-        return this.userOrgs?.val?.some((o) => o.id === orgId) ?? false;
+        return this.userOrgs.val.some((o) => o.id === orgId);
     }
 }
 
@@ -7592,4 +7581,4 @@ if (typeof window !== "undefined") {
 }
 
 export { GoogleAuthProvider as G, OrganizationsData as O, __awaiter as _, apiUtil as a, signInWithPopup as b, signOut as c, __generator as d, __values as e, getAuth as g, orgContext as o, signInWithEmailAndPassword as s };
-//# sourceMappingURL=orgContext-CXpKVdn1.js.map
+//# sourceMappingURL=orgContext-BzAEkigY.js.map

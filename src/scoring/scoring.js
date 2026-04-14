@@ -247,7 +247,7 @@ class Score {
         row.cores = {};
         for (const emotion of row.emotions) {
             const weight = profile[emotion.name];
-            if (typeof weight !== "number" || weight === 0) continue;
+            if (typeof weight !== "number") continue;
 
             // Signed reaction: detector score (0..1) times profile weight (can be ±) and scaled to ~0..±2000
             const r = emotion.score * weight * 1000;

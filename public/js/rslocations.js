@@ -1,6 +1,6 @@
-import van from './chunks/van-CscOHmlp.js';
+import { v as van } from './chunks/van-t8DywzvC.js';
 import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
-import { r as rsv } from './chunks/rsvan-CCqDO4fi.js';
+import { r as rsv } from './chunks/rsvan-ApYzafnY.js';
 
 class Form {
     constructor(collection, fields) {

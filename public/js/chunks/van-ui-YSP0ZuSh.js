@@ -1,9 +1,8 @@
-import van from './van-CscOHmlp.js';
+import { v as van } from './van-t8DywzvC.js';
 
 // Quote all tag names so that they're not mangled by minifier
 const { "button": button, "div": div, "header": header, "input": input, "label": label, "span": span, "style": style } = van.tags;
 const toStyleStr = (style) => Object.entries(style).map(([k, v]) => `${k}: ${v};`).join("");
-Object.getPrototypeOf(van.state(null));
 const Modal = ({ closed, backgroundColor = "rgba(0,0,0,.5)", blurBackground = false, clickBackgroundToClose = false, backgroundClass = "", backgroundStyleOverrides = {}, modalClass = "", modalStyleOverrides = {}, }, ...children) => {
     const backgroundStyle = {
         display: "flex",
@@ -74,4 +73,4 @@ const Tabs = ({ activeTab, activeTabDisplay = "block", resultClass = "", style =
 };
 
 export { Modal as M, Tabs as T };
-//# sourceMappingURL=van-ui-DNNh7cjk.js.map
+//# sourceMappingURL=van-ui-YSP0ZuSh.js.map
