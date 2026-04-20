@@ -11,12 +11,12 @@ class Nav {
             description: "Reports",
         },
         { name: "chat", path: "/chat", icon: "comments", description: "Chat" },
-        {
-            name: "library",
-            path: "/library",
-            icon: "folder-open",
-            description: "Library",
-        },
+        // {
+        //     name: "library",
+        //     path: "/library",
+        //     icon: "folder-open",
+        //     description: "Library",
+        // },
         {
             name: "schedule",
             path: "/schedule",

@@ -26,7 +26,7 @@ router.get("/:storage/*pathParts", async (req, res) => {
         const url = await storageInstance.createSignedUrl(path, "GET", 3600);
         res.set("Cache-Control", "public, max-age=3600");
         res.set("Location", url);
-        return res.status(302).end();
+        return res.status(302).json({ url });
     } catch (error) {
         console.error("Error generating signed URL:", error);
         return res.status(500).json({

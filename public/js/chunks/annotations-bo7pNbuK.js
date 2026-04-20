@@ -1,6 +1,6 @@
-import { database } from "./db.js";
-import { Hierarchy } from "../util/hierarchy.js";
-import { orgContext } from "./orgContext.js";
+import { d as database } from './db-s3IORrbE.js';
+import { H as Hierarchy } from './events-C7yf_3nD.js';
+import { o as orgContext } from './orgContext-BzAEkigY.js';
 
 class AnnotationsData {
     constructor() {}
@@ -118,5 +118,6 @@ class AnnotationsData {
 }
 
 const annotationsData = new AnnotationsData();
-export default AnnotationsData;
-export { annotationsData, AnnotationsData };
+
+export { AnnotationsData as A, annotationsData as a };
+//# sourceMappingURL=annotations-bo7pNbuK.js.map

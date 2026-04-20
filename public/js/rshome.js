@@ -1,11 +1,19 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
-import { d as database } from './chunks/db-s3IORrbE.js';
+import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
+import { o as orgContext } from './chunks/orgContext-BzAEkigY.js';
+import { e as eventsData } from './chunks/events-C7yf_3nD.js';
+import { F as FilesData } from './chunks/files-cPHp9Kr7.js';
+import { a as annotationsData } from './chunks/annotations-bo7pNbuK.js';
+import './chunks/db-s3IORrbE.js';
+import './chunks/index.esm2017-Y6lvFaM5.js';
 
 class Home {
     constructor() {
         this.analytics = {
             totalEvents: 0,
             totalHours: 0,
+            totalFiles: 0,
+            totalFileDuration: 0,
             recentAnnotations: [],
             recentActivity: []
         };
@@ -18,6 +26,9 @@ class Home {
             analytics: null,
             bluesky: null
         };
+        this.filesData = new FilesData();
+        this.currentOrgId = null;
+        this.analyticsCache = new Map();
     }
 
     async init() {
@@ -26,19 +37,52 @@ class Home {
             this.loadAnalytics(),
             this.loadBlueskyFeed()
         ]);
+
+        eventBus.on("org.changed", () => {
+            this.loading.analytics = true;
+            this.updateAnalyticsDisplay();
+            this.loadAnalytics();
+        });
+
+        eventBus.on("annotations.updated", () => {
+            const orgId = orgContext.getCurrentOrgId();
+            if (orgId) this.analyticsCache.delete(orgId);
+            this.loadAnalytics();
+        });
     }
 
     async loadAnalytics() {
+        const orgId = orgContext.getCurrentOrgId();
+        this.currentOrgId = orgId;
+
+        if (!orgId) {
+            this.loading.analytics = false;
+            this.errors.analytics = "No organization selected";
+            this.updateAnalyticsDisplay();
+            return;
+        }
+
+        const cached = this.analyticsCache.get(orgId);
+        if (cached && Date.now() - cached.loadedAt < 60_000) {
+            Object.assign(this.analytics, cached.data);
+            this.loading.analytics = false;
+            this.errors.analytics = null;
+            this.updateAnalyticsDisplay();
+        }
+
+        const t0 = performance.now();
         try {
-            // Fetch all analytics data in parallel
-            const [events, annotations] = await Promise.all([
-                database.query("events"),
-                database.query("annotations",
-                    { importance: { value: 3, op: ">=" } }
-                )
+            const [events, annotations, files] = await Promise.all([
+                eventsData.getByOrg(orgId),
+                annotationsData.getByImportanceForOrg(
+                    { value: 3, op: ">=" },
+                    orgId
+                ),
+                this.filesData.getByOrg(orgId)
             ]);
 
-            // Calculate metrics
+            if (this.currentOrgId !== orgId) return;
+
             this.analytics.totalEvents = events.length;
             this.analytics.totalHours = this.calculateTotalHours(events);
             this.analytics.recentAnnotations = annotations
@@ -48,8 +92,21 @@ class Home {
                 })
                 .slice(0, 10);
             this.analytics.recentActivity = this.getRecentActivity(events);
+            this.applyFileStats(files);
+
+            this.analyticsCache.set(orgId, {
+                data: { ...this.analytics },
+                loadedAt: Date.now()
+            });
+
+            console.log(
+                `rshome analytics loaded in ${Math.round(
+                    performance.now() - t0
+                )}ms for org ${orgId}`
+            );
 
             this.loading.analytics = false;
+            this.errors.analytics = null;
             this.updateAnalyticsDisplay();
         } catch (error) {
             console.error("Error loading analytics:", error);
@@ -57,6 +114,15 @@ class Home {
             this.loading.analytics = false;
             this.updateAnalyticsDisplay();
         }
+    }
+
+    applyFileStats(files) {
+        let totalDuration = 0;
+        for (const f of files) {
+            if (typeof f.duration === "number") totalDuration += f.duration;
+        }
+        this.analytics.totalFiles = files.length;
+        this.analytics.totalFileDuration = totalDuration;
     }
 
     async loadBlueskyFeed() {
@@ -130,9 +196,9 @@ class Home {
                 "Analytics"
             ),
 
-            // Stats cards in 2-column grid
+            // Stats cards in a responsive grid
             div(
-                { class: "grid grid-cols-1 sm:grid-cols-2 gap-4" },
+                { class: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" },
                 this.createStatCard(
                     "Total Events",
                     () => this.analytics.totalEvents,
@@ -144,6 +210,19 @@ class Home {
                     () => this.analytics.totalHours.toFixed(1),
                     "clock",
                     "bg-green-500"
+                ),
+                this.createStatCard(
+                    "Total Files",
+                    () => this.analytics.totalFiles,
+                    "file-video",
+                    "bg-purple-500"
+                ),
+                this.createStatCard(
+                    "Recorded Hours",
+                    () =>
+                        (this.analytics.totalFileDuration / 3600).toFixed(1),
+                    "film",
+                    "bg-orange-500"
                 )
             ),
 
@@ -411,6 +490,8 @@ class Home {
     updateAnalyticsDisplay() {
         const totalEventsEl = document.getElementById("stat-total-events");
         const videoHoursEl = document.getElementById("stat-video-hours");
+        const totalFilesEl = document.getElementById("stat-total-files");
+        const recordedHoursEl = document.getElementById("stat-recorded-hours");
         const alertsContentEl = document.getElementById("recent-alerts-content");
         const activityContentEl = document.getElementById("recent-activity-content");
 
@@ -419,6 +500,14 @@ class Home {
         }
         if (videoHoursEl) {
             videoHoursEl.textContent = this.analytics.totalHours.toFixed(1);
+        }
+        if (totalFilesEl) {
+            totalFilesEl.textContent = this.analytics.totalFiles;
+        }
+        if (recordedHoursEl) {
+            recordedHoursEl.textContent = (
+                this.analytics.totalFileDuration / 3600
+            ).toFixed(1);
         }
         if (alertsContentEl) {
             alertsContentEl.innerHTML = "";

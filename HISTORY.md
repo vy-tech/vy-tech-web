@@ -1,5 +1,8 @@
 # Change History
 
+## 2026-04-16
+Made the `rshome` dashboard organization-aware. `loadAnalytics` now filters events, annotations, and files by the current org (via `orgContext.getCurrentOrgId()`) and reruns on the `org.changed` and `annotations.updated` eventBus events. Added two stat cards — Total Files and Recorded Hours — computed from the `files` collection's new `duration`/`chunks`/`startMinuteOfDay`/`endMinuteOfDay` fields (Recorded Hours sums `duration`). `annotationsData.saveAnnotation` now stamps `oid` on write (new annotations only; legacy docs without `oid` stay hidden until a backfill runs). A new `getByImportanceForOrg(importance, orgId)` helper avoids changing the signature of the existing `getByImportance`. Analytics load is cached in-memory by orgId with a 60s TTL and a stale-response guard (`currentOrgId !== orgId`); persistent caching is deferred until timing logs warrant it.
+
 ## 2026-04-14
 Reports page URL now reflects the current selection. `Reports.changeHierarchy()` calls a new `updateLocationBar()` helper that rewrites `window.location` via `history.replaceState` using the same path format `getHierarchyFromPath()` already parses (preserves the first two path segments, appends `hierarchy.toString("/")`). `replaceState` avoids polluting history and sidesteps `popstate` handling — the URL is purely a permalink/reload target, not a navigation step.
 

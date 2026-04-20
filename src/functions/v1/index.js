@@ -3,7 +3,7 @@ import "../firebase-shim.js";
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
 
-import { keyHashHmacSecret } from "./helpers.js";
+import { keyHashHmacSecret, seaweedAccessKey, seaweedSecretKey } from "./helpers.js";
 import { requireApiKey } from "./middleware.js";
 import videoRoutes from "./routes/video.js";
 import fetchRoutes from "./routes/fetch.js";
@@ -45,7 +45,7 @@ export const v1 = onRequest(
         memory: "512MiB",
         timeoutSeconds: 60,
         invoker: "public",
-        secrets: [keyHashHmacSecret],
+        secrets: [keyHashHmacSecret, seaweedAccessKey, seaweedSecretKey],
     },
     functionApp
 );

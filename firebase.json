@@ -3,7 +3,7 @@
         "public": "public",
         "rewrites": [
             {
-                "regex": "^/(user|users|home|dashboard|locations|schedule|settings|report|reports|profile|playlist|admin|chat|docs)(?:/.*)?$",
+                "regex": "^/(user|users|home|dashboard|locations|schedule|settings|report|reports|profile|playlist|admin|chat|docs|bluesky)(?:/.*)?$",
                 "function": {
                     "functionId": "app",
                     "codebase": "default",

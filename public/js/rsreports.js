@@ -1,11 +1,13 @@
 import { v as van } from './chunks/van-t8DywzvC.js';
 import { M as Modal, T as Tabs } from './chunks/van-ui-YSP0ZuSh.js';
 import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
-import { P as ProfilesData, A as AnnotationsData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as storage, e as profilesData } from './chunks/annotations-CaDjyxAf.js';
+import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as storage, e as profilesData } from './chunks/summarizer-BXNkjElV.js';
 import { e as events } from './chunks/events-0vYhdN4u.js';
-import { d as database, s as serverTimestamp } from './chunks/db-s3IORrbE.js';
+import { d as database } from './chunks/db-s3IORrbE.js';
 import { H as Hierarchy, t as timeUtil } from './chunks/events-C7yf_3nD.js';
+import { A as AnnotationsData } from './chunks/annotations-bo7pNbuK.js';
 import { o as orgContext, a as apiUtil } from './chunks/orgContext-BzAEkigY.js';
+import { F as FilesData } from './chunks/files-cPHp9Kr7.js';
 import './chunks/index.esm2017-Y6lvFaM5.js';
 
 class Profiles extends ProfilesData {
@@ -2472,145 +2474,6 @@ class AnnotationLog {
 }
 
 const annotationLog = new AnnotationLog();
-
-class FilesData {
-    async getById(fileId) {
-        return await database.get("files", fileId);
-    }
-
-    async getByOrg(orgId) {
-        return await database.query("files", { oid: orgId });
-    }
-
-    async getByOrgAndContext(orgId, context) {
-        return await database.query("files", { oid: orgId, context: context });
-    }
-
-    async getByContext(context) {
-        return await this.getByOrgAndContext(
-            orgContext.getCurrentOrgId(),
-            context
-        );
-    }
-
-    async getByHierarchy(hierarchy) {
-        let h = new Hierarchy(hierarchy);
-        if (!h.file) {
-            console.warn("Invalid hierarchy for file lookup:", hierarchy);
-            return null;
-        }
-
-        let files = await database.query("files", {
-            oid: orgContext.getCurrentOrgId(),
-            hierarchy: h.toFileString(),
-        });
-
-        if (files && files.length > 0) {
-            return files[0];
-        } else {
-            console.warn("File not found for hierarchy:", h.toFileString());
-            return null;
-        }
-    }
-
-    tokenize(name) {
-        // Simple tokenization: lowercase, trim, replace non-words with underscores,
-        // collapse underscores
-        return name
-            .toLowerCase()
-            .trim()
-            .replace(/\W+/g, "_")
-            .replace(/_+/g, "_");
-    }
-
-    async ensureUniqueToken(name, org, context, fileId = null) {
-        // Ensures that the token generated from the organization name is unique
-        // by appending a random suffix if necessary.
-
-        const baseToken = this.tokenize(name);
-        let token = baseToken;
-        while (true) {
-            const existing = await database.query("files", {
-                token: token,
-                oid: org,
-                context: context,
-            });
-            if (
-                !existing ||
-                existing.length === 0 ||
-                existing[0].id === fileId
-            ) {
-                break;
-            }
-            const suffix = Math.floor(Math.random() * 900 + 100); // random 3-digit number
-            token = `${baseToken}_${suffix}`;
-        }
-
-        return token;
-    }
-
-    async update(fileId, updates) {
-        return await database.update("files", fileId, updates);
-    }
-
-    async save(
-        filename,
-        destinationPath,
-        context,
-        type,
-        fileId = null,
-        storage = "firebase"
-    ) {
-        const org = orgContext.getCurrentOrg();
-        const orgId = orgContext.getCurrentOrgId();
-
-        // This is checked by the firestore rule as well.
-        if (!orgContext.isInOrg(orgId)) {
-            console.error(
-                "Cannot save file: user is not in organization",
-                orgId
-            );
-            throw new Error("Cannot save file: not in organization " + orgId);
-        }
-
-        const filenameStub = filename.slice(0, filename.lastIndexOf("."));
-        const token = await this.ensureUniqueToken(
-            filenameStub,
-            orgId,
-            context,
-            fileId
-        );
-
-        let id = fileId || database.pushid();
-        let hierarchy = new Hierarchy();
-        hierarchy.org = org.token || orgId;
-        hierarchy.context = context;
-        hierarchy.file = token;
-
-        const fileDoc = {
-            id: id,
-            hierarchy: hierarchy.toFileString(),
-            filename: filename,
-            token: token,
-            path: `files/${orgId}/${destinationPath}/${filename}`,
-            context: context,
-            type: type,
-            oid: orgId,
-            uid: orgContext.userId,
-            storage: storage,
-        };
-
-        // If a fileId was not passed in add the created field.  We
-        // needed it before writing so we could produce hierarchy.
-        if (!fileId) {
-            fileDoc.created = serverTimestamp();
-        }
-
-        console.log("Saving file document:", fileDoc);
-
-        return await database.set("files", fileDoc);
-    }
-}
 
 class JobsData {
     async getByFile(fileId) {
