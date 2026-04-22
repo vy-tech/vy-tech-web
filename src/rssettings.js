@@ -101,8 +101,6 @@ class Settings {
                                 return this.createLocationsTab();
                             case "applications":
                                 return this.createApplicationsTab();
-                            case "billing":
-                                return this.createBillingTab();
                         }
                     })
                 )
@@ -134,8 +132,7 @@ class Settings {
                 class: "flex space-x-2 border-b border-gray-200 dark:border-gray-700",
             },
             tabButton("locations", "Locations"),
-            tabButton("applications", "Applications"),
-            tabButton("billing", "Billing")
+            tabButton("applications", "Applications")
         );
     }
 
@@ -1071,27 +1068,6 @@ class Settings {
         await this.loadApplications();
     }
 
-    // =========================================================================
-    // Billing Tab
-    // =========================================================================
-
-    createBillingTab() {
-        const { div, h2, p } = van.tags;
-
-        return div(
-            {
-                class: "bg-white dark:bg-gray-800 rounded-lg shadow p-8 border border-gray-200 dark:border-gray-700 text-center",
-            },
-            h2(
-                { class: "text-lg font-semibold dark:text-white mb-2" },
-                "Billing"
-            ),
-            p(
-                { class: "text-gray-500 dark:text-gray-400" },
-                "Billing management is coming soon."
-            )
-        );
-    }
 }
 
 const settings = new Settings();

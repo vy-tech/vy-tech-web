@@ -44,6 +44,8 @@ WORKDIR /app/functions/file
 RUN npm install
 WORKDIR /app/functions/v1
 RUN npm install
+WORKDIR /app/functions/billing
+RUN npm install
 
 
 WORKDIR /app

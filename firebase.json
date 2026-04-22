@@ -3,7 +3,7 @@
         "public": "public",
         "rewrites": [
             {
-                "regex": "^/(user|users|home|dashboard|locations|schedule|settings|report|reports|profile|playlist|admin|chat|docs|bluesky)(?:/.*)?$",
+                "regex": "^/(user|users|home|dashboard|locations|schedule|settings|report|reports|profile|playlist|admin|chat|docs|bluesky|billing|uploads)(?:/.*)?$",
                 "function": {
                     "functionId": "app",
                     "codebase": "default",
@@ -31,6 +31,14 @@
                 "function": {
                     "functionId": "v1",
                     "codebase": "v1",
+                    "region": "us-central1"
+                }
+            },
+            {
+                "regex": "^/api/billing/.*$",
+                "function": {
+                    "functionId": "billing",
+                    "codebase": "billing",
                     "region": "us-central1"
                 }
             },
@@ -79,6 +87,17 @@
         {
             "source": "functions/v1",
             "codebase": "v1",
+            "ignore": [
+                "node_modules",
+                ".git",
+                "firebase-debug.log",
+                "firebase-debug.*.log",
+                "*.local"
+            ]
+        },
+        {
+            "source": "functions/billing",
+            "codebase": "billing",
             "ignore": [
                 "node_modules",
                 ".git",

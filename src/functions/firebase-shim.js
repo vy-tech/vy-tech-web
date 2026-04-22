@@ -28,12 +28,15 @@ let firebaseFunctions = {
                 q = q.where(constraint.field, constraint.op, constraint.value);
             } else if (constraint.type === "orderBy") {
                 q = q.orderBy(constraint.field, constraint.direction || "asc");
+            } else if (constraint.type === "limit") {
+                q = q.limit(constraint.value);
             }
         });
         return q;
     },
     where: (field, op, value) => ({ type: "where", field, op, value }),
     orderBy: (field, direction) => ({ type: "orderBy", field, direction }),
+    limit: (value) => ({ type: "limit", value }),
     onSnapshot: (query, callback) => query.onSnapshot(callback),
     serverTimestamp: () => Timestamp.now(),
     runTransaction: (database, updateFunction) =>

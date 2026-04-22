@@ -121,5 +121,24 @@ service cloud.firestore {
       allow read, delete: if isInOrg(resource.data.oid);
     }
 
+    // Credit balance per org. Server-written only (Cloud Functions use the
+    // admin SDK and bypass rules). Any member of the org can read.
+    match /credit_balances/{oid} {
+      allow read: if isInOrg(oid);
+      allow write: if false;
+    }
+
+    // Append-only ledger of credit purchases, grants, and usage debits.
+    // Server-written only. Read by any member; UI gates owner-only views.
+    match /credit_ledger/{id} {
+      allow read: if isInOrg(resource.data.oid);
+      allow write: if false;
+    }
+
+    // Stripe event idempotency log — server-only.
+    match /stripe_events/{id} {
+      allow read, write: if false;
+    }
+
   }
 }

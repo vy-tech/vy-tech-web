@@ -1,108 +1,73 @@
 # Getting Started
 
-This guide walks you through setting up the Vy API so you can upload and process video programmatically. By the end you will have an organization, an application, an API key, and a working upload.
+Welcome to Vy. This guide walks you through uploading your first video and seeing behavior analysis results — no code required.
 
-![Vy API Key Steps](/img/vy-api-key-steps.png)
+Vy extracts behavior signals (dwell, attention, emotion, and more) from video you capture in your venue, then lets you browse the results by location, time, and event.
 
----
-
-## 1. Create or select an organization
-
-Everything in Vy — applications, API keys, uploads, and processing jobs — is scoped to an **organization**. When you first sign in, a personal organization is created automatically using your account name.
-
-To create a team organization:
-
-1. Open the **navigation sidebar** and click the organization name at the top.
-2. Select **Create Organization** and give it a name.
-3. The new organization appears in the sidebar picker. Select it to switch context.
-
-All resources you create from this point forward belong to the selected organization.
-
-> **Tip:** Use your personal org for experimentation and a team org for shared projects. You can invite teammates to a team org from the Settings page.
+> Writing code against the Vy API instead? See the [API Quickstart](/docs#api-quickstart).
 
 ---
 
-## 2. Create an application
+## 1. Sign in and pick an organization
 
-Applications represent a distinct integration or project that uses the Vy API. Each application can have its own set of API keys.
+When you first sign in, Vy creates a **personal organization** for you automatically. Everything you upload is scoped to the selected organization.
 
-1. Navigate to **Settings**.
-2. Under the **Applications** section, click **Create Application**.
-3. Enter a name (e.g. "Stadium Pilot") and an optional description.
-4. Click **Save**.
+- The current organization appears in the top bar. Click it to switch between organizations or create a new one.
+- Use your personal org for experimentation.
+- To collaborate with teammates, click the org picker and choose **Create Organization**, then invite others from the **Settings** page.
 
-Your new application appears in the list and is ready for API key generation.
-
----
-
-## 3. Generate an API key
-
-API keys authenticate your requests to the Vy API. Keys are scoped to a specific application within your organization.
-
-1. In **Settings**, find your application in the list.
-2. Click **Generate Key** and give the key a name (e.g. "production", "dev-laptop").
-3. Copy the key immediately — it is shown **only once** and cannot be retrieved later.
-
-Keys use the prefix `vyk_` so they are easy to identify. Store the key securely; treat it like a password.
+![Selecting an organization](/doc/vy-gs-orgs.png)
 
 ---
 
-## 4. Verify authentication
+## 2. Upload your first video
 
-Use the health-check endpoint to confirm your key is working before writing any upload code.
+Open the **Uploads** tab in the left sidebar (cloud-upload icon). This is the one-stop place to add videos and, soon, related data like transcripts and point-of-sale receipts.
 
-### cURL
+![Uploads view](/doc/vy-gs-uploads.png)
 
-```bash
-curl -H "X-API-Key: vyk_YOUR_KEY_HERE" \
-     https://app.vy.vision/api/v1/health
-```
+1. Click **Upload Video**.
+2. Choose a local video file. Supported formats: `.mp4`, `.mov`, `.avi`, `.m4v`, `.mkv`.
+3. Confirm the filename (defaults to the file's own name) and click **Upload**.
 
-### Python
+![Upload dialog with a file selected](/doc/vy-gs-upload.png)
 
-```python
-import requests
+You will see a progress bar while the file uploads directly to secure storage. Once the upload finishes, Vy automatically queues a processing job.
 
-resp = requests.get(
-    "https://app.vy.vision/api/v1/health",
-    headers={"X-API-Key": "vyk_YOUR_KEY_HERE"},
-)
-print(resp.json())  # {"status": "ok"}
-```
-
-### Node.js
-
-```js
-const resp = await fetch("https://app.vy.vision/api/v1/health", {
-    headers: { "X-API-Key": "vyk_YOUR_KEY_HERE" },
-});
-console.log(await resp.json()); // { status: "ok" }
-```
-
-A successful response looks like:
-
-```json
-{ "status": "ok" }
-```
-
-If you receive `401 Unauthorized`, double-check that the key is correct and has not expired.
-
-You can pass the key with either header format:
-
-```
-X-API-Key: vyk_...
-```
-
-or
-
-```
-Authorization: Bearer vyk_...
-```
+> **Tip:** start with a short clip (under a minute) for your first upload so you can quickly see end-to-end results before committing longer footage.
 
 ---
 
-## Next steps
+## 3. Watch processing progress
 
-- See the [Videos](/docs#videos) tab for upload, processing, and retrieval endpoints.
-- See the [Events & Locations](/docs#events-locations) tab for querying locations and camera events.
-- Upload your first video and poll `/api/v1/video/status/:fileId` to watch processing progress.
+After upload, a **Processing...** status appears with a live view of the job pipeline. You can leave the page — processing continues server-side — but while you stay, the status updates in real time.
+
+![File being processed](/doc/vy-gs-process.png)
+
+Because processing runs in 1-minute chunks, it's normal to see many instances of the same kind of processing happening in parallel — each one is handling a different slice of the video.
+
+When processing completes, the status changes to **Processing complete** and the video is ready to view in Reports.
+
+---
+
+## 4. View your results
+
+Open the **Reports** tab in the left sidebar.
+
+- Pick a location and date in the report tree.
+- Expand the **Videos** section and click your uploaded file.
+- The video player loads alongside visualizations: attention heatmaps, emotion timelines, and the event log.
+- Use the heatmap overlays and timeline scrubber to drill into specific moments.
+
+![File shown in the reports view](/doc/vy-gs-reports.png)
+
+The URL updates as you navigate, so you can bookmark any view or share it with a teammate.
+
+---
+
+## 5. Next steps
+
+- **Manage uploads.** Return to **Uploads** anytime to re-upload a replacement for an existing file, or to delete one you no longer need.
+- **Invite teammates.** Visit **Settings** to add collaborators to a team org.
+- **Billing and credits.** Video processing consumes credits. The **Billing** tab shows your current balance and lets you purchase more.
+- **Build an integration.** If you want to upload programmatically or pull processed data into your own tools, read the [API Quickstart](/docs#api-quickstart) and the reference tabs ([Videos](/docs#videos), [Events & Locations](/docs#events-locations), [Annotations](/docs#annotations)).

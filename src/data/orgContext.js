@@ -68,7 +68,7 @@ class BrowserOrgContext {
         return this.currentOrg.val;
     }
 
-    async setCurrentOrg(orgId, fireEvent = true) {
+    async setCurrentOrg(orgId, initialized = true) {
         const { eventBus } = await import("../eventbus.js");
 
         const org = this.userOrgs.val.find((o) => o.id === orgId);
@@ -82,13 +82,14 @@ class BrowserOrgContext {
         localStorage.setItem(STORAGE_KEY, orgId);
         console.log("Set current organization to:", orgId);
 
-        if (fireEvent) {
-            eventBus.fire("org.changed", {
-                orgId,
-                org,
-                isPersonal: org.isPersonal || false,
-            });
-        }
+        
+        eventBus.fire("org.changed", {
+            orgId,
+            org,
+            isPersonal: org.isPersonal || false,
+            initialized
+        });
+        
 
         return true;
     }

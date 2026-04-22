@@ -1,9 +1,7 @@
-import { v as van } from './chunks/van-t8DywzvC.js';
-import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
-import { o as orgContext, a as apiUtil } from './chunks/orgContext-BzAEkigY.js';
-import { d as database } from './chunks/db-s3IORrbE.js';
-import { M as Modal } from './chunks/van-ui-YSP0ZuSh.js';
-import './chunks/index.esm2017-Y6lvFaM5.js';
+import { v as van, e as eventBus } from './chunks/eventbus-c5hoJhOF.js';
+import { o as orgContext } from './chunks/orgContext-CAnKHZle.js';
+import { d as database, a as apiUtil } from './chunks/apiUtil-BuesFibk.js';
+import { M as Modal } from './chunks/van-ui-D8yynE9H.js';
 
 /**
  * LocationsData manages physical location records for an organization.
@@ -294,8 +292,6 @@ class Settings {
                                 return this.createLocationsTab();
                             case "applications":
                                 return this.createApplicationsTab();
-                            case "billing":
-                                return this.createBillingTab();
                         }
                     })
                 )
@@ -327,8 +323,7 @@ class Settings {
                 class: "flex space-x-2 border-b border-gray-200 dark:border-gray-700",
             },
             tabButton("locations", "Locations"),
-            tabButton("applications", "Applications"),
-            tabButton("billing", "Billing")
+            tabButton("applications", "Applications")
         );
     }
 
@@ -1264,27 +1259,6 @@ class Settings {
         await this.loadApplications();
     }
 
-    // =========================================================================
-    // Billing Tab
-    // =========================================================================
-
-    createBillingTab() {
-        const { div, h2, p } = van.tags;
-
-        return div(
-            {
-                class: "bg-white dark:bg-gray-800 rounded-lg shadow p-8 border border-gray-200 dark:border-gray-700 text-center",
-            },
-            h2(
-                { class: "text-lg font-semibold dark:text-white mb-2" },
-                "Billing"
-            ),
-            p(
-                { class: "text-gray-500 dark:text-gray-400" },
-                "Billing management is coming soon."
-            )
-        );
-    }
 }
 
 const settings = new Settings();

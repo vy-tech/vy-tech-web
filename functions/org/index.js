@@ -55,12 +55,15 @@ let firebaseFunctions = {
                 q = q.where(constraint.field, constraint.op, constraint.value);
             } else if (constraint.type === "orderBy") {
                 q = q.orderBy(constraint.field, constraint.direction || "asc");
+            } else if (constraint.type === "limit") {
+                q = q.limit(constraint.value);
             }
         });
         return q;
     },
     where: (field, op, value) => ({ type: "where", field, op, value }),
     orderBy: (field, direction) => ({ type: "orderBy", field, direction }),
+    limit: (value) => ({ type: "limit", value }),
     onSnapshot: (query, callback) => query.onSnapshot(callback),
     serverTimestamp: () => Timestamp.now(),
     runTransaction: (database, updateFunction) =>
@@ -172,6 +175,7 @@ let getFirestore,
     query,
     orderBy,
     where,
+    limit,
     onSnapshot,
     serverTimestamp,
     runTransaction,
@@ -202,6 +206,7 @@ async function initializeFirestore() {
     query = firebaseFunctions.query;
     orderBy = firebaseFunctions.orderBy;
     where = firebaseFunctions.where;
+    limit = firebaseFunctions.limit;
     onSnapshot = firebaseFunctions.onSnapshot;
     serverTimestamp = firebaseFunctions.serverTimestamp;
     runTransaction = firebaseFunctions.runTransaction;
@@ -296,8 +301,8 @@ class Database {
         return data;
     }
 
-    async query(collectionName, filters = null, order = null) {
-        console.log("Querying", collectionName, filters, order);
+    async query(collectionName, filters = null, order = null, limitN = null) {
+        console.log("Querying", collectionName, filters, order, limitN);
         await this.ensureFirestore();
 
         let q = collection(this.db, collectionName);
@@ -326,6 +331,10 @@ class Database {
                     q = query(q, orderBy(order));
                 }
             }
+        }
+
+        if (limitN) {
+            q = query(q, limit(limitN));
         }
 
         const querySnapshot = await getDocs(q);
@@ -438,6 +447,68 @@ class Database {
             console.error("Transaction failed: ", error);
             return false;
         }
+    }
+
+    /**
+     * Run a Firestore transaction. The callback receives a tx-scoped proxy
+     * exposing `get`, `set`, `update`, `delete` against collection + docId,
+     * mirroring the non-transactional API. All reads must occur before any
+     * writes within the callback (Firestore requirement).
+     *
+     * The `set` call mirrors `Database.set`: if `docData.id` is missing it
+     * is auto-assigned via `pushid()`; `created` is stamped on new docs; and
+     * `updated` is stamped on every write.
+     *
+     * @param {(tx: { get, set, update, delete }) => Promise<T>} callback
+     * @returns {Promise<T>}
+     */
+    async transaction(callback) {
+        await this.ensureFirestore();
+
+        return await runTransaction(this.db, async (tx) => {
+            const proxy = {
+                get: async (collectionName, docId) => {
+                    const docRef = doc(this.db, collectionName, docId);
+                    const docSnap = await tx.get(docRef);
+                    if (
+                        !docSnap ||
+                        (typeof docSnap.exists === "boolean" &&
+                            !docSnap.exists) ||
+                        (typeof docSnap.exists === "function" &&
+                            !docSnap.exists())
+                    ) {
+                        return null;
+                    }
+                    const data = docSnap.data();
+                    data.id = docSnap.id;
+                    return data;
+                },
+                set: (collectionName, docData, isNew = false) => {
+                    if (!docData.id || isNew) {
+                        docData.created = docData.created || serverTimestamp();
+                    }
+                    if (!docData.id) {
+                        docData.id = this.pushid();
+                    }
+                    docData.updated = serverTimestamp();
+                    const docRef = doc(this.db, collectionName, docData.id);
+                    tx.set(docRef, docData);
+                    return docData.id;
+                },
+                update: (collectionName, docId, updates) => {
+                    const docRef = doc(this.db, collectionName, docId);
+                    const processedUpdates = { ...updates };
+                    processedUpdates.updated = serverTimestamp();
+                    tx.update(docRef, processedUpdates);
+                },
+                delete: (collectionName, docId) => {
+                    const docRef = doc(this.db, collectionName, docId);
+                    tx.delete(docRef);
+                },
+            };
+
+            return await callback(proxy);
+        });
     }
 
     async listen(collectionName, callback, filters = null) {
@@ -10101,6 +10172,220 @@ class ApiKeysData {
     }
 }
 
+class JobsData {
+    async getByFile(fileId) {
+        return await database.query("jobs", { refType: "file", refId: fileId });
+    }
+
+    async getByRef(refType, refId, type) {
+        const filters = { refType, refId };
+        if (type) filters.type = type;
+        return await database.query("jobs", filters);
+    }
+
+    async resetRejectedByOrg(oid) {
+        const rejected = await database.query("jobs", {
+            oid,
+            status: "rejected",
+        });
+        for (const job of rejected) {
+            await database.update("jobs", job.id, { status: "requested" });
+            if (job.refType === "file" && job.refId) {
+                await database.atomicUpdate(
+                    "files",
+                    job.refId,
+                    "status",
+                    "rejected",
+                    "processing"
+                );
+            }
+        }
+        return rejected.length;
+    }
+
+    async queueJob(refType, refId, type, uid, oid, location = null) {
+        const jobDoc = {
+            refType: refType,
+            refId: refId,
+            type: type,
+            status: "requested",
+            uid: uid,
+            oid: oid,
+            location: location,
+        };
+
+        return await database.set("jobs", jobDoc);
+    }
+
+    async getJobTree(jobId) {
+        const jobs = [];
+
+        const getJob = async (id, depth) => {
+            const jobData = await database.get("jobs", id);
+            if (!jobData) return;
+
+            jobs.push({ ...jobData, depth });
+
+            if (jobData.children && jobData.children.length > 0) {
+                for (const childId of jobData.children) {
+                    await getJob(childId, depth + 1);
+                }
+            }
+        };
+
+        await getJob(jobId, 0);
+
+        return jobs;
+    }
+
+    watchJobStatus(jobId, onChange) {
+        return new Promise((resolve, reject) => {
+            const status = {};
+            const watched = {};
+
+            const notify = () => {
+                const keys = Object.keys(status).sort().reverse();
+                onChange(keys.map((key) => status[key]).join("\n"));
+            };
+
+            const watchJob = async (id, depth) => {
+                if (watched[id]) return;
+                watched[id] = true;
+
+                const indent = "  ".repeat(depth);
+
+                const unsub = await database.watch(
+                    "jobs",
+                    id,
+                    async (jobData) => {
+                        if (jobData.status === "completed") {
+                            delete status[id];
+                        } else {
+                            status[id] =
+                                `${indent}${jobData.type} - ${jobData.status}${jobData.message ? ": " + jobData.message : ""}`;
+                        }
+
+                        if (jobData.children && jobData.children.length > 0) {
+                            for (const childId of jobData.children) {
+                                await watchJob(childId, depth + 1);
+                            }
+                        }
+
+                        notify();
+
+                        if (
+                            jobData.status === "completed" ||
+                            jobData.status === "failed"
+                        ) {
+                            unsub();
+                            if (id === jobId) {
+                                if (jobData.status === "completed") {
+                                    resolve();
+                                } else if (jobData.status === "failed") {
+                                    reject(
+                                        new Error(
+                                            `Job ${jobId} failed: ${jobData.message}`
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    }
+                );
+            };
+
+            watchJob(jobId, 0);
+        });
+    }
+}
+
+/**
+ * Server-side credit mutation helpers. These must only run server-side —
+ * client Firestore rules deny writes on `credit_balances` and `credit_ledger`.
+ */
+
+/**
+ * Grant (or debit, with a negative amount) credits to an organization.
+ * Writes a ledger row and atomically updates the balance.
+ *
+ * Options:
+ *   oid         — target org id (required)
+ *   amount      — integer; positive grants, negative adjusts (required)
+ *   source      — "admin" | "stripe" | "system" | "processing"
+ *   type        — optional override; defaults to "grant" / "adjustment" /
+ *                 "debit" based on source and sign
+ *   uid         — actor user id, or null for system
+ *   description — human-readable description
+ *   ref         — external reference (session id, job id, etc.)
+ *   onlyIfNew   — if true, skip the grant when a balance doc already exists
+ *                 for this org. Returns { skipped: true } in that case. Used
+ *                 for the one-shot welcome grant.
+ *
+ * Returns { balanceAfter, ledgerId } on success, or { skipped: true } if
+ * onlyIfNew was set and a balance already existed.
+ */
+async function grantCredits({
+    oid,
+    amount,
+    source,
+    type = null,
+    uid = null,
+    description,
+    ref = null,
+    onlyIfNew = false,
+}) {
+    if (!oid) throw new Error("grantCredits: oid required");
+    if (!Number.isFinite(amount) || amount === 0) {
+        throw new Error("grantCredits: non-zero integer amount required");
+    }
+
+    const resolvedType =
+        type ||
+        ("grant");
+
+    const result = await database.transaction(async (tx) => {
+        const balance = await tx.get("credit_balances", oid);
+
+        if (onlyIfNew && balance) {
+            return { skipped: true };
+        }
+
+        const current = balance ? balance.credits || 0 : 0;
+        const next = current + amount;
+
+        tx.set("credit_balances", {
+            id: oid,
+            oid,
+            credits: next,
+            created: balance?.created || serverTimestamp(),
+        });
+
+        const ledgerId = tx.set("credit_ledger", {
+            oid,
+            type: resolvedType,
+            amount,
+            balanceAfter: next,
+            uid,
+            source,
+            ref,
+            description,
+        });
+
+        return { balanceAfter: next, ledgerId };
+    });
+
+    if (!result.skipped && amount > 0) {
+        await new JobsData().resetRejectedByOrg(oid);
+    }
+
+    return result;
+}
+
+// Each new personal org gets a one-shot free credits grant so the user can
+// try processing without paying. Idempotent via the `onlyIfNew` guard in
+// `grantCredits` — a second /create/personal call (existing org) is a no-op.
+const WELCOME_CREDITS = 1000;
+
 const keyHashHmacSecret = defineSecret("KEY_HASH_HMAC_SECRET");
 
 function getSecrets() {
@@ -10295,6 +10580,21 @@ orgApp.post("/create/personal", async (req, res) => {
         org.id = await orgsData.create(org.name, req.uid, org);
 
         await syncUserOrgClaims(req.uid);
+
+        try {
+            await grantCredits({
+                oid: org.id,
+                amount: WELCOME_CREDITS,
+                source: "system",
+                uid: req.uid,
+                ref: "welcome",
+                description: `Welcome bonus (${WELCOME_CREDITS.toLocaleString()} free credits)`,
+                onlyIfNew: true,
+            });
+        } catch (grantErr) {
+            // Don't fail org creation if the grant fails; log and continue.
+            console.error("Welcome grant failed:", grantErr);
+        }
 
         return res.status(201).json({
             success: true,
