@@ -65,8 +65,10 @@ const clientConfig = {
         rslocations: "src/rslocations.js",
         rsschedule: "src/rsschedule.js",
         rsreports: "src/rsreports.js",
+        rsuploads: "src/rsuploads.js",
         rssettings: "src/rssettings.js",
         rsprofile: "src/rsprofile.js",
+        rsbilling: "src/rsbilling.js",
         rsadmin: "src/rsadmin.js",
         rschat: "src/rschat.js",
         rsdocs: "src/rsdocs.js",
@@ -116,6 +118,9 @@ const functionsConfigs = Object.entries(functionEntries).map(
 
             // External OpenAI SDK
             if (id === "openai" || id.startsWith("openai/")) return true;
+
+            // External Stripe SDK
+            if (id === "stripe" || id.startsWith("stripe/")) return true;
 
             // External S3 SDKs
             if (id === "@aws-sdk/client-s3") return true;

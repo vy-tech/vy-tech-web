@@ -11,6 +11,26 @@ class JobsData {
         return await database.query("jobs", filters);
     }
 
+    async resetRejectedByOrg(oid) {
+        const rejected = await database.query("jobs", {
+            oid,
+            status: "rejected",
+        });
+        for (const job of rejected) {
+            await database.update("jobs", job.id, { status: "requested" });
+            if (job.refType === "file" && job.refId) {
+                await database.atomicUpdate(
+                    "files",
+                    job.refId,
+                    "status",
+                    "rejected",
+                    "processing"
+                );
+            }
+        }
+        return rejected.length;
+    }
+
     async queueJob(refType, refId, type, uid, oid, location = null) {
         const jobDoc = {
             refType: refType,

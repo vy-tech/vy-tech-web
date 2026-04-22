@@ -1,5 +1,6 @@
 import van from "vanjs-core";
 import { topBar } from "./ui/topbar.js";
+import { eventBus } from "./eventbus.js";
 
 class Nav {
     targets = [
@@ -9,6 +10,12 @@ class Nav {
             path: "/reports",
             icon: "chart-bar",
             description: "Reports",
+        },
+        {
+            name: "uploads",
+            path: "/uploads",
+            icon: "cloud-upload-alt",
+            description: "Uploads",
         },
         { name: "chat", path: "/chat", icon: "comments", description: "Chat" },
         // {
@@ -36,10 +43,23 @@ class Nav {
             description: "Settings",
         },
         {
+            name: "billing",
+            path: "/billing",
+            icon: "credit-card",
+            description: "Billing",
+        },
+        {
             name: "profile",
             path: "/profile",
             icon: "user-circle",
             description: "Profile",
+        },
+        {
+            name: "admin",
+            path: "/admin",
+            icon: "shield-alt",
+            description: "Admin",
+            hidden: true,
         },
     ];
 
@@ -61,8 +81,9 @@ class Nav {
                     : "text-gray-300";
             return a(
                 {
+                    id: `nav-${target.name}`,
                     href: target.path,
-                    class: `${color} my-4 hover:text-[#d94d50] flex items-center gap-3 w-full`,
+                    class: `${color} my-4 hover:text-[#d94d50] flex items-center gap-3 w-full ${target.hidden ? "hidden" : ""}`,
                 },
                 i({ class: `las la-${target.icon} text-4xl flex-shrink-0` }),
                 span(
@@ -110,6 +131,13 @@ class Nav {
         van.add(parentElement, navSidebar, rightContainer);
 
         topBar.addElements(document.getElementById("topbar-container"));
+
+        eventBus.on("org.changed", (e) => {
+            const org = e.detail.org;
+            document
+                .getElementById("nav-admin")
+                .classList.toggle("hidden", !(org.name == "Vy"));
+        });
     }
 }
 

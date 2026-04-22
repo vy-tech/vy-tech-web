@@ -14,6 +14,12 @@ const fileApp = express();
 fileApp.use(express.json());
 fileApp.use(requireAuth);
 
+// Registry of file contexts that can be queued for server-side processing.
+// Add an entry here to allow a new context through /process/:file_id.
+const PROCESSORS = {
+    video: { jobType: "ProcessFootage", mimePrefix: "video/" },
+};
+
 // Functions
 function guessMimeType(filename) {
     const extension = filename.split(".").pop().toLowerCase();
@@ -74,8 +80,8 @@ fileApp.post("/process/:file_id", async (req, res) => {
         });
     }
 
-    // Ensure context is "video" and type starts with "video/"
-    if (file.context !== "video" || !file.type.startsWith("video/")) {
+    const processor = PROCESSORS[file.context];
+    if (!processor || !file.type.startsWith(processor.mimePrefix)) {
         console.warn(
             `File ${file_id} has unsupported context ${file.context} or type ${file.type} for processing`
         );
@@ -89,7 +95,7 @@ fileApp.post("/process/:file_id", async (req, res) => {
         const jobId = await jobs.queueJob(
             "file",
             file_id,
-            "ProcessFootage",
+            processor.jobType,
             req.uid,
             file.oid,
             opts.location || null
@@ -211,7 +217,10 @@ fileApp.post("/delete/:file_id", async (req, res) => {
     }
 
     try {
-        await files.update(file_id, { deleteRequested: Date.now() });
+        await files.update(file_id, {
+            status: "deleted",
+            deletedAt: Date.now(),
+        });
 
         const jobs = new JobsData();
         const jobId = await jobs.queueJob(

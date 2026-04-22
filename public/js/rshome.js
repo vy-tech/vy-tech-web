@@ -1,11 +1,10 @@
-import { v as van } from './chunks/van-t8DywzvC.js';
-import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
-import { o as orgContext } from './chunks/orgContext-BzAEkigY.js';
-import { e as eventsData } from './chunks/events-C7yf_3nD.js';
-import { F as FilesData } from './chunks/files-cPHp9Kr7.js';
-import { a as annotationsData } from './chunks/annotations-bo7pNbuK.js';
-import './chunks/db-s3IORrbE.js';
-import './chunks/index.esm2017-Y6lvFaM5.js';
+import { e as eventBus, v as van } from './chunks/eventbus-c5hoJhOF.js';
+import { o as orgContext } from './chunks/orgContext-CAnKHZle.js';
+import { e as eventsData } from './chunks/events-CskLT14Q.js';
+import { F as FilesData } from './chunks/files-CwKMcJqz.js';
+import { a as annotationsData } from './chunks/annotations-CQgu4e2K.js';
+import './chunks/apiUtil-BuesFibk.js';
+import './chunks/hierarchy-BeeefNz4.js';
 
 class Home {
     constructor() {
@@ -143,7 +142,7 @@ class Home {
     }
 
     addElements(parentElement) {
-        const { div, main, h1 } = van.tags;
+        const { div, main, h1, a, i, span } = van.tags;
         parentElement = parentElement ||
             document.getElementById("main-content") ||
             document.getElementById("container") ||
@@ -152,7 +151,28 @@ class Home {
         van.add(
             parentElement,
             main(
-                { class: "w-[90%] p-4 overflow-auto" },
+                { class: "w-full p-4 overflow-auto" },
+
+                // Getting started tip
+                div(
+                    {
+                        class: "mb-6 flex items-start gap-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-900 dark:bg-yellow-900/20 dark:border-yellow-500 dark:text-yellow-100 rounded-r-lg p-4"
+                    },
+                    i({ class: "las la-lightbulb text-2xl text-yellow-500 dark:text-yellow-300 mt-0.5" }),
+                    div(
+                        { class: "flex-1 text-sm" },
+                        span({ class: "font-semibold" }, "New to Vy? "),
+                        "Check out the ",
+                        a(
+                            {
+                                href: "/docs#getting-started",
+                                class: "underline font-medium hover:text-yellow-700 dark:hover:text-yellow-200"
+                            },
+                            "Getting Started guide"
+                        ),
+                        " to upload your first video and see behavior analysis results."
+                    )
+                ),
 
                 // Page title
                 div(
@@ -163,21 +183,21 @@ class Home {
                     )
                 ),
 
-                // Two-column grid
+                // Two-column grid (Analytics 2/3, Site News 1/3)
                 div(
                     {
-                        class: "grid grid-cols-1 lg:grid-cols-2 gap-6"
+                        class: "grid grid-cols-1 lg:grid-cols-3 gap-6"
                     },
 
                     // Left column: Analytics
                     div(
-                        { class: "space-y-6" },
+                        { class: "space-y-6 lg:col-span-2" },
                         this.createAnalyticsSection()
                     ),
 
                     // Right column: Site News
                     div(
-                        { class: "space-y-6" },
+                        { class: "space-y-6 lg:col-span-1" },
                         this.createSiteNewsSection()
                     )
                 )
@@ -206,7 +226,7 @@ class Home {
                     "bg-blue-500"
                 ),
                 this.createStatCard(
-                    "Video Hours",
+                    "Event Hours",
                     () => this.analytics.totalHours.toFixed(1),
                     "clock",
                     "bg-green-500"
@@ -218,7 +238,7 @@ class Home {
                     "bg-purple-500"
                 ),
                 this.createStatCard(
-                    "Recorded Hours",
+                    "File Hours",
                     () =>
                         (this.analytics.totalFileDuration / 3600).toFixed(1),
                     "film",
@@ -236,9 +256,11 @@ class Home {
 
     createStatCard(label, getValue, icon, colorClass) {
         const { div, i, span } = van.tags;
+        const slug = label.toLowerCase().replace(/\s+/g, "-");
 
         return div(
             {
+                id: `stat-card-${slug}`,
                 class: "bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex items-center space-x-4"
             },
             // Icon
@@ -489,26 +511,37 @@ class Home {
 
     updateAnalyticsDisplay() {
         const totalEventsEl = document.getElementById("stat-total-events");
-        const videoHoursEl = document.getElementById("stat-video-hours");
+        const eventHoursEl = document.getElementById("stat-event-hours");
         const totalFilesEl = document.getElementById("stat-total-files");
-        const recordedHoursEl = document.getElementById("stat-recorded-hours");
+        const fileHoursEl = document.getElementById("stat-file-hours");
         const alertsContentEl = document.getElementById("recent-alerts-content");
         const activityContentEl = document.getElementById("recent-activity-content");
 
         if (totalEventsEl) {
             totalEventsEl.textContent = this.analytics.totalEvents;
         }
-        if (videoHoursEl) {
-            videoHoursEl.textContent = this.analytics.totalHours.toFixed(1);
+        if (eventHoursEl) {
+            eventHoursEl.textContent = this.analytics.totalHours.toFixed(1);
         }
         if (totalFilesEl) {
             totalFilesEl.textContent = this.analytics.totalFiles;
         }
-        if (recordedHoursEl) {
-            recordedHoursEl.textContent = (
+        if (fileHoursEl) {
+            fileHoursEl.textContent = (
                 this.analytics.totalFileDuration / 3600
             ).toFixed(1);
         }
+
+        const hasEvents = this.analytics.totalEvents > 0;
+        const hasFiles = this.analytics.totalFiles > 0;
+        const eventsCard = document.getElementById("stat-card-total-events");
+        const eventHoursCard = document.getElementById("stat-card-event-hours");
+        const filesCard = document.getElementById("stat-card-total-files");
+        const fileHoursCard = document.getElementById("stat-card-file-hours");
+        if (eventsCard) eventsCard.style.display = hasEvents ? "" : "none";
+        if (eventHoursCard) eventHoursCard.style.display = hasEvents ? "" : "none";
+        if (filesCard) filesCard.style.display = hasFiles ? "" : "none";
+        if (fileHoursCard) fileHoursCard.style.display = hasFiles ? "" : "none";
         if (alertsContentEl) {
             alertsContentEl.innerHTML = "";
             van.add(alertsContentEl, this.createAlertsList());

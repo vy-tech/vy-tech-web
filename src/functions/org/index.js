@@ -11,6 +11,12 @@ import { requireAuth, getAuth } from "../common.js";
 import { OrganizationsData } from "../../data/organizations.js";
 import { ApplicationsData } from "../../data/applications.js";
 import { ApiKeysData } from "../../data/apiKeys.js";
+import { grantCredits } from "../../data/creditGrants.js";
+
+// Each new personal org gets a one-shot free credits grant so the user can
+// try processing without paying. Idempotent via the `onlyIfNew` guard in
+// `grantCredits` — a second /create/personal call (existing org) is a no-op.
+const WELCOME_CREDITS = 1000;
 
 const keyHashHmacSecret = defineSecret("KEY_HASH_HMAC_SECRET");
 
@@ -206,6 +212,21 @@ orgApp.post("/create/personal", async (req, res) => {
         org.id = await orgsData.create(org.name, req.uid, org);
 
         await syncUserOrgClaims(req.uid);
+
+        try {
+            await grantCredits({
+                oid: org.id,
+                amount: WELCOME_CREDITS,
+                source: "system",
+                uid: req.uid,
+                ref: "welcome",
+                description: `Welcome bonus (${WELCOME_CREDITS.toLocaleString()} free credits)`,
+                onlyIfNew: true,
+            });
+        } catch (grantErr) {
+            // Don't fail org creation if the grant fails; log and continue.
+            console.error("Welcome grant failed:", grantErr);
+        }
 
         return res.status(201).json({
             success: true,

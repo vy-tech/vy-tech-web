@@ -6,6 +6,12 @@ import { Hierarchy } from "../util/hierarchy.js";
 class Events extends EventsData {
     constructor() {
         super();
+        this.list = van.state([]);
+        this.setSelectorToAvailable(this.list);
+
+        eventBus.on("org.changed", (e) => {
+            this.setSelectorToAvailable(this.list);
+        });
     }
 
     setSelectorToAvailable(state) {
@@ -39,9 +45,8 @@ class Events extends EventsData {
 
     createNavigationElement(selected) {
         const { div, details, summary, ul, li, i } = van.tags;
-        const eventListState = van.state([]);
+        const eventListState = this.list;
         const selectedState = van.state(selected || null);
-        this.setSelectorToAvailable(eventListState);
 
         const groupEvents = (events) => {
             const grouped = new Map(); // location -> Map(year -> Map(monthName -> events[]))
@@ -161,9 +166,11 @@ class Events extends EventsData {
             );
         });
 
-        eventBus.on("org.changed", () => {
+        eventBus.on("org.changed", (e) => {
+            // Only reset selection if this isn't the first
+            // organization change from initialization.
+            if (!e.detail.initialized) return;
             selectedState.val = null;
-            this.setSelectorToAvailable(eventListState);
             eventBus.fire("ui.requestEvent", null);
         });
 
@@ -172,8 +179,7 @@ class Events extends EventsData {
 
     createSelectorElement(selected) {
         const { div, select } = van.tags;
-        const eventListState = van.state([]);
-        this.setSelectorToAvailable(eventListState);
+        const eventListState = this.list;
 
         const container = div({ class: "vyevents-selector" }, () => {
             const sel = select({
@@ -208,7 +214,6 @@ class Events extends EventsData {
         });
 
         eventBus.on("org.changed", () => {
-            this.setSelectorToAvailable(eventListState);
             eventBus.fire("ui.requestEvent", null);
         });
 

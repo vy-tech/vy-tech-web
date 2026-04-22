@@ -47,6 +47,10 @@ class Reports {
 
         //this.event = null;
         this.wallclockStartTimeUTC = null;
+
+        this.isEventContext = van.state(
+            this.hierarchy?.type === "event"
+        );
     }
 
     updateLocationBar() {
@@ -90,6 +94,8 @@ class Reports {
             this.changeCamera(1);
         }
 
+        this.isEventContext.val = this.hierarchy?.type === "event";
+
         this.resetTitle();
         this.loadSource();
         this.updateLocationBar();
@@ -118,6 +124,22 @@ class Reports {
 
         this.resetTitle();
         this.loadSource();
+
+        if (this.hierarchy) {
+            this.setActiveTab();
+        }
+    }
+
+    setActiveTab() {
+        if (!this.hierarchy) return;
+        
+        const type = this.hierarchy.type;
+        if (type === "event") {
+            this.activeNavTab.val = "Events";
+        }
+        else if (type === "file") {
+            this.activeNavTab.val = "Videos";
+        }
     }
 
     async loadSource() {
@@ -252,34 +274,77 @@ class Reports {
 
         this.activeNavTab = van.state("Events");
 
+        const tabsElement = Tabs(
+            {
+                tabButtonRowClass: "flex",
+                tabButtonRowStyleOverrides: { "background-color": "none" },
+                tabButtonClass:
+                    "px-3 py-1.5 text-sm font-medium text-white rounded hover:bg-blue-600",
+                tabButtonStyleOverrides: {
+                    "border-style": "none none none none",
+                },
+                tabButtonActiveColor: "rgb(59, 130, 246)",
+                tabButtonHoverColor: "rgb(29, 78, 216)",
+                tabContentClass: "mt-2",
+                activeTab: this.activeNavTab,
+            },
+            {
+                Events: events.createNavigationElement(
+                    this.hierarchy?.toString(":")
+                ),
+                Videos: videoFiles.createNavigationElement(),
+                Annotations: annotationLog.createElement(),
+            }
+        );
+
+        // Hide Events/Videos tab buttons when their lists are empty. Tabs
+        // renders [buttonRow, ...contentPanels]; skip the auto-switch on the
+        // first (synchronous) run since both lists start empty while fetches
+        // are in flight — otherwise we'd always jump to Annotations at boot.
+        const buttonRow = tabsElement.firstElementChild;
+        const [eventsBtn, videosBtn] = buttonRow.children;
+        const prev = { hasEvents: false, hasVideos: false };
+        let initialRun = true;
+
+        van.derive(() => {
+            const hasEvents = events.list.val.length > 0;
+            const hasVideos = videoFiles.files.val.length > 0;
+            eventsBtn.style.display = hasEvents ? "" : "none";
+            videosBtn.style.display = hasVideos ? "" : "none";
+
+            if (!initialRun) {
+                const current = this.activeNavTab.rawVal;
+                if (current === "Annotations") {
+                    // A content tab just became available while we were on
+                    // the Annotations fallback (e.g. after an org change) —
+                    // promote the newly-available tab.
+                    if (!prev.hasEvents && hasEvents) {
+                        this.activeNavTab.val = "Events";
+                    } else if (!prev.hasVideos && hasVideos) {
+                        this.activeNavTab.val = "Videos";
+                    }
+                } else if (current === "Events" && !hasEvents) {
+                    this.activeNavTab.val = hasVideos
+                        ? "Videos"
+                        : "Annotations";
+                } else if (current === "Videos" && !hasVideos) {
+                    this.activeNavTab.val = hasEvents
+                        ? "Events"
+                        : "Annotations";
+                }
+            }
+
+            prev.hasEvents = hasEvents;
+            prev.hasVideos = hasVideos;
+            initialRun = false;
+        });
+
         return div(
             {
                 id: "report-left",
                 class: "w-full md:w-auto md:flex-grow min-w-[250px] max-w-[350px]",
             },
-
-            Tabs(
-                {
-                    tabButtonRowClass: "flex",
-                    tabButtonRowStyleOverrides: { "background-color": "none" },
-                    tabButtonClass:
-                        "px-3 py-1.5 text-sm font-medium text-white rounded hover:bg-blue-600",
-                    tabButtonStyleOverrides: {
-                        "border-style": "none none none none",
-                    },
-                    tabButtonActiveColor: "rgb(59, 130, 246)",
-                    tabButtonHoverColor: "rgb(29, 78, 216)",
-                    tabContentClass: "mt-2",
-                    activeTab: this.activeNavTab,
-                },
-                {
-                    Events: events.createNavigationElement(
-                        this.hierarchy?.toString(":")
-                    ),
-                    Videos: videoFiles.createNavigationElement(),
-                    Annotations: annotationLog.createElement(),
-                }
-            )
+            tabsElement
         );
     }
 
@@ -384,10 +449,13 @@ class Reports {
                 class: "w-full md:w-auto md:flex-grow min-w-[250px] max-w-[350px]",
             },
 
-            // Camera map section
+            // Camera map section — only meaningful in an event context where
+            // multiple camera angles exist.
             div(
                 {
                     class: "w-full h-auto aspect-[2] relative bg-white",
+                    style: () =>
+                        this.isEventContext.val ? "" : "display: none;",
                 },
 
                 // CAMERA MAP

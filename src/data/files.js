@@ -88,7 +88,8 @@ class FilesData {
         context,
         type,
         fileId = null,
-        storage = "firebase"
+        storage = "firebase",
+        extras = {}
     ) {
         const org = orgContext.getCurrentOrg();
         const orgId = orgContext.getCurrentOrgId();
@@ -129,10 +130,17 @@ class FilesData {
             storage: storage,
         };
 
+        if (extras.status != null) fileDoc.status = extras.status;
+        if (extras.size != null) fileDoc.size = extras.size;
+        if (extras.duration != null) fileDoc.duration = extras.duration;
+        if (extras.creationTime != null)
+            fileDoc.creationTime = extras.creationTime;
+
         // If a fileId was not passed in add the created field.  We
         // needed it before writing so we could produce hierarchy.
         if (!fileId) {
             fileDoc.created = serverTimestamp();
+            if (extras.status == null) fileDoc.status = "available";
         }
 
         console.log("Saving file document:", fileDoc);

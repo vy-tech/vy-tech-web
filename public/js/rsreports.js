@@ -1,14 +1,15 @@
-import { v as van } from './chunks/van-t8DywzvC.js';
-import { M as Modal, T as Tabs } from './chunks/van-ui-YSP0ZuSh.js';
-import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
-import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as storage, e as profilesData } from './chunks/summarizer-BXNkjElV.js';
-import { e as events } from './chunks/events-0vYhdN4u.js';
-import { d as database } from './chunks/db-s3IORrbE.js';
-import { H as Hierarchy, t as timeUtil } from './chunks/events-C7yf_3nD.js';
-import { A as AnnotationsData } from './chunks/annotations-bo7pNbuK.js';
-import { o as orgContext, a as apiUtil } from './chunks/orgContext-BzAEkigY.js';
-import { F as FilesData } from './chunks/files-cPHp9Kr7.js';
-import './chunks/index.esm2017-Y6lvFaM5.js';
+import { v as van, e as eventBus } from './chunks/eventbus-c5hoJhOF.js';
+import { M as Modal, T as Tabs } from './chunks/van-ui-D8yynE9H.js';
+import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-CxPrm0J0.js';
+import { e as events } from './chunks/events-Bgfu_X-q.js';
+import { d as database } from './chunks/apiUtil-BuesFibk.js';
+import { H as Hierarchy, t as timeUtil } from './chunks/hierarchy-BeeefNz4.js';
+import { A as AnnotationsData } from './chunks/annotations-CQgu4e2K.js';
+import { o as orgContext } from './chunks/orgContext-CAnKHZle.js';
+import { F as FilesData } from './chunks/files-CwKMcJqz.js';
+import { e as effectiveStatus } from './chunks/fileUpload-Cnhs0cau.js';
+import './chunks/storage-D35e2Ayq.js';
+import './chunks/events-CskLT14Q.js';
 
 class Profiles extends ProfilesData {
     constructor() {
@@ -2475,154 +2476,65 @@ class AnnotationLog {
 
 const annotationLog = new AnnotationLog();
 
-class JobsData {
-    async getByFile(fileId) {
-        return await database.query("jobs", { refType: "file", refId: fileId });
-    }
-
-    async getByRef(refType, refId, type) {
-        const filters = { refType, refId };
-        if (type) filters.type = type;
-        return await database.query("jobs", filters);
-    }
-
-    async queueJob(refType, refId, type, uid, oid, location = null) {
-        const jobDoc = {
-            refType: refType,
-            refId: refId,
-            type: type,
-            status: "requested",
-            uid: uid,
-            oid: oid,
-            location: location,
-        };
-
-        return await database.set("jobs", jobDoc);
-    }
-
-    async getJobTree(jobId) {
-        const jobs = [];
-
-        const getJob = async (id, depth) => {
-            const jobData = await database.get("jobs", id);
-            if (!jobData) return;
-
-            jobs.push({ ...jobData, depth });
-
-            if (jobData.children && jobData.children.length > 0) {
-                for (const childId of jobData.children) {
-                    await getJob(childId, depth + 1);
-                }
-            }
-        };
-
-        await getJob(jobId, 0);
-
-        return jobs;
-    }
-
-    watchJobStatus(jobId, onChange) {
-        return new Promise((resolve, reject) => {
-            const status = {};
-            const watched = {};
-
-            const notify = () => {
-                const keys = Object.keys(status).sort().reverse();
-                onChange(keys.map((key) => status[key]).join("\n"));
-            };
-
-            const watchJob = async (id, depth) => {
-                if (watched[id]) return;
-                watched[id] = true;
-
-                const indent = "  ".repeat(depth);
-
-                const unsub = await database.watch(
-                    "jobs",
-                    id,
-                    async (jobData) => {
-                        if (jobData.status === "completed") {
-                            delete status[id];
-                        } else {
-                            status[id] =
-                                `${indent}${jobData.type} - ${jobData.status}${jobData.message ? ": " + jobData.message : ""}`;
-                        }
-
-                        if (jobData.children && jobData.children.length > 0) {
-                            for (const childId of jobData.children) {
-                                await watchJob(childId, depth + 1);
-                            }
-                        }
-
-                        notify();
-
-                        if (
-                            jobData.status === "completed" ||
-                            jobData.status === "failed"
-                        ) {
-                            unsub();
-                            if (id === jobId) {
-                                if (jobData.status === "completed") {
-                                    resolve();
-                                } else if (jobData.status === "failed") {
-                                    reject(
-                                        new Error(
-                                            `Job ${jobId} failed: ${jobData.message}`
-                                        )
-                                    );
-                                }
-                            }
-                        }
-                    }
-                );
-            };
-
-            watchJob(jobId, 0);
-        });
-    }
-}
-
 class VideoFiles extends FilesData {
     /**
-     * Manages video files associated with an organization.  The navigation element
-     * is displayed in the reports UI to allow users to select videos, manage and
-     * upload new videos.
+     * Selector for video files in the reports UI. Upload and management now
+     * live in the top-level /uploads view (src/rsuploads.js).
      */
     constructor() {
         super();
 
+        this.fileMap = new Map();
         this.files = van.state([]);
+        this.selectedFile = van.state(null);
+        this.unsubscribe = null;
+        this.subscribedOrg = null;
 
-        eventBus.addEventListener("ui.requestVideoUpload", () => {
-            this.showUploadForm();
+        eventBus.on("org.changed", () => {
+            this.subscribe();
         });
 
-        eventBus.on("org.changed", async (orgId) => {
-            await this.get();
-        });
-
-        eventBus.on("videoFiles.updated", async () => {
-            await this.get();
-        });
+        this.subscribe();
     }
 
-    async get() {
-        let files = await this.getByContext("video");
-        this.files.val = files.filter(f => !f.deleteRequested);
-        return this.files.val;
-    }
+    async subscribe() {
+        const orgId = orgContext.getCurrentOrgId();
+        if (!orgId) return;
+        if (this.subscribedOrg === orgId && this.unsubscribe) return;
 
-    hasFilename(filename) {
-        return this.files.val.some((f) => f.filename === filename);
-    }
+        if (this.unsubscribe) {
+            try {
+                this.unsubscribe();
+            } catch (err) {
+                console.warn("Error tearing down videofiles listener:", err);
+            }
+            this.unsubscribe = null;
+        }
 
-    getIdForFilename(filename) {
-        const file = this.files.val.find((f) => f.filename === filename);
-        return file ? file.id : null;
+        this.fileMap = new Map();
+        this.files.val = [];
+        this.subscribedOrg = orgId;
+
+        try {
+            this.unsubscribe = await database.listen(
+                "files",
+                (changed) => {
+                    for (const doc of changed) {
+                        this.fileMap.set(doc.id, doc);
+                    }
+                    this.files.val = Array.from(this.fileMap.values()).filter(
+                        (f) => effectiveStatus(f) === "available"
+                    );
+                },
+                { oid: orgId, context: "video" }
+            );
+        } catch (err) {
+            console.error("Failed to subscribe to video files:", err);
+        }
     }
 
     createNavigationElement(options = {}) {
-        const { div, a, i, span, button } = van.tags;
+        const { div, a, i, span } = van.tags;
 
         const merged = {
             id: "report-annotation-log",
@@ -2631,23 +2543,6 @@ class VideoFiles extends FilesData {
         };
 
         const container = div(merged);
-        const buttonContainer = div(
-            {
-                class: "flex-none h-[24px] flex justify-end mb-1",
-            },
-            a(
-                {
-                    href: "#",
-                    title: "Upload Video",
-                    onclick: () => {
-                        eventBus.fire("ui.requestVideoUpload");
-                    },
-                },
-                i({ class: "las la-plus-circle mr-2" })
-            )
-        );
-
-        const selectedFile = van.state(null);
 
         const fileRowsContainer = div(
             { class: "flex-1 min-h-0 overflow-auto mt-1" },
@@ -2656,7 +2551,15 @@ class VideoFiles extends FilesData {
                 if (files.length === 0) {
                     return div(
                         { class: "p-4 text-sm text-gray-500" },
-                        "No videos uploaded yet."
+                        "No videos available. Go to ",
+                        a(
+                            {
+                                href: "/uploads",
+                                class: "text-blue-500 hover:underline",
+                            },
+                            "Uploads"
+                        ),
+                        " to add your first video."
                     );
                 }
                 return div(
@@ -2665,292 +2568,28 @@ class VideoFiles extends FilesData {
                             {
                                 class: () =>
                                     `relative group flex items-center p-2 rounded cursor-pointer text-sm hover:bg-blue-600${
-                                        selectedFile.val?.id === file.id
+                                        this.selectedFile.val?.id === file.id
                                             ? " bg-blue-500 font-semibold"
                                             : ""
                                     }`,
                                 onclick: () => {
-                                    selectedFile.val = file;
+                                    this.selectedFile.val = file;
                                     eventBus.fire(
                                         "ui.requestEvent",
                                         file.hierarchy
                                     );
-                                    //eventBus.fire("ui.videoSelected", { file });
                                 },
                             },
                             i({ class: "las la-video mr-2 flex-shrink-0" }),
-                            span({ class: "flex-1 truncate" }, file.filename),
-                            button(
-                                {
-                                    class: "opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-6 h-6 rounded-full bg-gray-600 bg-opacity-75 hover:bg-opacity-90 text-white text-xs flex items-center justify-center flex-shrink-0",
-                                    title: "Options",
-                                    onclick: (e) => {
-                                        e.stopPropagation();
-                                        this.showUploadForm(file);
-                                    },
-                                },
-                                "⋯"
-                            )
+                            span({ class: "flex-1 truncate" }, file.filename)
                         )
                     )
                 );
             }
         );
 
-        van.add(container, buttonContainer, fileRowsContainer);
-
-        this.get();
-
+        van.add(container, fileRowsContainer);
         return container;
-    }
-
-    showUploadForm(existingFile = null) {
-        const { div, h3, form, label, input, button, progress, p } = van.tags;
-
-        const closed = van.state(false);
-        const uploadPct = van.state(0);
-        const statusMsg = van.state(
-            existingFile
-                ? `Current file: ${existingFile.filename}`
-                : "Select a video file to upload."
-        );
-        const uploading = van.state(false);
-
-        let fileInputEl;
-        let filenameInputEl;
-
-        const formEl = form(
-            { class: "space-y-4" },
-            div(
-                { class: "flex flex-col space-y-1" },
-                label(
-                    {
-                        for: "videoFile",
-                        class: "text-sm font-medium text-gray-700",
-                    },
-                    "Video File"
-                ),
-                (fileInputEl = input({
-                    id: "videoFile",
-                    type: "file",
-                    accept: "video/*",
-                    class: "text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100",
-                    onchange: (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                            if (!filenameInputEl.value) {
-                                console.log("Setting filename to", file.name);
-                                filenameInputEl.value = file.name;
-                                filenameInputEl.parentElement.classList.remove(
-                                    "hidden"
-                                );
-                            }
-                            statusMsg.val = `Selected: ${file.name}`;
-                        } else {
-                            statusMsg.val = "Select a video file to upload.";
-                        }
-                    },
-                }))
-            ),
-            div(
-                {
-                    class: `flex flex-col space-y-1 ${existingFile ? "" : "hidden"}`,
-                },
-                label(
-                    {
-                        for: "videoFilename",
-                        class: "text-sm font-medium text-gray-700",
-                    },
-                    "Filename"
-                ),
-                (filenameInputEl = input({
-                    id: "videoFilename",
-                    type: "text",
-                    value: existingFile ? existingFile.filename : "",
-                    class: "px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
-                }))
-            ),
-
-            // Progress bar — only shown while uploading
-            () =>
-                uploading.val
-                    ? div(
-                          { class: "flex flex-col space-y-1" },
-                          progress({
-                              value: uploadPct,
-                              max: 100,
-                              class: "w-full h-2",
-                          }),
-                          p(
-                              { class: "text-xs text-gray-500 text-right" },
-                              () => `${Math.round(uploadPct.val)}%`
-                          )
-                      )
-                    : div(),
-            p(
-                { class: "text-sm text-gray-500 mt-1 whitespace-pre-wrap" },
-                statusMsg
-            ),
-            div(
-                { class: "flex space-x-3 pt-4" },
-                button(
-                    {
-                        type: "button",
-                        class: "px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-                        onclick: async () => {
-                            const file = fileInputEl.files?.[0];
-                            if (!file) {
-                                statusMsg.val = "Please select a file first.";
-                                return;
-                            }
-                            if (
-                                this.hasFilename(filenameInputEl.value) &&
-                                !existingFile &&
-                                !confirm(
-                                    "A file with this name already exists. Do you want to overwrite it?"
-                                )
-                            ) {
-                                return;
-                            }
-
-                            uploading.val = true;
-                            await this.startUpload(
-                                file,
-                                filenameInputEl.value,
-                                uploadPct,
-                                statusMsg,
-                                closed
-                            );
-                        },
-                    },
-                    existingFile ? "Re-upload" : "Upload"
-                ),
-                existingFile
-                    ? button(
-                          {
-                              type: "button",
-                              class: "px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2",
-                              onclick: async () => {
-                                  await this.deleteFile(existingFile);
-                                  closed.val = true;
-                              },
-                          },
-                          "Delete"
-                      )
-                    : null,
-                button(
-                    {
-                        type: "button",
-                        class: "px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2",
-                        onclick: () => {
-                            closed.val = true;
-                        },
-                    },
-                    "Cancel"
-                )
-            )
-        );
-
-        van.add(
-            document.body,
-            Modal(
-                {
-                    closed,
-                    backgroundStyleOverrides: {
-                        "align-items": "flex-start",
-                        "padding-top": "15vh",
-                    },
-                },
-                div(
-                    { class: "p-3 w-[500px] rounded-lg shadow-lg" },
-                    h3(
-                        {
-                            class: "text-lg font-semibold text-gray-900 mb-4 border-b pb-2",
-                        },
-                        existingFile ? "Manage Video" : "Upload Video"
-                    ),
-                    formEl
-                )
-            )
-        );
-    }
-
-    async startUpload(file, filename, uploadPct, statusMsg, closed) {
-        const orgId = orgContext.getCurrentOrgId();
-        const jobs = new JobsData();
-
-        try {
-            statusMsg.val = "Requesting upload URL...";
-            eventBus.fire("videoUpload.requestingUrl", { file });
-
-            const uploadUrl = await storage.requestUploadUrl(
-                file, "videos", filename, orgId, file.type, "firebase"
-            );
-
-            statusMsg.val = "Uploading...";
-            eventBus.fire("videoUpload.uploading", { file });
-
-            await storage.uploadToSignedUrl(uploadUrl, file, file.type, (pct) => {
-                uploadPct.val = pct;
-                eventBus.fire("videoUpload.progress", { pct });
-            });
-
-            uploadPct.val = 100;
-            statusMsg.val = "Saving file record...";
-
-            let fileId = this.getIdForFilename(filename);
-            fileId = await this.save(
-                filename, "videos", "video", file.type, fileId, "firebase"
-            );
-
-            eventBus.fire("videoUpload.complete", { file });
-            eventBus.fire("videoFiles.updated");
-
-            let jobId = await this.requestProcessing(fileId);
-            eventBus.fire("videoUpload.processingRequested", { file });
-
-            await jobs.watchJobStatus(jobId, (statusLines) => {
-                statusMsg.val = `Processing...\n${statusLines}`;
-            });
-
-            statusMsg.val = "Processing complete.";
-            eventBus.fire("videoUpload.processed", { file });
-
-            window.setTimeout(() => {
-                closed.val = true;
-            }, 1000);
-        } catch (err) {
-            statusMsg.val = `Error: ${err.message}`;
-            eventBus.fire("videoUpload.error", { file, error: err });
-        }
-    }
-
-    async requestProcessing(fileId) {
-        try {
-            let result = await apiUtil.call(
-                `/api/file/process/${fileId}`,
-                {},
-                "POST"
-            );
-            console.log(`Processing requested for file ${fileId}`);
-
-            return result.jobId;
-        } catch (err) {
-            console.error(
-                `Error requesting processing for file ${fileId}:`,
-                err
-            );
-        }
-    }
-
-    async deleteFile(file) {
-        try {
-            await this.update(file.id, { deleteRequested: Date.now() });
-            await storage.requestDeleteFile(file.id);
-        } catch (err) {
-            console.error("Error requesting file deletion:", err);
-        }
-        eventBus.fire("videoFiles.updated");
     }
 }
 
@@ -2973,6 +2612,10 @@ class Reports {
 
         //this.event = null;
         this.wallclockStartTimeUTC = null;
+
+        this.isEventContext = van.state(
+            this.hierarchy?.type === "event"
+        );
     }
 
     updateLocationBar() {
@@ -3016,6 +2659,8 @@ class Reports {
             this.changeCamera(1);
         }
 
+        this.isEventContext.val = this.hierarchy?.type === "event";
+
         this.resetTitle();
         this.loadSource();
         this.updateLocationBar();
@@ -3044,6 +2689,22 @@ class Reports {
 
         this.resetTitle();
         this.loadSource();
+
+        if (this.hierarchy) {
+            this.setActiveTab();
+        }
+    }
+
+    setActiveTab() {
+        if (!this.hierarchy) return;
+        
+        const type = this.hierarchy.type;
+        if (type === "event") {
+            this.activeNavTab.val = "Events";
+        }
+        else if (type === "file") {
+            this.activeNavTab.val = "Videos";
+        }
     }
 
     async loadSource() {
@@ -3178,34 +2839,77 @@ class Reports {
 
         this.activeNavTab = van.state("Events");
 
+        const tabsElement = Tabs(
+            {
+                tabButtonRowClass: "flex",
+                tabButtonRowStyleOverrides: { "background-color": "none" },
+                tabButtonClass:
+                    "px-3 py-1.5 text-sm font-medium text-white rounded hover:bg-blue-600",
+                tabButtonStyleOverrides: {
+                    "border-style": "none none none none",
+                },
+                tabButtonActiveColor: "rgb(59, 130, 246)",
+                tabButtonHoverColor: "rgb(29, 78, 216)",
+                tabContentClass: "mt-2",
+                activeTab: this.activeNavTab,
+            },
+            {
+                Events: events.createNavigationElement(
+                    this.hierarchy?.toString(":")
+                ),
+                Videos: videoFiles.createNavigationElement(),
+                Annotations: annotationLog.createElement(),
+            }
+        );
+
+        // Hide Events/Videos tab buttons when their lists are empty. Tabs
+        // renders [buttonRow, ...contentPanels]; skip the auto-switch on the
+        // first (synchronous) run since both lists start empty while fetches
+        // are in flight — otherwise we'd always jump to Annotations at boot.
+        const buttonRow = tabsElement.firstElementChild;
+        const [eventsBtn, videosBtn] = buttonRow.children;
+        const prev = { hasEvents: false, hasVideos: false };
+        let initialRun = true;
+
+        van.derive(() => {
+            const hasEvents = events.list.val.length > 0;
+            const hasVideos = videoFiles.files.val.length > 0;
+            eventsBtn.style.display = hasEvents ? "" : "none";
+            videosBtn.style.display = hasVideos ? "" : "none";
+
+            if (!initialRun) {
+                const current = this.activeNavTab.rawVal;
+                if (current === "Annotations") {
+                    // A content tab just became available while we were on
+                    // the Annotations fallback (e.g. after an org change) —
+                    // promote the newly-available tab.
+                    if (!prev.hasEvents && hasEvents) {
+                        this.activeNavTab.val = "Events";
+                    } else if (!prev.hasVideos && hasVideos) {
+                        this.activeNavTab.val = "Videos";
+                    }
+                } else if (current === "Events" && !hasEvents) {
+                    this.activeNavTab.val = hasVideos
+                        ? "Videos"
+                        : "Annotations";
+                } else if (current === "Videos" && !hasVideos) {
+                    this.activeNavTab.val = hasEvents
+                        ? "Events"
+                        : "Annotations";
+                }
+            }
+
+            prev.hasEvents = hasEvents;
+            prev.hasVideos = hasVideos;
+            initialRun = false;
+        });
+
         return div(
             {
                 id: "report-left",
                 class: "w-full md:w-auto md:flex-grow min-w-[250px] max-w-[350px]",
             },
-
-            Tabs(
-                {
-                    tabButtonRowClass: "flex",
-                    tabButtonRowStyleOverrides: { "background-color": "none" },
-                    tabButtonClass:
-                        "px-3 py-1.5 text-sm font-medium text-white rounded hover:bg-blue-600",
-                    tabButtonStyleOverrides: {
-                        "border-style": "none none none none",
-                    },
-                    tabButtonActiveColor: "rgb(59, 130, 246)",
-                    tabButtonHoverColor: "rgb(29, 78, 216)",
-                    tabContentClass: "mt-2",
-                    activeTab: this.activeNavTab,
-                },
-                {
-                    Events: events.createNavigationElement(
-                        this.hierarchy?.toString(":")
-                    ),
-                    Videos: videoFiles.createNavigationElement(),
-                    Annotations: annotationLog.createElement(),
-                }
-            )
+            tabsElement
         );
     }
 
@@ -3310,10 +3014,13 @@ class Reports {
                 class: "w-full md:w-auto md:flex-grow min-w-[250px] max-w-[350px]",
             },
 
-            // Camera map section
+            // Camera map section — only meaningful in an event context where
+            // multiple camera angles exist.
             div(
                 {
                     class: "w-full h-auto aspect-[2] relative bg-white",
+                    style: () =>
+                        this.isEventContext.val ? "" : "display: none;",
                 },
 
                 // CAMERA MAP

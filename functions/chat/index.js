@@ -55,12 +55,15 @@ let firebaseFunctions = {
                 q = q.where(constraint.field, constraint.op, constraint.value);
             } else if (constraint.type === "orderBy") {
                 q = q.orderBy(constraint.field, constraint.direction || "asc");
+            } else if (constraint.type === "limit") {
+                q = q.limit(constraint.value);
             }
         });
         return q;
     },
     where: (field, op, value) => ({ type: "where", field, op, value }),
     orderBy: (field, direction) => ({ type: "orderBy", field, direction }),
+    limit: (value) => ({ type: "limit", value }),
     onSnapshot: (query, callback) => query.onSnapshot(callback),
     serverTimestamp: () => Timestamp.now(),
     runTransaction: (database, updateFunction) =>
@@ -120,6 +123,7 @@ let getFirestore,
     query,
     orderBy,
     where,
+    limit,
     onSnapshot,
     serverTimestamp,
     runTransaction,
@@ -150,6 +154,7 @@ async function initializeFirestore() {
     query = firebaseFunctions.query;
     orderBy = firebaseFunctions.orderBy;
     where = firebaseFunctions.where;
+    limit = firebaseFunctions.limit;
     onSnapshot = firebaseFunctions.onSnapshot;
     serverTimestamp = firebaseFunctions.serverTimestamp;
     runTransaction = firebaseFunctions.runTransaction;
@@ -244,8 +249,8 @@ class Database {
         return data;
     }
 
-    async query(collectionName, filters = null, order = null) {
-        console.log("Querying", collectionName, filters, order);
+    async query(collectionName, filters = null, order = null, limitN = null) {
+        console.log("Querying", collectionName, filters, order, limitN);
         await this.ensureFirestore();
 
         let q = collection(this.db, collectionName);
@@ -274,6 +279,10 @@ class Database {
                     q = query(q, orderBy(order));
                 }
             }
+        }
+
+        if (limitN) {
+            q = query(q, limit(limitN));
         }
 
         const querySnapshot = await getDocs(q);
@@ -386,6 +395,68 @@ class Database {
             console.error("Transaction failed: ", error);
             return false;
         }
+    }
+
+    /**
+     * Run a Firestore transaction. The callback receives a tx-scoped proxy
+     * exposing `get`, `set`, `update`, `delete` against collection + docId,
+     * mirroring the non-transactional API. All reads must occur before any
+     * writes within the callback (Firestore requirement).
+     *
+     * The `set` call mirrors `Database.set`: if `docData.id` is missing it
+     * is auto-assigned via `pushid()`; `created` is stamped on new docs; and
+     * `updated` is stamped on every write.
+     *
+     * @param {(tx: { get, set, update, delete }) => Promise<T>} callback
+     * @returns {Promise<T>}
+     */
+    async transaction(callback) {
+        await this.ensureFirestore();
+
+        return await runTransaction(this.db, async (tx) => {
+            const proxy = {
+                get: async (collectionName, docId) => {
+                    const docRef = doc(this.db, collectionName, docId);
+                    const docSnap = await tx.get(docRef);
+                    if (
+                        !docSnap ||
+                        (typeof docSnap.exists === "boolean" &&
+                            !docSnap.exists) ||
+                        (typeof docSnap.exists === "function" &&
+                            !docSnap.exists())
+                    ) {
+                        return null;
+                    }
+                    const data = docSnap.data();
+                    data.id = docSnap.id;
+                    return data;
+                },
+                set: (collectionName, docData, isNew = false) => {
+                    if (!docData.id || isNew) {
+                        docData.created = docData.created || serverTimestamp();
+                    }
+                    if (!docData.id) {
+                        docData.id = this.pushid();
+                    }
+                    docData.updated = serverTimestamp();
+                    const docRef = doc(this.db, collectionName, docData.id);
+                    tx.set(docRef, docData);
+                    return docData.id;
+                },
+                update: (collectionName, docId, updates) => {
+                    const docRef = doc(this.db, collectionName, docId);
+                    const processedUpdates = { ...updates };
+                    processedUpdates.updated = serverTimestamp();
+                    tx.update(docRef, processedUpdates);
+                },
+                delete: (collectionName, docId) => {
+                    const docRef = doc(this.db, collectionName, docId);
+                    tx.delete(docRef);
+                },
+            };
+
+            return await callback(proxy);
+        });
     }
 
     async listen(collectionName, callback, filters = null) {

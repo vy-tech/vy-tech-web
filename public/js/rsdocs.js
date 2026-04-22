@@ -1,5 +1,4 @@
-import { v as van } from './chunks/van-t8DywzvC.js';
-import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
+import { v as van, e as eventBus } from './chunks/eventbus-c5hoJhOF.js';
 import { B } from './chunks/marked.esm-DDAYIbNt.js';
 
 const marked = new B();
@@ -9,6 +8,11 @@ const TABS = [
         id: "getting-started",
         label: "Getting Started",
         url: "/doc/vy-getting-started.md",
+    },
+    {
+        id: "api-quickstart",
+        label: "API Quickstart",
+        url: "/doc/vy-api-quickstart.md",
     },
     { id: "videos", label: "Videos", url: "/doc/vy-videos.md" },
     {
