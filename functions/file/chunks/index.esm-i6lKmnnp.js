@@ -1,4 +1,4 @@
-import { g as getApp, a as getModularInstance, _ as _getProvider, b as getDefaultEmulatorHostnameAndPort, i as isCloudWorkstation, p as pingServer, u as updateEmulatorBanner, c as createMockUserToken, d as _isFirebaseServerApp, F as FirebaseError, e as _registerComponent, C as Component, r as registerVersion, S as SDK_VERSION } from './index-DRmxS4EI.js';
+import { g as getApp, a as getModularInstance, _ as _getProvider, b as getDefaultEmulatorHostnameAndPort, i as isCloudWorkstation, p as pingServer, u as updateEmulatorBanner, c as createMockUserToken, d as _isFirebaseServerApp, F as FirebaseError, e as _registerComponent, C as Component, r as registerVersion, S as SDK_VERSION } from './index-BewX7AUM.js';
 import 'firebase-admin/app';
 import 'firebase-admin/firestore';
 import 'firebase-admin/storage';
@@ -2313,4 +2313,4 @@ function registerStorage() {
 registerStorage();
 
 export { StorageError, StorageErrorCode, StringFormat, FbsBlob as _FbsBlob, Location as _Location, dataFromString as _dataFromString, invalidArgument as _invalidArgument, invalidRootOperation as _invalidRootOperation, connectStorageEmulator, getDownloadURL, getStorage, ref, uploadString };
-//# sourceMappingURL=index.esm-DrVlDLxX.js.map
+//# sourceMappingURL=index.esm-i6lKmnnp.js.map

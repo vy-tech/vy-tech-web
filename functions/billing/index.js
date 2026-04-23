@@ -10431,12 +10431,20 @@ billingApp.post("/checkout/create", async (req, res) => {
                 : null) ||
             "";
 
+        // Stripe Tax: automatic_tax uses the tax_code set on the Stripe
+        // Product (txcd_10105004 — "Artificial Intelligence as a Service").
+        // Requires a billing address to determine jurisdiction;
+        // tax_id_collection lets B2B customers enter a VAT/tax ID for
+        // reverse-charge treatment where applicable.
         const session = await getStripe().checkout.sessions.create({
             mode: "payment",
             line_items: [{ price: getPriceId(pack), quantity: 1 }],
             success_url: `${origin}/billing?purchase=success`,
             cancel_url: `${origin}/billing?purchase=cancelled`,
             client_reference_id: oid,
+            automatic_tax: { enabled: true },
+            billing_address_collection: "required",
+            tax_id_collection: { enabled: true },
             metadata: {
                 oid,
                 uid: req.uid,

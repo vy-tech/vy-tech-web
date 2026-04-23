@@ -35,6 +35,14 @@
                 }
             },
             {
+                "regex": "^/api/file/.*$",
+                "function": {
+                    "functionId": "file",
+                    "codebase": "file",
+                    "region": "us-central1"
+                }
+            },
+            {
                 "regex": "^/api/billing/.*$",
                 "function": {
                     "functionId": "billing",
@@ -87,6 +95,17 @@
         {
             "source": "functions/v1",
             "codebase": "v1",
+            "ignore": [
+                "node_modules",
+                ".git",
+                "firebase-debug.log",
+                "firebase-debug.*.log",
+                "*.local"
+            ]
+        },
+        {
+            "source": "functions/file",
+            "codebase": "file",
             "ignore": [
                 "node_modules",
                 ".git",

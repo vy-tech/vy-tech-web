@@ -321,17 +321,17 @@ class Storage {
         mimeType = mimeType || file.type;
         filename = filename || file.name;
 
+        const path = `${destinationPath}/${filename}`;
         const body = {
+            path,
             storage: storageType,
             mimeType,
             oid: orgId,
         };
 
-        const path = `${destinationPath}/${filename}`;
         const headers = await this.getAuthHeaders();
-        const endpoint = `/api/file/upload/${encodeURIComponent(path)}`;
 
-        const resp = await fetch(endpoint, {
+        const resp = await fetch("/api/file/upload", {
             method: "POST",
             headers,
             body: JSON.stringify(body),
@@ -823,4 +823,4 @@ if (typeof window !== "undefined") {
 }
 
 export { firebaseStorage as f, storage as s };
-//# sourceMappingURL=storage-D35e2Ayq.js.map
+//# sourceMappingURL=storage-BUYjI5b-.js.map

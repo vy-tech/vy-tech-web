@@ -9758,17 +9758,17 @@ class Storage {
         mimeType = mimeType || file.type;
         filename = filename || file.name;
 
+        const path = `${destinationPath}/${filename}`;
         const body = {
+            path,
             storage: storageType,
             mimeType,
             oid: orgId,
         };
 
-        const path = `${destinationPath}/${filename}`;
         const headers = await this.getAuthHeaders();
-        const endpoint = `/api/file/upload/${encodeURIComponent(path)}`;
 
-        const resp = await fetch(endpoint, {
+        const resp = await fetch("/api/file/upload", {
             method: "POST",
             headers,
             body: JSON.stringify(body),
@@ -10008,7 +10008,7 @@ async function initFirebaseStorage() {
         _firebaseStorageInstance = _firebaseStorageFunctions.getStorage();
     } else {
         const { getStorage, ref, uploadString, getDownloadURL } =
-            await import('./index.esm-DrVlDLxX.js');
+            await import('./index.esm-i6lKmnnp.js');
         _firebaseStorageFunctions = {
             getStorage,
             ref,
@@ -11961,21 +11961,20 @@ fileApp.post("/process/:file_id", async (req, res) => {
     }
 });
 
-fileApp.post("/upload/:path", async (req, res) => {
+fileApp.post("/upload", async (req, res) => {
     // Returns a pre-signed URL allowing for upload to the specified path.
     // Upload paths are prefixed with /files/{orgId}/...
-    // Request body is JSON and may include:
+    // Request body is JSON and must include:
+    //   path: string (e.g. "videos/myfile.mp4")
+    // and may include:
     //   mimeType: string (default: guessed from path)
     //   oid: organization ID to upload under (default: first valid org)
 
     const validOids = req.user.orgIds || [];
     validOids.push("personal_" + req.uid); // Always allow personal org
 
-    const { path } = req.params;
     const opts = req.body || {};
-
-    const mimeType = opts.mimeType || guessMimeType(path);
-    const requestedOrgId = opts.oid || validOids[0];
+    const { path } = opts;
 
     if (!path) {
         console.warn("Upload path not specified");
@@ -11984,6 +11983,9 @@ fileApp.post("/upload/:path", async (req, res) => {
             message: "Upload path is required",
         });
     }
+
+    const mimeType = opts.mimeType || guessMimeType(path);
+    const requestedOrgId = opts.oid || validOids[0];
 
     if (!requestedOrgId || !validOids.includes(requestedOrgId)) {
         console.warn(
@@ -12109,4 +12111,4 @@ const file = onRequest(
 );
 
 export { Component as C, FirebaseError as F, SDK_VERSION as S, _getProvider as _, getModularInstance as a, getDefaultEmulatorHostnameAndPort as b, createMockUserToken as c, _isFirebaseServerApp as d, _registerComponent as e, fileApp as f, getApp$1 as g, file as h, isCloudWorkstation as i, pingServer as p, registerVersion as r, updateEmulatorBanner as u };
-//# sourceMappingURL=index-DRmxS4EI.js.map
+//# sourceMappingURL=index-BewX7AUM.js.map

@@ -322,17 +322,17 @@ class Storage {
         mimeType = mimeType || file.type;
         filename = filename || file.name;
 
+        const path = `${destinationPath}/${filename}`;
         const body = {
+            path,
             storage: storageType,
             mimeType,
             oid: orgId,
         };
 
-        const path = `${destinationPath}/${filename}`;
         const headers = await this.getAuthHeaders();
-        const endpoint = `/api/file/upload/${encodeURIComponent(path)}`;
 
-        const resp = await fetch(endpoint, {
+        const resp = await fetch("/api/file/upload", {
             method: "POST",
             headers,
             body: JSON.stringify(body),

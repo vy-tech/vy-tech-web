@@ -3,11 +3,11 @@ import { k } from './chunks/marked.esm-DDAYIbNt.js';
 import { d as database, g as getApp, b as getAuth } from './chunks/apiUtil-BuesFibk.js';
 import { E as EventsData } from './chunks/events-CskLT14Q.js';
 import { H as Hierarchy, t as timeUtil } from './chunks/hierarchy-BeeefNz4.js';
-import { S as Summarizer, p as progress } from './chunks/summarizer-CxPrm0J0.js';
+import { S as Summarizer, p as progress } from './chunks/summarizer-hVUkvEQA.js';
 import { A as AnnotationsData } from './chunks/annotations-CQgu4e2K.js';
 import { a as auth } from './chunks/rsauth-DYLh0PX8.js';
 import './chunks/orgContext-CAnKHZle.js';
-import './chunks/storage-D35e2Ayq.js';
+import './chunks/storage-BUYjI5b-.js';
 import './chunks/van-ui-D8yynE9H.js';
 
 class MessagesData {

@@ -288,6 +288,12 @@ class Billing {
                                   },
                                   `${pack.credits.toLocaleString()} credits for $${pack.priceUsd}`
                               ),
+                              div(
+                                  {
+                                      class: "text-xs text-gray-400 dark:text-gray-500 mt-1",
+                                  },
+                                  "Plus applicable tax at checkout"
+                              ),
                               div({ class: "flex-1" }, ""),
                               div(
                                   { class: "mt-4" },

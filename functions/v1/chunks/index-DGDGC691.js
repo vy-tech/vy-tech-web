@@ -9707,17 +9707,17 @@ class Storage {
         mimeType = mimeType || file.type;
         filename = filename || file.name;
 
+        const path = `${destinationPath}/${filename}`;
         const body = {
+            path,
             storage: storageType,
             mimeType,
             oid: orgId,
         };
 
-        const path = `${destinationPath}/${filename}`;
         const headers = await this.getAuthHeaders();
-        const endpoint = `/api/file/upload/${encodeURIComponent(path)}`;
 
-        const resp = await fetch(endpoint, {
+        const resp = await fetch("/api/file/upload", {
             method: "POST",
             headers,
             body: JSON.stringify(body),
@@ -9957,7 +9957,7 @@ async function initFirebaseStorage() {
         _firebaseStorageInstance = _firebaseStorageFunctions.getStorage();
     } else {
         const { getStorage, ref, uploadString, getDownloadURL } =
-            await import('./index.esm-CSC1si8Q.js');
+            await import('./index.esm-7dXIB8cB.js');
         _firebaseStorageFunctions = {
             getStorage,
             ref,
@@ -21518,4 +21518,4 @@ const v1 = onRequest(
 );
 
 export { Component as C, FirebaseError as F, SDK_VERSION as S, _getProvider as _, getModularInstance as a, getDefaultEmulatorHostnameAndPort as b, createMockUserToken as c, _isFirebaseServerApp as d, _registerComponent as e, v1 as f, getApp$1 as g, isCloudWorkstation as i, pingServer as p, registerVersion as r, updateEmulatorBanner as u, v1App as v };
-//# sourceMappingURL=index-CGOwAn--.js.map
+//# sourceMappingURL=index-DGDGC691.js.map
