@@ -1,5 +1,5 @@
-import { r as registerVersion } from './apiUtil-BuesFibk.js';
-export { F as FirebaseError, S as SDK_VERSION, D as _DEFAULT_ENTRY_NAME, _ as _addComponent, h as _apps, i as _components, j as _getProvider, k as _isFirebaseServerApp, l as _registerComponent, m as _removeServiceInstance, n as _serverApps, o as getApp, p as initializeApp } from './apiUtil-BuesFibk.js';
+import { r as registerVersion } from './apiUtil-CDq4WBQY.js';
+export { F as FirebaseError, S as SDK_VERSION, D as _DEFAULT_ENTRY_NAME, _ as _addComponent, i as _apps, j as _components, k as _getProvider, m as _isFirebaseServerApp, n as _registerComponent, o as _removeServiceInstance, p as _serverApps, q as getApp, t as initializeApp } from './apiUtil-CDq4WBQY.js';
 
 var name = "firebase";
 var version = "11.10.0";
@@ -23,4 +23,4 @@ var version = "11.10.0";
 registerVersion(name, version, 'app');
 
 export { registerVersion };
-//# sourceMappingURL=index.esm-nEsW981p.js.map
+//# sourceMappingURL=index.esm-BVTwxPX3.js.map

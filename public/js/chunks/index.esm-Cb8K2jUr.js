@@ -1,4 +1,4 @@
-import { o as getApp, t as getModularInstance, j as _getProvider, z as getDefaultEmulatorHostnameAndPort, v as isCloudWorkstation, w as pingServer, x as updateEmulatorBanner, y as createMockUserToken, k as _isFirebaseServerApp, F as FirebaseError, l as _registerComponent, C as Component, r as registerVersion, S as SDK_VERSION } from './apiUtil-BuesFibk.js';
+import { q as getApp, v as getModularInstance, k as _getProvider, B as getDefaultEmulatorHostnameAndPort, x as isCloudWorkstation, y as pingServer, z as updateEmulatorBanner, A as createMockUserToken, m as _isFirebaseServerApp, F as FirebaseError, n as _registerComponent, C as Component, r as registerVersion, S as SDK_VERSION } from './apiUtil-CDq4WBQY.js';
 
 /**
  * @license
@@ -2307,4 +2307,4 @@ function registerStorage() {
 registerStorage();
 
 export { StorageError, StorageErrorCode, StringFormat, FbsBlob as _FbsBlob, Location as _Location, dataFromString as _dataFromString, invalidArgument as _invalidArgument, invalidRootOperation as _invalidRootOperation, connectStorageEmulator, getDownloadURL, getStorage, ref, uploadString };
-//# sourceMappingURL=index.esm-B1mO26z3.js.map
+//# sourceMappingURL=index.esm-Cb8K2jUr.js.map

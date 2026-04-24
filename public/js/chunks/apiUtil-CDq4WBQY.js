@@ -8,7 +8,7 @@ async function getApp$1() {
         app = global._vy_firebase_app;
     } else {
         console.log("Initializing Firebase Client App...");
-        const { initializeApp } = await import('./index.esm-nEsW981p.js');
+        const { initializeApp } = await import('./index.esm-BVTwxPX3.js');
         const { config } = await import('./firebase-config-DABbTo-C.js');
         app = initializeApp(config);
     }
@@ -7100,6 +7100,130 @@ class BaseOAuthProvider extends FederatedAuthProvider {
         return [...this.scopes];
     }
 }
+/**
+ * Provider for generating generic {@link OAuthCredential}.
+ *
+ * @example
+ * ```javascript
+ * // Sign in using a redirect.
+ * const provider = new OAuthProvider('google.com');
+ * // Start a sign in process for an unauthenticated user.
+ * provider.addScope('profile');
+ * provider.addScope('email');
+ * await signInWithRedirect(auth, provider);
+ * // This will trigger a full page redirect away from your app
+ *
+ * // After returning from the redirect when your app initializes you can obtain the result
+ * const result = await getRedirectResult(auth);
+ * if (result) {
+ *   // This is the signed-in user
+ *   const user = result.user;
+ *   // This gives you a OAuth Access Token for the provider.
+ *   const credential = provider.credentialFromResult(auth, result);
+ *   const token = credential.accessToken;
+ * }
+ * ```
+ *
+ * @example
+ * ```javascript
+ * // Sign in using a popup.
+ * const provider = new OAuthProvider('google.com');
+ * provider.addScope('profile');
+ * provider.addScope('email');
+ * const result = await signInWithPopup(auth, provider);
+ *
+ * // The signed-in user info.
+ * const user = result.user;
+ * // This gives you a OAuth Access Token for the provider.
+ * const credential = provider.credentialFromResult(auth, result);
+ * const token = credential.accessToken;
+ * ```
+ * @public
+ */
+class OAuthProvider extends BaseOAuthProvider {
+    /**
+     * Creates an {@link OAuthCredential} from a JSON string or a plain object.
+     * @param json - A plain object or a JSON string
+     */
+    static credentialFromJSON(json) {
+        const obj = typeof json === 'string' ? JSON.parse(json) : json;
+        _assert('providerId' in obj && 'signInMethod' in obj, "argument-error" /* AuthErrorCode.ARGUMENT_ERROR */);
+        return OAuthCredential._fromParams(obj);
+    }
+    /**
+     * Creates a {@link OAuthCredential} from a generic OAuth provider's access token or ID token.
+     *
+     * @remarks
+     * The raw nonce is required when an ID token with a nonce field is provided. The SHA-256 hash of
+     * the raw nonce must match the nonce field in the ID token.
+     *
+     * @example
+     * ```javascript
+     * // `googleUser` from the onsuccess Google Sign In callback.
+     * // Initialize a generate OAuth provider with a `google.com` providerId.
+     * const provider = new OAuthProvider('google.com');
+     * const credential = provider.credential({
+     *   idToken: googleUser.getAuthResponse().id_token,
+     * });
+     * const result = await signInWithCredential(credential);
+     * ```
+     *
+     * @param params - Either the options object containing the ID token, access token and raw nonce
+     * or the ID token string.
+     */
+    credential(params) {
+        return this._credential(Object.assign(Object.assign({}, params), { nonce: params.rawNonce }));
+    }
+    /** An internal credential method that accepts more permissive options */
+    _credential(params) {
+        _assert(params.idToken || params.accessToken, "argument-error" /* AuthErrorCode.ARGUMENT_ERROR */);
+        // For OAuthCredential, sign in method is same as providerId.
+        return OAuthCredential._fromParams(Object.assign(Object.assign({}, params), { providerId: this.providerId, signInMethod: this.providerId }));
+    }
+    /**
+     * Used to extract the underlying {@link OAuthCredential} from a {@link UserCredential}.
+     *
+     * @param userCredential - The user credential.
+     */
+    static credentialFromResult(userCredential) {
+        return OAuthProvider.oauthCredentialFromTaggedObject(userCredential);
+    }
+    /**
+     * Used to extract the underlying {@link OAuthCredential} from a {@link AuthError} which was
+     * thrown during a sign-in, link, or reauthenticate operation.
+     *
+     * @param userCredential - The user credential.
+     */
+    static credentialFromError(error) {
+        return OAuthProvider.oauthCredentialFromTaggedObject((error.customData || {}));
+    }
+    static oauthCredentialFromTaggedObject({ _tokenResponse: tokenResponse }) {
+        if (!tokenResponse) {
+            return null;
+        }
+        const { oauthIdToken, oauthAccessToken, oauthTokenSecret, pendingToken, nonce, providerId } = tokenResponse;
+        if (!oauthAccessToken &&
+            !oauthTokenSecret &&
+            !oauthIdToken &&
+            !pendingToken) {
+            return null;
+        }
+        if (!providerId) {
+            return null;
+        }
+        try {
+            return new OAuthProvider(providerId)._credential({
+                idToken: oauthIdToken,
+                accessToken: oauthAccessToken,
+                nonce,
+                pendingToken
+            });
+        }
+        catch (e) {
+            return null;
+        }
+    }
+}
 
 /**
  * @license
@@ -7661,9 +7785,41 @@ function _processCredentialSavingMfaContextIfNecessary(auth, operationType, cred
         throw error;
     });
 }
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Takes a set of UserInfo provider data and converts it to a set of names
+ */
+function providerDataAsNames(providerData) {
+    return new Set(providerData
+        .map(({ providerId }) => providerId)
+        .filter(pid => !!pid));
+}
 async function _link$1(user, credential, bypassAuthState = false) {
     const response = await _logoutIfInvalidated(user, credential._linkToIdToken(user.auth, await user.getIdToken()), bypassAuthState);
     return UserCredentialImpl._forOperation(user, "link" /* OperationType.LINK */, response);
+}
+async function _assertLinkedStatus(expected, user, provider) {
+    await _reloadWithoutSaving(user);
+    const providerIds = providerDataAsNames(user.providerData);
+    const code = "provider-already-linked" /* AuthErrorCode.PROVIDER_ALREADY_LINKED */
+         /* AuthErrorCode.NO_SUCH_PROVIDER */;
+    _assert(providerIds.has(provider) === expected, user.auth, code);
 }
 
 /**
@@ -7751,6 +7907,22 @@ async function _signInWithCredential(auth, credential, bypassAuthState = false) 
 async function signInWithCredential(auth, credential) {
     return _signInWithCredential(_castAuth(auth), credential);
 }
+/**
+ * Links the user account with the given credentials.
+ *
+ * @remarks
+ * An {@link AuthProvider} can be used to generate the credential.
+ *
+ * @param user - The user.
+ * @param credential - The auth credential.
+ *
+ * @public
+ */
+async function linkWithCredential(user, credential) {
+    const userInternal = getModularInstance(user);
+    await _assertLinkedStatus(false, userInternal, credential.providerId);
+    return _link$1(userInternal, credential);
+}
 
 /**
  * @license
@@ -7820,6 +7992,75 @@ function signInWithEmailAndPassword(auth, email, password) {
         }
         throw error;
     });
+}
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+async function createAuthUri(auth, request) {
+    return _performApiRequest(auth, "POST" /* HttpMethod.POST */, "/v1/accounts:createAuthUri" /* Endpoint.CREATE_AUTH_URI */, _addTidIfNecessary(auth, request));
+}
+
+/**
+ * @license
+ * Copyright 2020 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/**
+ * Gets the list of possible sign in methods for the given email address. This method returns an
+ * empty list when
+ * {@link https://cloud.google.com/identity-platform/docs/admin/email-enumeration-protection | Email Enumeration Protection}
+ * is enabled, irrespective of the number of authentication methods available for the given email.
+ *
+ * @remarks
+ * This is useful to differentiate methods of sign-in for the same provider, eg.
+ * {@link EmailAuthProvider} which has 2 methods of sign-in,
+ * {@link SignInMethod}.EMAIL_PASSWORD and
+ * {@link SignInMethod}.EMAIL_LINK.
+ *
+ * @param auth - The {@link Auth} instance.
+ * @param email - The user's email address.
+ *
+ * Deprecated. Migrating off of this method is recommended as a security best-practice.
+ * Learn more in the Identity Platform documentation for
+ * {@link https://cloud.google.com/identity-platform/docs/admin/email-enumeration-protection | Email Enumeration Protection}.
+ * @public
+ */
+async function fetchSignInMethodsForEmail(auth, email) {
+    // createAuthUri returns an error if continue URI is not http or https.
+    // For environments like Cordova, Chrome extensions, native frameworks, file
+    // systems, etc, use http://localhost as continue URL.
+    const continueUri = _isHttpOrHttps() ? _getCurrentUrl() : 'http://localhost';
+    const request = {
+        identifier: email,
+        continueUri
+    };
+    const { signinMethods } = await createAuthUri(getModularInstance(auth), request);
+    return signinMethods || [];
 }
 /**
  * Adds an observer for changes to the signed-in user's ID token.
@@ -10263,7 +10504,7 @@ async function initializeFirestore() {
         firebaseFunctions = global._vy_firebase_functions;
     } else {
         console.log("Importing Client Firestore SDK...");
-        const firebaseModules = await import('./index.esm-_jVgnhfd.js');
+        const firebaseModules = await import('./index.esm-CWw9p6l-.js');
         firebaseFunctions = firebaseModules;
     }
 
@@ -10694,5 +10935,5 @@ if (typeof window !== "undefined") {
     window._vy_apiUtil = apiUtil;
 }
 
-export { getGlobal as A, isIndexedDBAvailable as B, Component as C, DEFAULT_ENTRY_NAME as D, getUA as E, FirebaseError as F, GoogleAuthProvider as G, isSafari as H, isSafariOrWebkit as I, __awaiter as J, __generator as K, Logger as L, __values as M, SDK_VERSION as S, _addComponent as _, apiUtil as a, getAuth as b, signInWithEmailAndPassword as c, database as d, signInWithPopup as e, signOut as f, getApp$1 as g, _apps as h, _components as i, _getProvider as j, _isFirebaseServerApp as k, _registerComponent as l, _removeServiceInstance as m, _serverApps as n, getApp as o, initializeApp as p, LogLevel as q, registerVersion as r, serverTimestamp as s, getModularInstance as t, deepEqual as u, isCloudWorkstation as v, pingServer as w, updateEmulatorBanner as x, createMockUserToken as y, getDefaultEmulatorHostnameAndPort as z };
-//# sourceMappingURL=apiUtil-BuesFibk.js.map
+export { createMockUserToken as A, getDefaultEmulatorHostnameAndPort as B, Component as C, DEFAULT_ENTRY_NAME as D, getGlobal as E, FirebaseError as F, GoogleAuthProvider as G, isIndexedDBAvailable as H, getUA as I, isSafari as J, isSafariOrWebkit as K, Logger as L, __awaiter as M, __generator as N, OAuthProvider as O, __values as P, SDK_VERSION as S, _addComponent as _, apiUtil as a, getAuth as b, signInWithEmailAndPassword as c, database as d, signInWithPopup as e, fetchSignInMethodsForEmail as f, getApp$1 as g, signOut as h, _apps as i, _components as j, _getProvider as k, linkWithCredential as l, _isFirebaseServerApp as m, _registerComponent as n, _removeServiceInstance as o, _serverApps as p, getApp as q, registerVersion as r, serverTimestamp as s, initializeApp as t, LogLevel as u, getModularInstance as v, deepEqual as w, isCloudWorkstation as x, pingServer as y, updateEmulatorBanner as z };
+//# sourceMappingURL=apiUtil-CDq4WBQY.js.map

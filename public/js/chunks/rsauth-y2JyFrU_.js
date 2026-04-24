@@ -1,22 +1,71 @@
-import van from "vanjs-core";
-import { getApp } from "./data/firebase.js";
+import { e as eventBus, v as van } from './eventbus-c5hoJhOF.js';
+import { d as database, b as getAuth, g as getApp, c as signInWithEmailAndPassword, O as OAuthProvider, G as GoogleAuthProvider, e as signInWithPopup, f as fetchSignInMethodsForEmail, l as linkWithCredential, h as signOut } from './apiUtil-CDq4WBQY.js';
+import { o as orgContext } from './orgContext-CvnztG5e.js';
 
-import { eventBus } from "./eventbus.js";
+/**
+ * UserProfilesData class manages user profile-related data operations.
+ *
+ * User profiles are represented in a single collection as follows:
+ * - id: Record identifier, matches user id
+ * - email: User's email address
+ * - displayName: User's display name
+ * - created: Timestamp of creation (auto-generated)
+ * - updated: Timestamp of last update (auto-generated)
+ */
 
-import {
-    getAuth,
-    signInWithEmailAndPassword,
-    signInWithPopup,
-    GoogleAuthProvider,
-    OAuthProvider,
-    fetchSignInMethodsForEmail,
-    linkWithCredential,
-    sendPasswordResetEmail,
-    signOut,
-} from "firebase/auth";
+const COLLECTION = "userProfiles";
 
-import { UserProfilesData } from "./data/userProfiles.js";
-import { orgContext } from "./data/orgContext.js";
+class UserProfilesData {
+    constructor() {}
+
+    // =========================================================================
+    // Query Methods
+    // =========================================================================
+
+    async getById(id) {
+        return await database.get(COLLECTION, id);
+    }
+
+    async getByIds(ids) {
+        return await database.query(COLLECTION, {
+            id: { op: "in", value: ids },
+        });
+    }
+
+    async ensureProfile(id, email, displayName) {
+        let profile = await this.getById(id);
+
+        if (!profile) {
+            displayName = displayName || email;
+            const newProfile = {
+                id,
+                email,
+                displayName,
+            };
+            await database.set(COLLECTION, newProfile);
+            profile = await this.getById(id);
+        }
+
+        return profile;
+    }
+
+    // =========================================================================
+    // CRUD Methods
+    // =========================================================================
+
+    async update(id, updates) {
+        const allowedFields = ["displayName"];
+        const filteredUpdates = {};
+        for (const key of allowedFields) {
+            if (updates[key] !== undefined) {
+                filteredUpdates[key] = updates[key];
+            }
+        }
+        if (Object.keys(filteredUpdates).length > 0) {
+            await database.update(COLLECTION, id, filteredUpdates);
+        }
+    }
+}
 
 class Auth {
     constructor() {
@@ -527,4 +576,5 @@ if (typeof window !== "undefined") {
     window._vy_auth = auth;
 }
 
-export { Auth, auth };
+export { Auth as A, UserProfilesData as U, auth as a };
+//# sourceMappingURL=rsauth-y2JyFrU_.js.map

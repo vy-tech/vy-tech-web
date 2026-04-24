@@ -1,6 +1,6 @@
-import { t as toUtf8 } from './index-CHuSLD4x.js';
+import { t as toUtf8 } from './index-bOoZQvBx.js';
 import { f as fromUtf8 } from './SignatureV4MultiRegion-DiJigTAW.js';
-import './apiUtil-BuesFibk.js';
+import './apiUtil-CDq4WBQY.js';
 
 class EventStreamSerde {
     marshaller;
@@ -257,4 +257,4 @@ class EventStreamSerde {
 }
 
 export { EventStreamSerde };
-//# sourceMappingURL=index-B5ndMMku.js.map
+//# sourceMappingURL=index-CrZjThyH.js.map

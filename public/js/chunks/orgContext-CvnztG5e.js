@@ -1,5 +1,5 @@
 import { v as van } from './eventbus-c5hoJhOF.js';
-import { d as database, a as apiUtil } from './apiUtil-BuesFibk.js';
+import { d as database, a as apiUtil } from './apiUtil-CDq4WBQY.js';
 
 /**
  * OrganizationsData class manages organization-related data operations.
@@ -430,4 +430,4 @@ if (typeof window !== "undefined") {
 }
 
 export { OrganizationsData as O, orgContext as o };
-//# sourceMappingURL=orgContext-CAnKHZle.js.map
+//# sourceMappingURL=orgContext-CvnztG5e.js.map

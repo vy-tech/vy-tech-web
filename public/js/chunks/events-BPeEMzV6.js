@@ -1,5 +1,5 @@
 import { v as van, e as eventBus } from './eventbus-c5hoJhOF.js';
-import { E as EventsData } from './events-CskLT14Q.js';
+import { E as EventsData } from './events-D5QflqmM.js';
 import { H as Hierarchy } from './hierarchy-BeeefNz4.js';
 
 class Events extends EventsData {
@@ -223,4 +223,4 @@ class Events extends EventsData {
 const events = new Events();
 
 export { events as e };
-//# sourceMappingURL=events-Bgfu_X-q.js.map
+//# sourceMappingURL=events-BPeEMzV6.js.map

@@ -1,5 +1,5 @@
 import { H as HttpRequest, f as fromUtf8$3, b as buildQueryString, t as toHex, p as parseUrl, S as SignatureV4, i as isArrayBuffer, a as toUint8Array, n as normalizeProvider$1, c as S3_EXPRESS_AUTH_SCHEME, d as S3_EXPRESS_BACKEND, e as S3_EXPRESS_BUCKET_TYPE, g as SESSION_TOKEN_HEADER, h as getEndpointFromInstructions, j as toEndpointV1$1, k as getEndpointFromConfig, l as SignatureV4MultiRegion, r as resolveParams, m as fromHex } from './SignatureV4MultiRegion-DiJigTAW.js';
-import { J as __awaiter, K as __generator, M as __values } from './apiUtil-BuesFibk.js';
+import { M as __awaiter, N as __generator, P as __values } from './apiUtil-CDq4WBQY.js';
 
 const getHttpHandlerExtensionConfiguration = (runtimeConfig) => {
     return {
@@ -2185,7 +2185,7 @@ class HttpProtocol extends SerdeContext {
         });
     }
     async loadEventStreamCapability() {
-        const { EventStreamSerde } = await import('./index-B5ndMMku.js');
+        const { EventStreamSerde } = await import('./index-CrZjThyH.js');
         return new EventStreamSerde({
             marshaller: this.getEventStreamMarshaller(),
             serializer: this.serializer,
@@ -16364,4 +16364,4 @@ var index = /*#__PURE__*/Object.freeze({
 });
 
 export { index as i, toUtf8 as t };
-//# sourceMappingURL=index-CHuSLD4x.js.map
+//# sourceMappingURL=index-bOoZQvBx.js.map
