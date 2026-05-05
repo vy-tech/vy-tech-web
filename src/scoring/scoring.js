@@ -149,6 +149,16 @@ class Score {
         this.newBoxVolatilityFactor = 0.0;
         this.lostBoxVolatilityFactor = 0.0;
 
+        // Live-UI smoothing: causal rolling mean over the last N currentScore
+        // values. Independent of the summarizer's bucket-level smoothing
+        // (H017). At 0.25s ticks, liveSmoothWindow=40 ≈ 10s of lookback.
+        // Set liveSmoothWindow <= 1 to disable. liveSmoothEnabled is gated
+        // off by Summarizer.create() so the offline rebuild sees raw
+        // post-volatility currentScore (the H017-validated math).
+        this.liveSmoothWindow = 40;
+        this.liveSmoothBuffer = [];
+        this.liveSmoothEnabled = true;
+
         /** Last working recipe */
         // this.softmaxAlpha = 0.003;
         // //this.softmaxAlpha = 0.001875; // controls how spiky per-row scoring is
@@ -194,7 +204,7 @@ class Score {
         }
 
         for (const row of rows) {
-            row.time = row.frame / (row.fps || 20.0) + timeOffset;
+            row.time = row.frame / (this.fps || row.fps || 20.0) + timeOffset;
 
             this.computeRowScore(row, emotions, this.softmaxAlpha);
         }
@@ -213,6 +223,12 @@ class Score {
             return [];
         }
         const rows = await response.json();
+
+        // Support both raw array and {results: []} formats for flexibility
+        if (!Array.isArray(rows) && "results" in rows) {
+            this.fps = rows.fps;
+            return rows.results;
+        }
 
         if (!rows || rows.length == 0) {
             console.error(`Error ${url} is empty`);
@@ -492,6 +508,7 @@ class Score {
         this.windowEndIndex = 0;
         this.windowScore = 0;
         this.windowBoxes = [];
+        this.liveSmoothBuffer = [];
     }
 
     async resetLoadSchedule(newTime) {
@@ -555,6 +572,7 @@ class Score {
         this.currentSecond = null;
         this.currentScore = 0;
         this.currentCores = [0, 0, 0, 0, 0, 0, 0];
+        this.liveSmoothBuffer = [];
 
         eventBus.fire("scoring.timeSeek", { currentTime: currentTime });
 
@@ -822,6 +840,20 @@ class Score {
         } else {
             this.currentScore = 0;
             this.currentCores.fill(0);
+        }
+
+        // Live-UI causal smoothing of currentScore. Buffer the raw
+        // post-volatility score, then replace currentScore with the rolling
+        // mean. Gated so the summarizer's offline rebuild path sees raw
+        // currentScore (the H017-validated max-then-smooth math).
+        if (this.liveSmoothEnabled && this.liveSmoothWindow > 1) {
+            this.liveSmoothBuffer.push(this.currentScore);
+            if (this.liveSmoothBuffer.length > this.liveSmoothWindow) {
+                this.liveSmoothBuffer.shift();
+            }
+            let sum = 0;
+            for (const v of this.liveSmoothBuffer) sum += v;
+            this.currentScore = sum / this.liveSmoothBuffer.length;
         }
 
         // TODO Refactor, only call for new boxes in the window

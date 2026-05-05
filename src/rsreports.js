@@ -48,9 +48,7 @@ class Reports {
         //this.event = null;
         this.wallclockStartTimeUTC = null;
 
-        this.isEventContext = van.state(
-            this.hierarchy?.type === "event"
-        );
+        this.isEventContext = van.state(this.hierarchy?.type === "event");
     }
 
     updateLocationBar() {
@@ -132,12 +130,11 @@ class Reports {
 
     setActiveTab() {
         if (!this.hierarchy) return;
-        
+
         const type = this.hierarchy.type;
         if (type === "event") {
             this.activeNavTab.val = "Events";
-        }
-        else if (type === "file") {
+        } else if (type === "file") {
             this.activeNavTab.val = "Videos";
         }
     }
@@ -647,7 +644,6 @@ class Reports {
                 this.player.pause();
             }
         });
-
     }
 
     addCameraMapListeners() {
@@ -655,7 +651,6 @@ class Reports {
             this.changeCamera(e.detail.camera);
         });
     }
-
 }
 
 const reports = new Reports();

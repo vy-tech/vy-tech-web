@@ -942,6 +942,16 @@ class Score {
         this.newBoxVolatilityFactor = 0.0;
         this.lostBoxVolatilityFactor = 0.0;
 
+        // Live-UI smoothing: causal rolling mean over the last N currentScore
+        // values. Independent of the summarizer's bucket-level smoothing
+        // (H017). At 0.25s ticks, liveSmoothWindow=40 ≈ 10s of lookback.
+        // Set liveSmoothWindow <= 1 to disable. liveSmoothEnabled is gated
+        // off by Summarizer.create() so the offline rebuild sees raw
+        // post-volatility currentScore (the H017-validated math).
+        this.liveSmoothWindow = 40;
+        this.liveSmoothBuffer = [];
+        this.liveSmoothEnabled = true;
+
         /** Last working recipe */
         // this.softmaxAlpha = 0.003;
         // //this.softmaxAlpha = 0.001875; // controls how spiky per-row scoring is
@@ -987,7 +997,7 @@ class Score {
         }
 
         for (const row of rows) {
-            row.time = row.frame / (row.fps || 20.0) + timeOffset;
+            row.time = row.frame / (this.fps || row.fps || 20.0) + timeOffset;
 
             this.computeRowScore(row, emotions, this.softmaxAlpha);
         }
@@ -1006,6 +1016,12 @@ class Score {
             return [];
         }
         const rows = await response.json();
+
+        // Support both raw array and {results: []} formats for flexibility
+        if (!Array.isArray(rows) && "results" in rows) {
+            this.fps = rows.fps;
+            return rows.results;
+        }
 
         if (!rows || rows.length == 0) {
             console.error(`Error ${url} is empty`);
@@ -1285,6 +1301,7 @@ class Score {
         this.windowEndIndex = 0;
         this.windowScore = 0;
         this.windowBoxes = [];
+        this.liveSmoothBuffer = [];
     }
 
     async resetLoadSchedule(newTime) {
@@ -1348,6 +1365,7 @@ class Score {
         this.currentSecond = null;
         this.currentScore = 0;
         this.currentCores = [0, 0, 0, 0, 0, 0, 0];
+        this.liveSmoothBuffer = [];
 
         eventBus.fire("scoring.timeSeek", { currentTime: currentTime });
 
@@ -1617,6 +1635,20 @@ class Score {
             this.currentCores.fill(0);
         }
 
+        // Live-UI causal smoothing of currentScore. Buffer the raw
+        // post-volatility score, then replace currentScore with the rolling
+        // mean. Gated so the summarizer's offline rebuild path sees raw
+        // currentScore (the H017-validated max-then-smooth math).
+        if (this.liveSmoothEnabled && this.liveSmoothWindow > 1) {
+            this.liveSmoothBuffer.push(this.currentScore);
+            if (this.liveSmoothBuffer.length > this.liveSmoothWindow) {
+                this.liveSmoothBuffer.shift();
+            }
+            let sum = 0;
+            for (const v of this.liveSmoothBuffer) sum += v;
+            this.currentScore = sum / this.liveSmoothBuffer.length;
+        }
+
         // TODO Refactor, only call for new boxes in the window
         // TODO Refactor, make event based?
         activeBoxManager.update(this.windowBoxes);
@@ -1769,6 +1801,12 @@ class Summarizer {
         this.currentCamera = 1;
         this.summaries = [];
 
+        // H017: post-bucket rolling-mean smoothing on the `score` field.
+        // Defaults match the H017 production recommendation: causal w=10.
+        // Set smoothWindow <= 1 or smoothMode = "none" to disable.
+        this.smoothWindow = 10;
+        this.smoothMode = "causal"; // "causal" | "centered" | "none"
+
         eventBus.addEventListener("ui.requestSummaryRebuild", async (e) => {
             const { hierarchy } = e.detail;
             await this.rebuild(hierarchy);
@@ -1785,6 +1823,38 @@ class Summarizer {
 
     getAll() {
         return this.summaries;
+    }
+
+    smoothSummary(results) {
+        const window = this.smoothWindow;
+        const mode = this.smoothMode;
+        if (window <= 1 || mode === "none") return results;
+
+        const n = results.length;
+        // Snapshot the original scores so each smoothed value is computed
+        // from raw inputs, not from previously-smoothed neighbors.
+        const raw = results.map((r) => r.score);
+
+        for (let i = 0; i < n; i++) {
+            let lo, hi;
+            if (mode === "centered") {
+                const half = Math.floor(window / 2);
+                lo = Math.max(0, i - half);
+                hi = Math.min(n, i + half + 1);
+            } else if (mode === "causal") {
+                lo = Math.max(0, i - window + 1);
+                hi = i + 1;
+            } else {
+                console.error(
+                    `Unknown smoothMode: ${mode}; smoothing skipped`
+                );
+                return results;
+            }
+            let sum = 0;
+            for (let j = lo; j < hi; j++) sum += raw[j];
+            results[i].score = sum / (hi - lo);
+        }
+        return results;
     }
 
     async rebuild(hierarchy) {
@@ -1820,37 +1890,48 @@ class Summarizer {
         var { closed, pct } = progress.show("Creating summary...");
 
         // Run through the fragments as if the video was playing 0.25 seconds
-        // at a time.
-        for (let i = 0; i < fragments.length; i++) {
-            const fragment = fragments[i];
-            pct.val = (i / fragments.length) * 100;
+        // at a time. Disable per-tick live-UI smoothing for the duration so
+        // bucket aggregation sees raw post-volatility currentScore (the
+        // H017-validated max-then-smooth path).
+        const prevLiveSmooth = scoring.liveSmoothEnabled;
+        scoring.liveSmoothEnabled = false;
+        try {
+            for (let i = 0; i < fragments.length; i++) {
+                const fragment = fragments[i];
+                pct.val = (i / fragments.length) * 100;
 
-            for (let dt = 0; dt < fragment.duration; dt += 0.25) {
-                // Update the scoring engine to this time
-                const newTime = fragment.start + dt;
-                const second = Math.floor(newTime);
-                await scoring.handleTimeUpdate(newTime);
+                for (let dt = 0; dt < fragment.duration; dt += 0.25) {
+                    // Update the scoring engine to this time
+                    const newTime = fragment.start + dt;
+                    const second = Math.floor(newTime);
+                    await scoring.handleTimeUpdate(newTime);
 
-                // Get or initialize the score accumulator for this second
-                const score = (scores[second] = scores[second] || {
-                    startTime: 99999999,
-                    endTime: 0,
-                    score: 0,
-                    count: 0,
-                    people: 0,
-                    maxScore: 0,
-                });
+                    // Get or initialize the score accumulator for this second
+                    const score = (scores[second] = scores[second] || {
+                        startTime: 99999999,
+                        endTime: 0,
+                        score: 0,
+                        count: 0,
+                        people: 0,
+                        maxScore: 0,
+                    });
 
-                // Accumulate the score
-                score.startTime = Math.min(score.startTime, newTime);
-                score.endTime = Math.max(score.endTime, newTime);
-                score.score += scoring.currentScore;
-                score.people += activeBoxManager.activeBoxes.length;
-                score.count += 1;
-                if (Math.abs(scoring.currentScore) > Math.abs(score.maxScore)) {
-                    score.maxScore = scoring.currentScore;
+                    // Accumulate the score
+                    score.startTime = Math.min(score.startTime, newTime);
+                    score.endTime = Math.max(score.endTime, newTime);
+                    score.score += scoring.currentScore;
+                    score.people += activeBoxManager.activeBoxes.length;
+                    score.count += 1;
+                    if (
+                        Math.abs(scoring.currentScore) >
+                        Math.abs(score.maxScore)
+                    ) {
+                        score.maxScore = scoring.currentScore;
+                    }
                 }
             }
+        } finally {
+            scoring.liveSmoothEnabled = prevLiveSmooth;
         }
 
         // Compute averages and format times
@@ -1862,9 +1943,12 @@ class Summarizer {
             score.endTime = score.endTime.toFixed(2);
         }
 
-        closed.val = true;
+        // H017: post-bucket smoothing pass. `count` and `maxScore` pass
+        // through unchanged; only `score` is smoothed.
+        const result = this.smoothSummary(Object.values(scores));
 
-        return Object.values(scores);
+        closed.val = true;
+        return result;
     }
 
     // checkPeople(summary) {
@@ -2169,4 +2253,4 @@ class Summarizer {
 const summarizer = new Summarizer();
 
 export { ProfilesData as P, Summarizer as S, activeBoxManager as a, scoring as b, profilesData as c, demographics as d, geomUtil as g, progress as p, summarizer as s };
-//# sourceMappingURL=summarizer-CXZ65g74.js.map
+//# sourceMappingURL=summarizer-C7QbJ7AE.js.map

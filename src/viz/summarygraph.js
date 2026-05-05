@@ -9,7 +9,9 @@ class SummaryGraph {
         this.canvas = null;
         this.ctx = null;
         this.isStale = true;
-        this.timeComplete = 0;
+        this.currentTime = 0;
+        this.firstBucketTime = 0;
+        this.lastBucketTime = 0;
 
         eventBus.addEventListener("playback.ready", (e) => {
             this.paint();
@@ -20,7 +22,7 @@ class SummaryGraph {
             //if (this.isStale) this.paint();
             //this.isStale = false;
             if (!e.detail.currentTime || !e.detail.duration) return;
-            this.timeComplete = e.detail.currentTime / e.detail.duration;
+            this.currentTime = e.detail.currentTime;
             this.paint();
         });
 
@@ -88,12 +90,16 @@ class SummaryGraph {
         const timeLinePlugin = {
             id: "timeLine",
             afterDraw: (chart) => {
-                if (this.timeComplete) {
+                if (this.currentTime && this.lastBucketTime > this.firstBucketTime) {
                     const ctx = chart.ctx;
                     const chartArea = chart.chartArea;
+                    const fraction =
+                        (this.currentTime - this.firstBucketTime) /
+                        (this.lastBucketTime - this.firstBucketTime);
+                    const clamped = Math.max(0, Math.min(1, fraction));
                     const currentX =
                         chartArea.left +
-                        this.timeComplete * (chartArea.right - chartArea.left);
+                        clamped * (chartArea.right - chartArea.left);
 
                     ctx.save();
                     ctx.beginPath();
@@ -179,24 +185,50 @@ class SummaryGraph {
         //     data.push(summary[idx].people);
         // }
 
-        let step = Math.floor(summary.length / 100);
+        const totalDuration = parseInt(summary[summary.length - 1].startTime);
+        const useMMSS = totalDuration < 3600;
+
+        let firstBucketTime = 0;
+        let lastBucketTime = 0;
 
         for (let i = 0; i < 100; i++) {
-            let idx = i * step;
+            const startIdx = Math.floor((i * summary.length) / 100);
+            const endIdx = Math.max(
+                startIdx + 1,
+                Math.floor(((i + 1) * summary.length) / 100)
+            );
+            const count = endIdx - startIdx;
+
             let people = 0;
             let score = 0;
             let elapsedTime = 0;
 
-            for (let j = 0; j < step; j++) {
-                people += summary[idx + j].people;
-                score += summary[idx + j].score;
-                elapsedTime += parseInt(summary[idx + j].startTime);
+            for (let j = startIdx; j < endIdx; j++) {
+                people += summary[j].people;
+                score += summary[j].score;
+                elapsedTime += parseInt(summary[j].startTime);
             }
 
-            peopleData.push(people / step);
-            scoreData.push(score / step);
-            labels.push(timeUtil.format(elapsedTime / step));
+            peopleData.push(people / count);
+            scoreData.push(score / count);
+
+            const avgTime = elapsedTime / count;
+            if (i === 0) firstBucketTime = avgTime;
+            if (i === 99) lastBucketTime = avgTime;
+
+            if (useMMSS) {
+                const mins = Math.floor(avgTime / 60);
+                const secs = Math.floor(avgTime % 60);
+                labels.push(
+                    `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+                );
+            } else {
+                labels.push(timeUtil.format(avgTime));
+            }
         }
+
+        this.firstBucketTime = firstBucketTime;
+        this.lastBucketTime = lastBucketTime;
 
         // Update the chart data
         this.chart.data.labels = labels;

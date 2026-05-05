@@ -12,6 +12,12 @@ class Summarizer {
         this.currentCamera = 1;
         this.summaries = [];
 
+        // H017: post-bucket rolling-mean smoothing on the `score` field.
+        // Defaults match the H017 production recommendation: causal w=10.
+        // Set smoothWindow <= 1 or smoothMode = "none" to disable.
+        this.smoothWindow = 10;
+        this.smoothMode = "causal"; // "causal" | "centered" | "none"
+
         eventBus.addEventListener("ui.requestSummaryRebuild", async (e) => {
             const { hierarchy } = e.detail;
             await this.rebuild(hierarchy);
@@ -28,6 +34,38 @@ class Summarizer {
 
     getAll() {
         return this.summaries;
+    }
+
+    smoothSummary(results) {
+        const window = this.smoothWindow;
+        const mode = this.smoothMode;
+        if (window <= 1 || mode === "none") return results;
+
+        const n = results.length;
+        // Snapshot the original scores so each smoothed value is computed
+        // from raw inputs, not from previously-smoothed neighbors.
+        const raw = results.map((r) => r.score);
+
+        for (let i = 0; i < n; i++) {
+            let lo, hi;
+            if (mode === "centered") {
+                const half = Math.floor(window / 2);
+                lo = Math.max(0, i - half);
+                hi = Math.min(n, i + half + 1);
+            } else if (mode === "causal") {
+                lo = Math.max(0, i - window + 1);
+                hi = i + 1;
+            } else {
+                console.error(
+                    `Unknown smoothMode: ${mode}; smoothing skipped`
+                );
+                return results;
+            }
+            let sum = 0;
+            for (let j = lo; j < hi; j++) sum += raw[j];
+            results[i].score = sum / (hi - lo);
+        }
+        return results;
     }
 
     async rebuild(hierarchy) {
@@ -63,37 +101,48 @@ class Summarizer {
         var { closed, pct } = progress.show("Creating summary...");
 
         // Run through the fragments as if the video was playing 0.25 seconds
-        // at a time.
-        for (let i = 0; i < fragments.length; i++) {
-            const fragment = fragments[i];
-            pct.val = (i / fragments.length) * 100;
+        // at a time. Disable per-tick live-UI smoothing for the duration so
+        // bucket aggregation sees raw post-volatility currentScore (the
+        // H017-validated max-then-smooth path).
+        const prevLiveSmooth = scoring.liveSmoothEnabled;
+        scoring.liveSmoothEnabled = false;
+        try {
+            for (let i = 0; i < fragments.length; i++) {
+                const fragment = fragments[i];
+                pct.val = (i / fragments.length) * 100;
 
-            for (let dt = 0; dt < fragment.duration; dt += 0.25) {
-                // Update the scoring engine to this time
-                const newTime = fragment.start + dt;
-                const second = Math.floor(newTime);
-                await scoring.handleTimeUpdate(newTime);
+                for (let dt = 0; dt < fragment.duration; dt += 0.25) {
+                    // Update the scoring engine to this time
+                    const newTime = fragment.start + dt;
+                    const second = Math.floor(newTime);
+                    await scoring.handleTimeUpdate(newTime);
 
-                // Get or initialize the score accumulator for this second
-                const score = (scores[second] = scores[second] || {
-                    startTime: 99999999,
-                    endTime: 0,
-                    score: 0,
-                    count: 0,
-                    people: 0,
-                    maxScore: 0,
-                });
+                    // Get or initialize the score accumulator for this second
+                    const score = (scores[second] = scores[second] || {
+                        startTime: 99999999,
+                        endTime: 0,
+                        score: 0,
+                        count: 0,
+                        people: 0,
+                        maxScore: 0,
+                    });
 
-                // Accumulate the score
-                score.startTime = Math.min(score.startTime, newTime);
-                score.endTime = Math.max(score.endTime, newTime);
-                score.score += scoring.currentScore;
-                score.people += activeBoxManager.activeBoxes.length;
-                score.count += 1;
-                if (Math.abs(scoring.currentScore) > Math.abs(score.maxScore)) {
-                    score.maxScore = scoring.currentScore;
+                    // Accumulate the score
+                    score.startTime = Math.min(score.startTime, newTime);
+                    score.endTime = Math.max(score.endTime, newTime);
+                    score.score += scoring.currentScore;
+                    score.people += activeBoxManager.activeBoxes.length;
+                    score.count += 1;
+                    if (
+                        Math.abs(scoring.currentScore) >
+                        Math.abs(score.maxScore)
+                    ) {
+                        score.maxScore = scoring.currentScore;
+                    }
                 }
             }
+        } finally {
+            scoring.liveSmoothEnabled = prevLiveSmooth;
         }
 
         // Compute averages and format times
@@ -105,9 +154,12 @@ class Summarizer {
             score.endTime = score.endTime.toFixed(2);
         }
 
-        closed.val = true;
+        // H017: post-bucket smoothing pass. `count` and `maxScore` pass
+        // through unchanged; only `score` is smoothed.
+        const result = this.smoothSummary(Object.values(scores));
 
-        return Object.values(scores);
+        closed.val = true;
+        return result;
     }
 
     // checkPeople(summary) {
