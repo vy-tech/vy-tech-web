@@ -155,9 +155,9 @@ class Score {
         // Set liveSmoothWindow <= 1 to disable. liveSmoothEnabled is gated
         // off by Summarizer.create() so the offline rebuild sees raw
         // post-volatility currentScore (the H017-validated math).
-        this.liveSmoothWindow = 40;
+        this.liveSmoothWindow = 0;
         this.liveSmoothBuffer = [];
-        this.liveSmoothEnabled = true;
+        this.liveSmoothEnabled = false;
 
         /** Last working recipe */
         // this.softmaxAlpha = 0.003;

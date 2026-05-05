@@ -948,9 +948,9 @@ class Score {
         // Set liveSmoothWindow <= 1 to disable. liveSmoothEnabled is gated
         // off by Summarizer.create() so the offline rebuild sees raw
         // post-volatility currentScore (the H017-validated math).
-        this.liveSmoothWindow = 40;
+        this.liveSmoothWindow = 0;
         this.liveSmoothBuffer = [];
-        this.liveSmoothEnabled = true;
+        this.liveSmoothEnabled = false;
 
         /** Last working recipe */
         // this.softmaxAlpha = 0.003;
@@ -2253,4 +2253,4 @@ class Summarizer {
 const summarizer = new Summarizer();
 
 export { ProfilesData as P, Summarizer as S, activeBoxManager as a, scoring as b, profilesData as c, demographics as d, geomUtil as g, progress as p, summarizer as s };
-//# sourceMappingURL=summarizer-C7QbJ7AE.js.map
+//# sourceMappingURL=summarizer-K5uZqnQb.js.map

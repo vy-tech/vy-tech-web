@@ -1,6 +1,6 @@
 import { v as van, e as eventBus } from './chunks/eventbus-c5hoJhOF.js';
 import { M as Modal, T as Tabs } from './chunks/van-ui-D8yynE9H.js';
-import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-C7QbJ7AE.js';
+import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-K5uZqnQb.js';
 import { e as events } from './chunks/events-BPeEMzV6.js';
 import { d as database } from './chunks/apiUtil-CDq4WBQY.js';
 import { H as Hierarchy, t as timeUtil } from './chunks/hierarchy-BeeefNz4.js';
