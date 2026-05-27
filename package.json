@@ -16,6 +16,7 @@
     "dependencies": {
         "@aws-sdk/client-s3": "^3.0.0",
         "@aws-sdk/s3-request-presigner": "^3.0.0",
+        "@pixiv/three-vrm": "^3.1.6",
         "@tailwindcss/typography": "^0.5.19",
         "ag-grid-community": "^34.2.0",
         "chart.js": "^4.5.0",
@@ -32,6 +33,7 @@
         "luxon": "^3.7.2",
         "marked": "^16.4.1",
         "stripe": "^17.0.0",
+        "three": "^0.169.0",
         "vanjs-core": "^1.5.5",
         "vanjs-ui": "^0.11.13"
     },

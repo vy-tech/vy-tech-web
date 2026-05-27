@@ -222,13 +222,23 @@ class Score {
             console.error(`Error loading ${url}: ${response.statusText}`);
             return [];
         }
-        const rows = await response.json();
+        let rows;
+
+        try {
+            rows = await response.json();
+        } catch (e) {
+            console.error(`Error parsing JSON from ${url}: ${e}`);
+            return [];
+        }
 
         // Support both raw array and {results: []} formats for flexibility
         if (!Array.isArray(rows) && "results" in rows) {
             this.fps = rows.fps;
+            eventBus.fire("scoring.capabilities", rows.capabilities || {});
             return rows.results;
         }
+
+        eventBus.fire("scoring.capabilities", {});
 
         if (!rows || rows.length == 0) {
             console.error(`Error ${url} is empty`);
@@ -709,6 +719,17 @@ class Score {
                 score: row.score,
                 count: 1,
                 index: this.windowEndIndex,
+                // Threaded through for the synthetic-view renderer (x001).
+                // Reference, not copy — these objects are read-only downstream.
+                cores: row.cores,
+                emotion: row.emotion,
+                // Optional in older data; activeBoxManager prefers it for
+                // matching when present (else falls back to spatial overlap).
+                person: row.person,
+                // 32-point head-and-shoulders outline (64 numbers, x/y
+                // interleaved, source-pixel space). Only present in newer
+                // pipeline output.
+                silhouette: row.silhouette,
             });
 
             this.windowEndIndex++;

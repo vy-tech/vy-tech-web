@@ -2,6 +2,7 @@ import { van, rsv } from "./rsvan.js";
 import { eventBus } from "./eventbus.js";
 import { database } from "./data/db.js";
 import { apiUtil } from "./util/apiUtil.js";
+import { timeUtil } from "./util/time.js";
 
 class Admin {
     constructor() {
@@ -14,6 +15,7 @@ class Admin {
         ];
         this.isAdmin = van.state(null); // null = unknown, false = denied, true = allowed
         this.activeTab = van.state("jobs");
+        this.jobsStats = van.state(null);
         this.searchQuery = van.state("");
         this.searchResults = van.state({ orgs: [], users: [] });
         this.searching = van.state(false);
@@ -160,6 +162,12 @@ class Admin {
                     width: 640,
                     height: 360,
                 })
+            ),
+            div(
+                {
+                    class: "mt-6 pt-6 border-t border-gray-200 dark:border-gray-700",
+                },
+                () => this.renderJobsStats()
             )
         );
     }
@@ -226,12 +234,204 @@ class Admin {
     }
 
     async updateJobsChart() {
-        if (!this.jobsChart) return;
         let jobs = await this.getJobsByStatus();
-        let data = this.statusLabels.map((label) => jobs[label].count);
 
-        this.jobsChart.data.datasets[0].data = data;
-        this.jobsChart.update();
+        if (this.jobsChart) {
+            let data = this.statusLabels.map((label) => jobs[label].count);
+            this.jobsChart.data.datasets[0].data = data;
+            this.jobsChart.update();
+        }
+
+        this.jobsStats.val = this.computeJobsStats(jobs);
+    }
+
+    computeJobsStats(jobs) {
+        // Completed jobs carry the processing-time signal only if the backend
+        // stamped a `started` field (added when requested -> processing). Older
+        // jobs without it are excluded from every stat.
+        const completed = jobs.completed.jobs.filter((job) => job.started);
+
+        const byType = {}; // type -> { count, totalSeconds }
+        let totalCount = 0;
+        let totalSeconds = 0;
+
+        for (const job of completed) {
+            const started = job.started?.toDate
+                ? job.started.toDate()
+                : new Date(job.started);
+            const updated = job.updated?.toDate
+                ? job.updated.toDate()
+                : new Date(job.updated);
+            const seconds = (updated - started) / 1000;
+            if (!isFinite(seconds) || seconds < 0) continue;
+
+            const type = job.type || "unknown";
+            if (!byType[type]) byType[type] = { count: 0, totalSeconds: 0 };
+            byType[type].count += 1;
+            byType[type].totalSeconds += seconds;
+            totalCount += 1;
+            totalSeconds += seconds;
+        }
+
+        const remaining = jobs.requested.count + jobs.processing.count;
+
+        const requestedByType = {};
+        for (const job of jobs.requested.jobs) {
+            const type = job.type || "unknown";
+            requestedByType[type] = (requestedByType[type] || 0) + 1;
+        }
+        const processingByType = {};
+        for (const job of jobs.processing.jobs) {
+            const type = job.type || "unknown";
+            processingByType[type] = (processingByType[type] || 0) + 1;
+        }
+
+        const types = Object.entries(byType)
+            .map(([type, agg]) => {
+                const avgSeconds = agg.totalSeconds / agg.count;
+                const perHour = avgSeconds > 0 ? 3600 / avgSeconds : 0;
+                const ratio = totalCount > 0 ? agg.count / totalCount : 0;
+                const requestedCount = requestedByType[type] || 0;
+                // Treat processing count as the parallelism level draining the
+                // requested queue. Fall back to 1 when nothing is in flight.
+                const parallelism = processingByType[type] || 1;
+                const etaSeconds = (requestedCount * avgSeconds) / parallelism;
+                return {
+                    type,
+                    count: agg.count,
+                    avgSeconds,
+                    perHour,
+                    ratio,
+                    etaSeconds,
+                };
+            })
+            .sort((a, b) => b.count - a.count);
+
+        const avgSecondsOverall =
+            totalCount > 0 ? totalSeconds / totalCount : 0;
+        const perHourOverall =
+            avgSecondsOverall > 0 ? 3600 / avgSecondsOverall : 0;
+        const etaSecondsTotal = types.reduce((sum, t) => sum + t.etaSeconds, 0);
+
+        return {
+            totalCount,
+            remaining,
+            avgSecondsOverall,
+            perHourOverall,
+            etaSecondsTotal,
+            types,
+        };
+    }
+
+    renderJobsStats() {
+        const { div, h2, table, thead, tbody, tr, th, td } = van.tags;
+        const stats = this.jobsStats.val;
+
+        if (!stats || stats.totalCount === 0) {
+            return div(
+                { class: "text-sm text-gray-500 dark:text-gray-400" },
+                "No completed jobs with timing data yet."
+            );
+        }
+
+        const summaryCard = (label, value) =>
+            div(
+                {
+                    class: "bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700",
+                },
+                div(
+                    {
+                        class: "text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400",
+                    },
+                    label
+                ),
+                div(
+                    {
+                        class: "text-lg font-semibold dark:text-gray-400 mt-1",
+                    },
+                    value
+                )
+            );
+
+        const headerCell = (text, extra = "") =>
+            th(
+                {
+                    class: `px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 ${extra}`,
+                },
+                text
+            );
+
+        const dataCell = (content, extra = "") =>
+            td(
+                {
+                    class: `px-3 py-2 text-sm dark:text-gray-200 ${extra}`,
+                },
+                content
+            );
+
+        return div(
+            h2(
+                { class: "text-lg font-semibold mb-4 dark:text-white" },
+                "Processing statistics"
+            ),
+            div(
+                {
+                    class: "grid grid-cols-2 md:grid-cols-5 gap-3 mb-6",
+                },
+                summaryCard("Timed completions", String(stats.totalCount)),
+                summaryCard(
+                    "Overall rate",
+                    `${stats.perHourOverall.toFixed(1)}/hr`
+                ),
+                summaryCard(
+                    "Avg processing",
+                    timeUtil.format(stats.avgSecondsOverall, true)
+                ),
+                summaryCard("Remaining jobs", String(stats.remaining)),
+                summaryCard(
+                    "Est. time remaining",
+                    timeUtil.format(stats.etaSecondsTotal, true)
+                )
+            ),
+            div(
+                { class: "overflow-x-auto" },
+                table(
+                    { class: "min-w-full" },
+                    thead(
+                        {
+                            class: "border-b border-gray-200 dark:border-gray-700",
+                        },
+                        tr(
+                            headerCell("Type", "text-left"),
+                            headerCell("Completed", "text-right"),
+                            headerCell("Ratio", "text-right"),
+                            headerCell("Avg time", "text-right"),
+                            headerCell("Jobs/hr", "text-right")
+                        )
+                    ),
+                    tbody(
+                        stats.types.map((t) =>
+                            tr(
+                                {
+                                    class: "border-b border-gray-100 dark:border-gray-700/50",
+                                },
+                                dataCell(t.type, "text-left font-medium"),
+                                dataCell(String(t.count), "text-right"),
+                                dataCell(
+                                    `${(t.ratio * 100).toFixed(0)}%`,
+                                    "text-right"
+                                ),
+                                dataCell(
+                                    timeUtil.format(t.avgSeconds, true),
+                                    "text-right"
+                                ),
+                                dataCell(t.perHour.toFixed(1), "text-right")
+                            )
+                        )
+                    )
+                )
+            )
+        );
     }
 
     // =========================================================================

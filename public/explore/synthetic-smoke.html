@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Synthetic View — VRM smoke test</title>
+<style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0e0e12; color: #e8e8ea; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    #scene { display: block; width: 100vw; height: 100vh; }
+    #hud {
+        position: fixed; top: 12px; left: 12px;
+        background: rgba(0,0,0,0.55); padding: 10px 12px; border-radius: 8px;
+        font-size: 13px; line-height: 1.6; user-select: none; min-width: 220px;
+    }
+    #hud h1 { margin: 0 0 6px 0; font-size: 13px; font-weight: 600; opacity: 0.8; }
+    #hud .row { display: flex; align-items: center; gap: 8px; }
+    #hud .row label { opacity: 0.7; min-width: 70px; }
+    #hud input[type=range] { flex: 1; }
+    #hud .v { font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
+    #fps { font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 600; }
+    #status { font-size: 12px; opacity: 0.7; min-height: 16px; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="hud">
+    <h1>VRM smoke test (x001)</h1>
+    <div id="fps">— fps</div>
+    <div id="status">initializing…</div>
+    <div class="row">
+        <label for="count">instances</label>
+        <input id="count" type="range" min="1" max="100" value="60" />
+        <div class="v" id="countV">60</div>
+    </div>
+    <div class="row">
+        <label for="speed">expr speed</label>
+        <input id="speed" type="range" min="0" max="200" value="60" />
+        <div class="v" id="speedV">0.6×</div>
+    </div>
+    <div class="row">
+        <label for="minimal">expr only</label>
+        <input id="minimal" type="checkbox" checked />
+        <div class="v" id="minimalV">on</div>
+    </div>
+    <div id="stats" style="margin-top: 6px; font-size: 11px; opacity: 0.7;"></div>
+</div>
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+        "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.6/lib/three-vrm.module.js"
+    }
+}
+</script>
+<script type="module" src="./synthetic-smoke.js"></script>
+</body>
+</html>
