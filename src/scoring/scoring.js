@@ -4,6 +4,9 @@ import { eventBus } from "../eventbus.js";
 import { chunksData } from "../data/chunk.js";
 import { demographics } from "./demographics.js";
 import { Hierarchy } from "../util/hierarchy.js";
+import { Tracker } from "./tracker.js";
+import { StateFilter } from "./stateFilter.js";
+import { DEFAULT_FILTER_CONFIG } from "./filterConfig.js";
 
 // const Box = Object.freeze({
 //     X: 0,
@@ -179,6 +182,27 @@ class Score {
 
         this.currentCamera = 0;
         this.enableWindowSplicing = true;
+
+        // H019: per-(track, emotion) state filter. Off by default; flip on
+        // via Score.setFilterEnabled(true) for A/B comparison in the UI.
+        this.filterEnabled = true;
+        this.tracker = new Tracker();
+        this.stateFilter = new StateFilter(DEFAULT_FILTER_CONFIG);
+    }
+
+    setFilterEnabled(enabled, tauConfig = null) {
+        this.filterEnabled = !!enabled;
+        if (tauConfig !== null) this.stateFilter.setTau(tauConfig);
+        this.tracker.reset();
+        this.stateFilter.reset();
+        if (this.filterEnabled) {
+            console.log(
+                "[H019] StateFilter enabled. tauDefault=",
+                this.stateFilter.tauDefault,
+                "tauPerEmotion=",
+                this.stateFilter.tauPerEmotion
+            );
+        }
     }
 
     applyProfileToParams(profile) {
@@ -193,7 +217,26 @@ class Score {
         }
     }
 
-    applyProfileToRows(rows, profile = null, timeOffset = 0.0) {
+    applyTime(rows, timeOffset = 0.0) {
+        for (const row of rows) {
+            row.time = row.frame / (this.fps || row.fps || 20.0) + timeOffset;
+        }
+        return rows;
+    }
+
+    ensureTracking(rows) {
+        if (!this.filterEnabled) return rows;
+        this.tracker.assign(rows, null);
+        return rows;
+    }
+
+    applyFilters(rows) {
+        if (!this.filterEnabled) return rows;
+        this.stateFilter.apply(rows);
+        return rows;
+    }
+
+    applyProfile(rows, profile = null) {
         profile = profile || profilesData.profile;
         let emotions = profile.emotions;
 
@@ -204,8 +247,6 @@ class Score {
         }
 
         for (const row of rows) {
-            row.time = row.frame / (this.fps || row.fps || 20.0) + timeOffset;
-
             this.computeRowScore(row, emotions, this.softmaxAlpha);
         }
 
@@ -222,13 +263,23 @@ class Score {
             console.error(`Error loading ${url}: ${response.statusText}`);
             return [];
         }
-        const rows = await response.json();
+        let rows;
+
+        try {
+            rows = await response.json();
+        } catch (e) {
+            console.error(`Error parsing JSON from ${url}: ${e}`);
+            return [];
+        }
 
         // Support both raw array and {results: []} formats for flexibility
         if (!Array.isArray(rows) && "results" in rows) {
             this.fps = rows.fps;
+            eventBus.fire("scoring.capabilities", rows.capabilities || {});
             return rows.results;
         }
+
+        eventBus.fire("scoring.capabilities", {});
 
         if (!rows || rows.length == 0) {
             console.error(`Error ${url} is empty`);
@@ -245,7 +296,10 @@ class Score {
 
         var rows = await this.loadDetections(url);
 
-        this.applyProfileToRows(rows, profilesData.profile, timeOffset);
+        this.applyTime(rows, timeOffset);
+        this.ensureTracking(rows);
+        this.applyFilters(rows);
+        this.applyProfile(rows, profilesData.profile);
 
         return rows;
     }
@@ -509,6 +563,8 @@ class Score {
         this.windowScore = 0;
         this.windowBoxes = [];
         this.liveSmoothBuffer = [];
+        this.tracker.reset();
+        this.stateFilter.reset();
     }
 
     async resetLoadSchedule(newTime) {
@@ -709,6 +765,17 @@ class Score {
                 score: row.score,
                 count: 1,
                 index: this.windowEndIndex,
+                // Threaded through for the synthetic-view renderer (x001).
+                // Reference, not copy — these objects are read-only downstream.
+                cores: row.cores,
+                emotion: row.emotion,
+                // Optional in older data; activeBoxManager prefers it for
+                // matching when present (else falls back to spatial overlap).
+                person: row.person,
+                // 32-point head-and-shoulders outline (64 numbers, x/y
+                // interleaved, source-pixel space). Only present in newer
+                // pipeline output.
+                silhouette: row.silhouette,
             });
 
             this.windowEndIndex++;

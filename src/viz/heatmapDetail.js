@@ -51,14 +51,20 @@ class HeatmapDetail {
             );
         }
 
-        let content;
+        const personId = box.row.person ?? box.activeBox?.person;
+        const header =
+            personId !== undefined && personId !== null
+                ? div({ class: "text-gray-500 mb-1" }, `Person ${personId}`)
+                : null;
+
+        let body;
         if (emotionRows.length === 0) {
-            content = div(
+            body = div(
                 { class: "italic text-gray-500" },
                 "No contributing emotions",
             );
         } else {
-            content = table(
+            body = table(
                 { class: "table-fixed" },
                 tr(
                     th({ class: "w-32 text-left" }, "Emotion"),
@@ -78,7 +84,7 @@ class HeatmapDetail {
             );
         }
 
-        this.body.replaceChildren(content);
+        this.body.replaceChildren(...(header ? [header, body] : [body]));
 
         const offset = 14;
         const w = this.container.offsetWidth || 240;

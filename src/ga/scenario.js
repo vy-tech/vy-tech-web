@@ -117,14 +117,20 @@ class Scenario {
 
         // Apply the profile to our preloaded raw data and append to the scoring window
         let rows = this.deepCopy(this.rawData);
-        this.scoring.applyProfileToRows(rows, profile);
+        this.scoring.applyTime(rows, 0.0);
+        this.scoring.ensureTracking(rows);
+        this.scoring.applyFilters(rows);
+        this.scoring.applyProfile(rows, profile);
         this.scoring.appendToWindow(rows);
 
         // If we have spillover data, apply the profile and append as well
         if (this.spilloverRawData) {
             const timeOffset = this.scoring.getWindowEndTime();
             let spilloverRows = this.deepCopy(this.spilloverRawData);
-            this.scoring.applyProfileToRows(spilloverRows, profile, timeOffset);
+            this.scoring.applyTime(spilloverRows, timeOffset);
+            this.scoring.ensureTracking(spilloverRows);
+            this.scoring.applyFilters(spilloverRows);
+            this.scoring.applyProfile(spilloverRows, profile);
             this.scoring.appendToWindow(spilloverRows);
         }
 

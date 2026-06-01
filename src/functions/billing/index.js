@@ -7,7 +7,7 @@ import Stripe from "stripe";
 
 import { getAuth } from "firebase-admin/auth";
 
-import { requireAuth } from "../common.js";
+import { requireAuth, isAdmin, requireAdmin } from "../common.js";
 import { OrganizationsData } from "../../data/organizations.js";
 import { grantCredits } from "../../data/creditGrants.js";
 import { JobsData } from "../../data/jobs.js";
@@ -16,35 +16,6 @@ import { database, serverTimestamp } from "../../data/db.js";
 const stripeSecretKey = defineSecret("STRIPE_SECRET_KEY");
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 const stripePriceStarter1000 = defineSecret("STRIPE_PRICE_STARTER_1000");
-
-// Members of this org's `owners` array are treated as Vy admins with the
-// ability to grant credits to any organization. The prod id is baked in;
-// dev/staging can override via the VY_ADMIN_OID env var.
-const VY_ADMIN_OID =
-    process.env.VY_ADMIN_OID || "00hB8gSxKMs5SSLCCbyi";
-
-async function isAdmin(uid) {
-    if (!uid) return false;
-    try {
-        const orgsData = new OrganizationsData();
-        const adminOrg = await orgsData.getById(VY_ADMIN_OID);
-        if (!adminOrg) {
-            console.warn("Vy admin org not found:", VY_ADMIN_OID);
-            return false;
-        }
-        return (adminOrg.owners || []).includes(uid);
-    } catch (err) {
-        console.error("Admin check failed:", err);
-        return false;
-    }
-}
-
-async function requireAdmin(req, res, next) {
-    if (!(await isAdmin(req.uid))) {
-        return res.status(403).json({ error: "Admin access required" });
-    }
-    next();
-}
 
 // Server-side credit pack catalog. Credits and label live in code; the Stripe
 // price id is a secret so pack pricing can be rotated without a code deploy.

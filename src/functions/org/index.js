@@ -6,12 +6,15 @@ import { defineSecret } from "firebase-functions/params";
 
 import { randomBytes, createHmac } from "crypto";
 
-import { requireAuth, getAuth } from "../common.js";
+import { requireAuth, requireAdmin, getAuth } from "../common.js";
 
 import { OrganizationsData } from "../../data/organizations.js";
 import { ApplicationsData } from "../../data/applications.js";
 import { ApiKeysData } from "../../data/apiKeys.js";
+import { FilesData } from "../../data/files.js";
+import { EventsData } from "../../data/events.js";
 import { grantCredits } from "../../data/creditGrants.js";
+import { database } from "../../data/db.js";
 
 // Each new personal org gets a one-shot free credits grant so the user can
 // try processing without paying. Idempotent via the `onlyIfNew` guard in
@@ -246,6 +249,142 @@ orgApp.post("/sync", async (req, res) => {
     await syncUserOrgClaims(req.uid);
     return res.status(200).json({ ok: "ok" });
 });
+
+// Admin listing of all orgs with member, video, event, and credit stats.
+// Restricted to Vy admins via requireAdmin.
+orgApp.get("/admin/list", requireAdmin, async (req, res) => {
+    try {
+        const userCache = new Map();
+        const filesData = new FilesData();
+        const eventsData = new EventsData();
+
+        const orgs = await database.query("organizations");
+        orgs.sort((a, b) =>
+            (a.name || "").localeCompare(b.name || "", undefined, {
+                sensitivity: "base",
+            })
+        );
+
+        const enriched = await Promise.all(
+            orgs.map(async (org) => {
+                const base = {
+                    id: org.id,
+                    name: org.name || null,
+                    token: org.token || null,
+                    isPersonal: !!org.isPersonal,
+                    ownerCount: (org.owners || []).length,
+                    memberCount: (org.members || []).length,
+                };
+                try {
+                    const [members, videos, events, credits] =
+                        await Promise.all([
+                            getAllMembers(org, userCache),
+                            getOrgVideoStats(filesData, org.id),
+                            getOrgEventStats(eventsData, org.id),
+                            getOrgCredits(org.id),
+                        ]);
+                    return {
+                        ...base,
+                        members,
+                        credits,
+                        videos,
+                        events,
+                    };
+                } catch (err) {
+                    console.error(`Failed to enrich org ${org.id}:`, err);
+                    return { ...base, error: err.message || String(err) };
+                }
+            })
+        );
+
+        return res.json({ orgs: enriched });
+    } catch (err) {
+        console.error("Admin list failed:", err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
+async function getAllMembers(org, userCache) {
+    const owners = new Set(org.owners || []);
+    const memberIds = org.members || [];
+    return await Promise.all(
+        memberIds.map(async (uid) => {
+            const isOwner = owners.has(uid);
+            if (!userCache.has(uid)) {
+                try {
+                    const u = await getAuth().getUser(uid);
+                    userCache.set(uid, {
+                        uid: u.uid,
+                        email: u.email || null,
+                        displayName: u.displayName || null,
+                    });
+                } catch (err) {
+                    if (err?.code !== "auth/user-not-found") {
+                        console.warn(
+                            `getUser(${uid}) failed:`,
+                            err?.message || err
+                        );
+                    }
+                    userCache.set(uid, {
+                        uid,
+                        email: null,
+                        displayName: null,
+                    });
+                }
+            }
+            return { ...userCache.get(uid), isOwner };
+        })
+    );
+}
+
+async function getOrgVideoStats(filesData, orgId) {
+    const files = await filesData.getByOrgAndContext(orgId, "video");
+    const byStatus = {};
+    for (const f of files || []) {
+        const status = f.status || "uploaded";
+        byStatus[status] = (byStatus[status] || 0) + 1;
+    }
+    return { total: (files || []).length, byStatus };
+}
+
+function toDateMaybe(value) {
+    if (!value) return null;
+    if (typeof value.toDate === "function") return value.toDate();
+    if (value instanceof Date) return value;
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+async function getOrgEventStats(eventsData, orgId) {
+    const events = await eventsData.getByOrg(orgId);
+    const now = Date.now();
+    const byStatus = {};
+    for (const e of events || []) {
+        let status = e.status;
+        if (!status) {
+            const end = toDateMaybe(e.end);
+            // First processed event in Vy history
+            const cutoff = toDateMaybe("2025-07-11");
+
+            if (end) {
+                if (end.getTime() < cutoff.getTime()) {
+                    status = "missed";
+                } else if (end.getTime() < now) {
+                    status = "captured";
+                } else {
+                    status = "scheduled";
+                }
+            }
+        }
+        byStatus[status] = (byStatus[status] || 0) + 1;
+    }
+    return { total: (events || []).length, byStatus };
+}
+
+async function getOrgCredits(orgId) {
+    const balance = await database.get("credit_balances", orgId);
+    return balance?.credits || 0;
+}
 
 orgApp.post("/key/generate", async (req, res) => {
     const { application, name } = req.body;

@@ -1,5 +1,34 @@
 import { getAuth } from "firebase-admin/auth";
 
+import { OrganizationsData } from "../data/organizations.js";
+
+// Members of this org's `owners` array are treated as Vy admins. The prod id
+// is baked in; dev/staging can override via the VY_ADMIN_OID env var.
+const VY_ADMIN_OID = process.env.VY_ADMIN_OID || "00hB8gSxKMs5SSLCCbyi";
+
+async function isAdmin(uid) {
+    if (!uid) return false;
+    try {
+        const orgsData = new OrganizationsData();
+        const adminOrg = await orgsData.getById(VY_ADMIN_OID);
+        if (!adminOrg) {
+            console.warn("Vy admin org not found:", VY_ADMIN_OID);
+            return false;
+        }
+        return (adminOrg.owners || []).includes(uid);
+    } catch (err) {
+        console.error("Admin check failed:", err);
+        return false;
+    }
+}
+
+async function requireAdmin(req, res, next) {
+    if (!(await isAdmin(req.uid))) {
+        return res.status(403).json({ error: "Admin access required" });
+    }
+    next();
+}
+
 // Helper to check if request is authenticated
 const isAuthenticated = async (req) => {
     try {
@@ -52,4 +81,11 @@ const requireAuth = async (req, res, next) => {
     next();
 };
 
-export { syncUserOrgClaims, isAuthenticated, requireAuth, getAuth };
+export {
+    isAuthenticated,
+    requireAuth,
+    getAuth,
+    VY_ADMIN_OID,
+    isAdmin,
+    requireAdmin,
+};

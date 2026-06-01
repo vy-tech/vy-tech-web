@@ -18,6 +18,7 @@ import { timeUtil } from "./util/time.js";
 
 import { heatmap } from "./viz/heatmap.js";
 import { heatmapDetail } from "./viz/heatmapDetail.js";
+import { syntheticView } from "./viz/syntheticView.js";
 import { cameramap } from "./viz/cameramap.js";
 import { ekg } from "./viz/ekg.js";
 import { spider } from "./viz/spider.js";
@@ -179,6 +180,17 @@ class Reports {
         document.getElementById("report-title").innerText = title;
     }
 
+    async toggleSynthetic() {
+        const next = !syntheticView.active;
+        const videoEl = document.getElementById("report-video");
+        const heatmapEl = document.getElementById("report-viz-heatmap");
+        const btn = document.getElementById("synthetic-toggle");
+        if (videoEl) videoEl.style.visibility = next ? "hidden" : "";
+        if (heatmapEl) heatmapEl.style.display = next ? "none" : "";
+        if (btn) btn.innerText = next ? "Video" : "Synthetic";
+        await syntheticView.setActive(next);
+    }
+
     initListeners() {
         eventBus.addEventListener("ui.requestTimeSeek", (e) => {
             let seconds = e.detail.seconds;
@@ -228,6 +240,17 @@ class Reports {
             const title = file ? file.filename : "File Not Found";
             document.title = `Vy - ${title}`;
             document.getElementById("report-title").innerText = title;
+        });
+
+        eventBus.on("scoring.capabilities", (e) => {
+            const btn = document.getElementById("synthetic-toggle");
+            if (!btn) return;
+            const synthetic = !!(e.detail && e.detail.synthetic);
+            // TEMP: force-on for vy:video:coke until capabilities are deployed
+            const hierarchyOverride = this.hierarchy
+                ?.toString(":")
+                .startsWith("vy:video:coke");
+            btn.classList.toggle("hidden", !(synthetic || hierarchyOverride));
         });
     }
 
@@ -363,7 +386,10 @@ class Reports {
 
             // Video section
             div(
-                { class: "relative w-full pt-[62.8125%] mt-4" },
+                {
+                    id: "report-video-container",
+                    class: "relative w-full pt-[62.8125%] mt-4",
+                },
                 video({
                     id: "report-video",
                     class: "!absolute !top-0 !left-0 !w-full !h-auto !aspect-video video-js video-js-default-skin",
@@ -371,15 +397,32 @@ class Reports {
                     muted: true,
                 }),
 
+                // SYNTHETIC VIEW (x001) — z-5: above the video, below the heatmap
+                syntheticView.createElement({
+                    class: "absolute top-0 left-0 w-full h-auto aspect-video z-[5]",
+                }),
+
                 // HEATMAP
                 heatmap.createElement({
                     class: "absolute top-0 left-0 w-full h-auto aspect-video z-10",
                 }),
 
-                div({
-                    id: "video-controls",
-                    class: "absolute bottom-0 left-0 w-full h-[30px]",
-                })
+                div(
+                    {
+                        id: "video-controls",
+                        class: "absolute bottom-0 left-0 w-full h-[30px] flex items-center px-2 z-20",
+                    },
+                    button(
+                        {
+                            id: "synthetic-toggle",
+                            type: "button",
+                            class:
+                                "ml-auto text-xs px-2 py-1 rounded bg-gray-800/70 text-white hover:bg-gray-700 hidden",
+                            onclick: () => this.toggleSynthetic(),
+                        },
+                        "Synthetic"
+                    )
+                )
             ),
             div(
                 {

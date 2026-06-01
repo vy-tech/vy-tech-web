@@ -153,6 +153,22 @@ class ActiveBoxManager {
     //     );
     // }
 
+    matches(a, b) {
+        /**
+         * Returns true if two boxes are considered the same person.
+         *
+         * When both boxes carry a `person` ID (newer pipeline data), that
+         * is the authoritative signal — two distinct IDs mean two distinct
+         * people even if the boxes happen to spatially overlap. When at
+         * least one side is missing the ID, fall back to spatial overlap
+         * via geomUtil.boxesAreSame (legacy + mixed-data path).
+         */
+        const aHas = a.person !== undefined && a.person !== null;
+        const bHas = b.person !== undefined && b.person !== null;
+        if (aHas && bHas) return a.person === b.person;
+        return geomUtil.boxesAreSame(a, b);
+    }
+
     update(boxes) {
         /**
          * Updates the active boxes based on the current second,
@@ -162,7 +178,7 @@ class ActiveBoxManager {
         for (const box of boxes) {
             // Check if the box is already active
             var activeBox = this.activeBoxes.find((activeBox) => {
-                if (geomUtil.boxesAreSame(activeBox, box)) {
+                if (this.matches(activeBox, box)) {
                     return activeBox;
                 }
             });
@@ -177,6 +193,26 @@ class ActiveBoxManager {
                 activeBox.score = box.score / box.count;
                 activeBox.expires = EXPIRE_TIME;
                 activeBox.index = box.index;
+                // Keep the active box's person ID consistent with the
+                // latest detection. If the new detection has no ID, retain
+                // whatever the active box already had.
+                if (box.person !== undefined && box.person !== null) {
+                    activeBox.person = box.person;
+                }
+                // Refresh per-frame semantic fields from the new detection.
+                // The `undefined` guard preserves the previous value when a
+                // single frame drops the field (sticky last-known behavior),
+                // important for `silhouette` which the synthetic view reads
+                // every paint and which only some pipeline runs emit.
+                if (box.cores !== undefined) {
+                    activeBox.cores = box.cores;
+                }
+                if (box.emotion !== undefined) {
+                    activeBox.emotion = box.emotion;
+                }
+                if (box.silhouette !== undefined) {
+                    activeBox.silhouette = box.silhouette;
+                }
             }
             // If not active, create it and add it to activeBoxes
             // Ensure score is averaged because we're reusing the count
