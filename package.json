@@ -11,7 +11,8 @@
         "dev:js": "rollup -c -w",
         "dev": "npm run dev:css & npm run dev:js",
         "start": "node server.js",
-        "cf-dev-mode": "node scripts/enable-cf-dev-mode.js"
+        "cf-dev-mode": "node scripts/enable-cf-dev-mode.js",
+        "test": "node tests/h019-filter.test.js"
     },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.0.0",

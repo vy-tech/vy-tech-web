@@ -1,6 +1,6 @@
 import { v as van, e as eventBus } from './chunks/eventbus-c5hoJhOF.js';
 import { M as Modal, T as Tabs } from './chunks/van-ui-D8yynE9H.js';
-import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-CYuHBlAu.js';
+import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-n6XNy39N.js';
 import { e as events } from './chunks/events-Dq3OWhfw.js';
 import { d as database } from './chunks/apiUtil-CDq4WBQY.js';
 import { t as timeUtil } from './chunks/time-CkvqO9Ha.js';
@@ -1044,14 +1044,20 @@ class HeatmapDetail {
             );
         }
 
-        let content;
+        const personId = box.row.person ?? box.activeBox?.person;
+        const header =
+            personId !== undefined && personId !== null
+                ? div({ class: "text-gray-500 mb-1" }, `Person ${personId}`)
+                : null;
+
+        let body;
         if (emotionRows.length === 0) {
-            content = div(
+            body = div(
                 { class: "italic text-gray-500" },
                 "No contributing emotions",
             );
         } else {
-            content = table(
+            body = table(
                 { class: "table-fixed" },
                 tr(
                     th({ class: "w-32 text-left" }, "Emotion"),
@@ -1071,7 +1077,7 @@ class HeatmapDetail {
             );
         }
 
-        this.body.replaceChildren(content);
+        this.body.replaceChildren(...(header ? [header, body] : [body]));
 
         const offset = 14;
         const w = this.container.offsetWidth || 240;

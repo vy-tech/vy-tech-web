@@ -20,6 +20,10 @@ class Admin {
         this.searchResults = van.state({ orgs: [], users: [] });
         this.searching = van.state(false);
         this.grantState = van.state({}); // { [oid]: { amount, note, busy, error, success } }
+        this.orgsLoading = van.state(false);
+        this.orgsData = van.state(null); // { orgs: [...] } once loaded
+        this.orgsError = van.state(null);
+        this.orgsExpanded = van.state({}); // { [oid]: bool }
     }
 
     async init() {
@@ -104,6 +108,8 @@ class Admin {
                         return this.createJobsTab();
                     case "credits":
                         return this.createCreditsTab();
+                    case "orgs":
+                        return this.createOrgsTab();
                 }
             })
         );
@@ -134,7 +140,8 @@ class Admin {
                 class: "flex space-x-2 border-b border-gray-200 dark:border-gray-700",
             },
             tabButton("jobs", "Jobs"),
-            tabButton("credits", "Credits")
+            tabButton("credits", "Credits"),
+            tabButton("orgs", "Orgs & Users")
         );
     }
 
@@ -651,6 +658,300 @@ class Admin {
                     );
                 return div();
             }
+        );
+    }
+
+    // =========================================================================
+    // Orgs & Users Tab
+    // =========================================================================
+
+    createOrgsTab() {
+        const { div, h2 } = van.tags;
+        if (!this.orgsData.val && !this.orgsLoading.val && !this.orgsError.val) {
+            this.loadOrgs();
+        }
+        return div(
+            {
+                class: "bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700",
+            },
+            div(
+                { class: "flex items-center justify-between mb-4" },
+                h2(
+                    { class: "text-lg font-semibold dark:text-white" },
+                    "Organizations & users"
+                ),
+                () => {
+                    const { button } = rsv.tags;
+                    return button(
+                        {
+                            name: "refresh-orgs",
+                            onclick: () => this.loadOrgs(true),
+                            disabled: () => this.orgsLoading.val,
+                        },
+                        () =>
+                            this.orgsLoading.val ? "Loading…" : "Refresh"
+                    );
+                }
+            ),
+            () => this.renderOrgsBody()
+        );
+    }
+
+    async loadOrgs(force = false) {
+        if (this.orgsLoading.val) return;
+        if (!force && this.orgsData.val) return;
+        this.orgsLoading.val = true;
+        this.orgsError.val = null;
+        try {
+            const res = await apiUtil.call("/api/org/admin/list");
+            this.orgsData.val = res;
+        } catch (err) {
+            console.error("Failed to load admin org list:", err);
+            this.orgsError.val = "Failed to load. See console.";
+        }
+        this.orgsLoading.val = false;
+    }
+
+    renderOrgsBody() {
+        const { div, p } = van.tags;
+        if (this.orgsError.val) {
+            return p(
+                { class: "text-sm text-red-600 dark:text-red-400" },
+                this.orgsError.val
+            );
+        }
+        if (!this.orgsData.val) {
+            return p(
+                { class: "text-sm text-gray-500 dark:text-gray-400" },
+                "Loading…"
+            );
+        }
+        const orgs = this.orgsData.val.orgs || [];
+        return div(
+            this.renderOrgsSummary(orgs),
+            this.renderOrgsTable(orgs)
+        );
+    }
+
+    renderOrgsSummary(orgs) {
+        const { div } = van.tags;
+        const totals = orgs.reduce(
+            (acc, o) => {
+                (o.members || []).forEach((m) => acc.users.add(m.uid));
+                acc.videos += o.videos?.total || 0;
+                acc.events += o.events?.total || 0;
+                acc.credits += o.credits || 0;
+                return acc;
+            },
+            { users: new Set(), videos: 0, events: 0, credits: 0 }
+        );
+
+        const card = (label, value) =>
+            div(
+                {
+                    class: "bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700",
+                },
+                div(
+                    {
+                        class: "text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400",
+                    },
+                    label
+                ),
+                div(
+                    {
+                        class: "text-lg font-semibold dark:text-gray-400 mt-1",
+                    },
+                    value
+                )
+            );
+
+        return div(
+            { class: "grid grid-cols-2 md:grid-cols-5 gap-3 mb-6" },
+            card("Orgs", String(orgs.length)),
+            card("Users", String(totals.users.size)),
+            card("Videos", String(totals.videos)),
+            card("Events", String(totals.events)),
+            card("Credits", totals.credits.toLocaleString())
+        );
+    }
+
+    formatStatusBreakdown(byStatus) {
+        const entries = Object.entries(byStatus || {});
+        if (entries.length === 0) return "—";
+        entries.sort((a, b) => b[1] - a[1]);
+        return entries.map(([k, v]) => `${k}: ${v}`).join(", ");
+    }
+
+    renderOrgsTable(orgs) {
+        const { div, table, thead, tbody, tr, th, td, span } = van.tags;
+
+        const headerCell = (text, extra = "") =>
+            th(
+                {
+                    class: `px-3 py-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 ${extra}`,
+                },
+                text
+            );
+
+        const dataCell = (content, extra = "") =>
+            td(
+                { class: `px-3 py-2 text-sm dark:text-gray-200 ${extra}` },
+                content
+            );
+
+        const rows = orgs.flatMap((org) => {
+            const expanded = !!this.orgsExpanded.val[org.id];
+            const nameCell = div(
+                div(
+                    { class: "font-medium dark:text-white" },
+                    org.name || "(unnamed)",
+                    org.isPersonal
+                        ? span(
+                              {
+                                  class: "ml-2 text-xs px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300",
+                              },
+                              "personal"
+                          )
+                        : null
+                ),
+                div(
+                    {
+                        class: "text-xs text-gray-500 dark:text-gray-400 font-mono mt-1",
+                    },
+                    org.id
+                ),
+                org.token
+                    ? div(
+                          {
+                              class: "text-xs text-gray-500 dark:text-gray-400 mt-0.5",
+                          },
+                          org.token
+                      )
+                    : null
+            );
+
+            const memberSummary = div(
+                {
+                    class: "cursor-pointer text-blue-600 dark:text-blue-400 hover:underline",
+                    onclick: () => {
+                        this.orgsExpanded.val = {
+                            ...this.orgsExpanded.val,
+                            [org.id]: !expanded,
+                        };
+                    },
+                },
+                `${org.memberCount} ${
+                    org.memberCount === 1 ? "member" : "members"
+                } (${org.ownerCount} owner${org.ownerCount === 1 ? "" : "s"})`
+            );
+
+            const mainRow = tr(
+                {
+                    class: "border-b border-gray-100 dark:border-gray-700/50 align-top",
+                },
+                dataCell(nameCell, "text-left"),
+                dataCell(memberSummary, "text-left"),
+                dataCell((org.credits || 0).toLocaleString(), "text-right"),
+                dataCell(
+                    div(
+                        div(String(org.videos?.total || 0)),
+                        div(
+                            {
+                                class: "text-xs text-gray-500 dark:text-gray-400",
+                            },
+                            this.formatStatusBreakdown(org.videos?.byStatus)
+                        )
+                    ),
+                    "text-right"
+                ),
+                dataCell(
+                    div(
+                        div(String(org.events?.total || 0)),
+                        div(
+                            {
+                                class: "text-xs text-gray-500 dark:text-gray-400",
+                            },
+                            this.formatStatusBreakdown(org.events?.byStatus)
+                        )
+                    ),
+                    "text-right"
+                )
+            );
+
+            if (!expanded) return [mainRow];
+
+            const members = org.members || [];
+            const memberList = members.length
+                ? div(
+                      { class: "space-y-1" },
+                      ...members.map((m) =>
+                          div(
+                              { class: "text-xs dark:text-gray-300" },
+                              m.isOwner
+                                  ? span(
+                                        {
+                                            class: "mr-2 px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200",
+                                        },
+                                        "owner"
+                                    )
+                                  : null,
+                              m.email || m.displayName || m.uid,
+                              m.displayName && m.email
+                                  ? span(
+                                        {
+                                            class: "ml-2 text-gray-500 dark:text-gray-400",
+                                        },
+                                        `(${m.displayName})`
+                                    )
+                                  : null
+                          )
+                      )
+                  )
+                : div(
+                      { class: "text-xs text-gray-500 dark:text-gray-400" },
+                      "No members."
+                  );
+
+            const detailRow = tr(
+                { class: "border-b border-gray-100 dark:border-gray-700/50" },
+                td(
+                    {
+                        colspan: 5,
+                        class: "px-3 py-3 bg-gray-50 dark:bg-gray-900/30",
+                    },
+                    memberList,
+                    org.error
+                        ? div(
+                              {
+                                  class: "mt-2 text-xs text-red-600 dark:text-red-400",
+                              },
+                              `Error: ${org.error}`
+                          )
+                        : null
+                )
+            );
+
+            return [mainRow, detailRow];
+        });
+
+        return div(
+            { class: "overflow-x-auto" },
+            table(
+                { class: "min-w-full" },
+                thead(
+                    {
+                        class: "border-b border-gray-200 dark:border-gray-700",
+                    },
+                    tr(
+                        headerCell("Org", "text-left"),
+                        headerCell("Members", "text-left"),
+                        headerCell("Credits", "text-right"),
+                        headerCell("Videos", "text-right"),
+                        headerCell("Events", "text-right")
+                    )
+                ),
+                tbody(...rows)
+            )
         );
     }
 

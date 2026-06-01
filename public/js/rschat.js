@@ -3,7 +3,7 @@ import { k } from './chunks/marked.esm-DDAYIbNt.js';
 import { d as database, g as getApp, b as getAuth } from './chunks/apiUtil-CDq4WBQY.js';
 import { E as EventsData } from './chunks/events-DTIA-1Jc.js';
 import { H as Hierarchy } from './chunks/hierarchy-HD-XXbBO.js';
-import { S as Summarizer, p as progress } from './chunks/summarizer-CYuHBlAu.js';
+import { S as Summarizer, p as progress } from './chunks/summarizer-n6XNy39N.js';
 import { A as AnnotationsData } from './chunks/annotations-BN4rneuv.js';
 import { a as auth } from './chunks/rsauth-y2JyFrU_.js';
 import { t as timeUtil } from './chunks/time-CkvqO9Ha.js';
