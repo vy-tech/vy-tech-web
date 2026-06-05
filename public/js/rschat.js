@@ -5,7 +5,7 @@ import { E as EventsData } from './chunks/events-DTIA-1Jc.js';
 import { H as Hierarchy } from './chunks/hierarchy-HD-XXbBO.js';
 import { S as Summarizer, p as progress } from './chunks/summarizer-n6XNy39N.js';
 import { A as AnnotationsData } from './chunks/annotations-BN4rneuv.js';
-import { a as auth } from './chunks/rsauth-y2JyFrU_.js';
+import { a as auth } from './chunks/rsauth-kcYSBLKs.js';
 import { t as timeUtil } from './chunks/time-CkvqO9Ha.js';
 import './chunks/orgContext-CvnztG5e.js';
 import './chunks/storage-Dh8pfopK.js';
