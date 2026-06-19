@@ -614,10 +614,15 @@ class Annotations extends AnnotationsData {
         lines.forEach((line) => {
             // Match [mm:ss] or [hh:mm:ss] at start of line
             const match = line.match(/^(\d{1,2}:\d{2}(?::\d{2})?)$/);
+            const match2 = line.match(
+                /^\s*(?:\d+ (?:hour|minute|second)s?,?\s*){1,3}/
+            );
 
             if (match) {
                 const timeStr = match[1];
                 currentTime = timeUtil.toSeconds(timeStr, true) + offset;
+            } else if (match2) {
+                // The time is repeated so we just skip this one..
             } else {
                 annotations.push({
                     time: currentTime,
@@ -625,6 +630,8 @@ class Annotations extends AnnotationsData {
                     importance: "medium",
                     content: line.trim(),
                 });
+
+                console.log(currentTime, line.trim());
             }
         });
 
