@@ -1,16 +1,16 @@
 import { v as van, e as eventBus } from './chunks/eventbus-c5hoJhOF.js';
 import { M as Modal, T as Tabs } from './chunks/van-ui-D8yynE9H.js';
-import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-n6XNy39N.js';
-import { e as events } from './chunks/events-Dq3OWhfw.js';
+import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-CDsXKg_T.js';
+import { e as events } from './chunks/events-DfSCAAk6.js';
 import { d as database } from './chunks/apiUtil-CDq4WBQY.js';
-import { t as timeUtil } from './chunks/time-CkvqO9Ha.js';
+import { t as timeUtil } from './chunks/time-Ckmoh8eN.js';
 import { H as Hierarchy } from './chunks/hierarchy-HD-XXbBO.js';
 import { A as AnnotationsData } from './chunks/annotations-BN4rneuv.js';
 import { o as orgContext } from './chunks/orgContext-CvnztG5e.js';
 import { F as FilesData } from './chunks/files-Ci600Yy3.js';
-import { e as effectiveStatus } from './chunks/fileUpload-B844PUFS.js';
+import { e as effectiveStatus } from './chunks/fileUpload-BzCYdCoW.js';
 import './chunks/storage-Dh8pfopK.js';
-import './chunks/events-DTIA-1Jc.js';
+import './chunks/events-gMoU96vh.js';
 
 class Profiles extends ProfilesData {
     constructor() {
@@ -148,6 +148,10 @@ class Annotations extends AnnotationsData {
 
         await this.saveAnnotation(hierarchy, annotation);
 
+        // Add the new annotation to the cache
+        this.annotations.push(annotation);
+        this.annotations.sort((a, b) => a.time - b.time);
+
         // Fire event to notify that annotations have been updated
         eventBus.fire("annotations.updated", {
             hierarchy: annotation.hierarchy,
@@ -172,6 +176,15 @@ class Annotations extends AnnotationsData {
         } else {
             console.warn("Unknown action:", action);
             return;
+        }
+
+        // Remove existing annotation from the cache
+        this.annotations = this.annotations.filter(a => a.id !== existingAnnotation.id);
+
+        // Add the edited annotation to the cache if it was updated
+        if (action === "update") {
+            this.annotations.push(annotation);
+            this.annotations.sort((a, b) => a.time - b.time);
         }
 
         // Fire event to notify that annotations have been updated
@@ -556,6 +569,7 @@ class Annotations extends AnnotationsData {
             await this.deleteTranscript(hierarchy);
             await this.saveTranscript(hierarchy, annotations);
 
+            this.annotations = annotations;
             // Fire event to notify that annotations have been updated
             eventBus.fire("annotations.updated", {
                 hierarchy: hierarchy,
@@ -673,19 +687,36 @@ class Annotations extends AnnotationsData {
         // Split transcriptText into lines, then parse each line for time and text
         const lines = transcriptText.split("\n");
         const annotations = [];
-        let currentTime = offset;
+        let currentTime = offset;        
 
         lines.forEach((line) => {
             // Match [mm:ss] or [hh:mm:ss] at start of line
-            const match = line.match(/^(\d{1,2}:\d{2}(?::\d{2})?)$/);
-            const match2 = line.match(
-                /^\s*(?:\d+ (?:hour|minute|second)s?,?\s*){1,3}/
-            );
+            const match = line.match(/^(\s*\d{1,2}:\d{2}(?::\d{2})?)/);
 
+            // If we match set currentTime and strip the time part from the line
             if (match) {
                 const timeStr = match[1];
                 currentTime = timeUtil.toSeconds(timeStr, true) + offset;
-            } else if (match2) ; else {
+                // Remove the time part from the line to get the actual content
+                line = line.replace(timeStr, "").trim();
+
+            } 
+            
+            // Match human-readable time formats like "1 hour, 30 minutes, 20 seconds" at start of line
+            const match2 = line.match(
+                /^(\s*(?:\d+ (?:hour|minute|second)s?,?\s*){1,3})/
+            );
+            
+            // If we match set the current time and strip the time part from the line
+            if (match2) {
+                const timeStr2 = match2[1];
+                currentTime = timeUtil.toSecondsFromHuman(timeStr2) + offset;
+                // Remove the time part from the line to get the actual content
+                line = line.replace(timeStr2, "").trim();
+            } 
+            
+            // If there's any text left write it as an annotation
+            if (line.trim() !== "") {
                 annotations.push({
                     time: currentTime,
                     type: "transcript",

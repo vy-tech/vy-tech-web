@@ -9957,7 +9957,7 @@ async function initFirebaseStorage() {
         _firebaseStorageInstance = _firebaseStorageFunctions.getStorage();
     } else {
         const { getStorage, ref, uploadString, getDownloadURL } =
-            await import('./index.esm-7dXIB8cB.js');
+            await import('./index.esm-CHhXho42.js');
         _firebaseStorageFunctions = {
             getStorage,
             ref,
@@ -21032,6 +21032,25 @@ class Time {
         return seconds;
     }
 
+    toSecondsFromHuman(time) {
+        // Matches human-readable time formats like "1 hour, 30 minutes, 20 seconds"
+        const regex = /(\d+)\s*(hour|minute|second)s?/g;
+        let match;
+        let seconds = 0;
+        while ((match = regex.exec(time)) !== null) {
+            const value = parseInt(match[1]);
+            const unit = match[2];
+            if (unit === "hour") {
+                seconds += value * 3600;
+            } else if (unit === "minute") {
+                seconds += value * 60;
+            } else if (unit === "second") {
+                seconds += value;
+            }
+        }
+        return seconds;
+    }
+
     /**
      * Convert a JS Date to UTC, interpreting it as being in a specific timezone.
      *
@@ -21518,4 +21537,4 @@ const v1 = onRequest(
 );
 
 export { Component as C, FirebaseError as F, SDK_VERSION as S, _getProvider as _, getModularInstance as a, getDefaultEmulatorHostnameAndPort as b, createMockUserToken as c, _isFirebaseServerApp as d, _registerComponent as e, v1 as f, getApp$1 as g, isCloudWorkstation as i, pingServer as p, registerVersion as r, updateEmulatorBanner as u, v1App as v };
-//# sourceMappingURL=index-DGDGC691.js.map
+//# sourceMappingURL=index-wt_5CQ32.js.map

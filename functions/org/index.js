@@ -19245,6 +19245,25 @@ class Time {
         return seconds;
     }
 
+    toSecondsFromHuman(time) {
+        // Matches human-readable time formats like "1 hour, 30 minutes, 20 seconds"
+        const regex = /(\d+)\s*(hour|minute|second)s?/g;
+        let match;
+        let seconds = 0;
+        while ((match = regex.exec(time)) !== null) {
+            const value = parseInt(match[1]);
+            const unit = match[2];
+            if (unit === "hour") {
+                seconds += value * 3600;
+            } else if (unit === "minute") {
+                seconds += value * 60;
+            } else if (unit === "second") {
+                seconds += value;
+            }
+        }
+        return seconds;
+    }
+
     /**
      * Convert a JS Date to UTC, interpreting it as being in a specific timezone.
      *
