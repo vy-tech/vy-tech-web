@@ -5,6 +5,8 @@ import { eventBus } from "../eventbus.js";
 class Heatmap {
     constructor() {
         this.canvas = null;
+        this.originalWidth = 3840;
+        this.originalHeight = 2160;
 
         eventBus.addEventListener("playback.timeupdate", (e) => {
             this.paint();
@@ -12,6 +14,14 @@ class Heatmap {
 
         eventBus.addEventListener("ui.hierarchyChanged", (e) => {
             this.paint();
+        });
+
+        eventBus.addEventListener("scoring.video", (e) => {
+            const video = e.detail;
+            if (video.width && video.height) {
+                this.originalWidth = video.width;
+                this.originalHeight = video.height;
+            }
         });
     }
 
@@ -33,9 +43,13 @@ class Heatmap {
         this.canvas.addEventListener("mousemove", (e) => {
             const rect = this.canvas.getBoundingClientRect();
             // Calculate the mouse position relative to the canvas
-            // and scale it to the original video resolution (3840x2160)
-            const x = Math.floor(((e.clientX - rect.left) / rect.width) * 3840);
-            const y = Math.floor(((e.clientY - rect.top) / rect.height) * 2160);
+            // and scale it to the original video resolution
+            const x = Math.floor(
+                ((e.clientX - rect.left) / rect.width) * this.originalWidth
+            );
+            const y = Math.floor(
+                ((e.clientY - rect.top) / rect.height) * this.originalHeight
+            );
 
             eventBus.fire("heatmap.mousemove", {
                 x: x,
@@ -72,10 +86,10 @@ class Heatmap {
             const expires = box.expires;
 
             // Scale the box coordinates to the canvas size
-            const x = (ox / 3840) * this.canvas.width;
-            const y = (oy / 2160) * this.canvas.height;
-            const w = (ow / 3840) * this.canvas.width;
-            const h = (oh / 2160) * this.canvas.height;
+            const x = (ox / this.originalWidth) * this.canvas.width;
+            const y = (oy / this.originalHeight) * this.canvas.height;
+            const w = (ow / this.originalWidth) * this.canvas.width;
+            const h = (oh / this.originalHeight) * this.canvas.height;
 
             // Calculate center and radiuses for the radial gradient
             const cx = x + w / 2;

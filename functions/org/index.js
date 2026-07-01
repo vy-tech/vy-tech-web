@@ -19485,7 +19485,15 @@ class JobsData {
         return rejected.length;
     }
 
-    async queueJob(refType, refId, type, uid, oid, location = null) {
+    async queueJob(
+        refType,
+        refId,
+        type,
+        uid,
+        oid,
+        location = null,
+        params = null
+    ) {
         const jobDoc = {
             refType: refType,
             refId: refId,
@@ -19495,6 +19503,10 @@ class JobsData {
             oid: oid,
             location: location,
         };
+
+        if (params) {
+            jobDoc.params = params;
+        }
 
         return await database.set("jobs", jobDoc);
     }

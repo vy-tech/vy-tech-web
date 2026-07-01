@@ -10098,6 +10098,18 @@ class OrganizationsData {
 // is baked in; dev/staging can override via the VY_ADMIN_OID env var.
 process.env.VY_ADMIN_OID || "00hB8gSxKMs5SSLCCbyi";
 
+async function getOrg(oid) {
+    if (!oid) return null;
+    try {
+        const orgsData = new OrganizationsData();
+        const org = await orgsData.getById(oid);
+        return org || null;
+    } catch (err) {
+        console.error("Error fetching organization:", err);
+        return null;
+    }
+}
+
 // Helper to check if request is authenticated
 const isAuthenticated = async (req) => {
     try {
@@ -10721,7 +10733,7 @@ async function initFirebaseStorage() {
         _firebaseStorageInstance = _firebaseStorageFunctions.getStorage();
     } else {
         const { getStorage, ref, uploadString, getDownloadURL } =
-            await import('./index.esm-BAtihGBT.js');
+            await import('./index.esm-D6nbJOaO.js');
         _firebaseStorageFunctions = {
             getStorage,
             ref,
@@ -11003,7 +11015,15 @@ class JobsData {
         return rejected.length;
     }
 
-    async queueJob(refType, refId, type, uid, oid, location = null) {
+    async queueJob(
+        refType,
+        refId,
+        type,
+        uid,
+        oid,
+        location = null,
+        params = null
+    ) {
         const jobDoc = {
             refType: refType,
             refId: refId,
@@ -11013,6 +11033,10 @@ class JobsData {
             oid: oid,
             location: location,
         };
+
+        if (params) {
+            jobDoc.params = params;
+        }
 
         return await database.set("jobs", jobDoc);
     }
@@ -11937,6 +11961,21 @@ fileApp.post("/process/:file_id", async (req, res) => {
         });
     }
 
+    // If opts includes a request for beta processing make sure the org has that flag
+    if (opts.betaPipeline) {
+        const org = await getOrg(file.oid);
+        if (!org || !org.flags || !org.flags.betaPipeline) {
+            console.warn(
+                `Org ${file.oid} does not have access to beta processing features`
+            );
+            return res.status(403).json({
+                error: "Forbidden",
+                message:
+                    "Organization does not have access to beta processing features",
+            });
+        }
+    }
+
     try {
         const jobId = await jobs.queueJob(
             "file",
@@ -11944,7 +11983,8 @@ fileApp.post("/process/:file_id", async (req, res) => {
             processor.jobType,
             req.uid,
             file.oid,
-            opts.location || null
+            opts.location || null,
+            opts.betaPipeline ? { beta: true } : null
         );
         console.log(
             `Queued processing job ${jobId} for file ${file_id} by user ${req.uid}`
@@ -12115,4 +12155,4 @@ const file = onRequest(
 );
 
 export { Component as C, FirebaseError as F, SDK_VERSION as S, _getProvider as _, getModularInstance as a, getDefaultEmulatorHostnameAndPort as b, createMockUserToken as c, _isFirebaseServerApp as d, _registerComponent as e, fileApp as f, getApp as g, file as h, isCloudWorkstation as i, pingServer as p, registerVersion as r, updateEmulatorBanner as u };
-//# sourceMappingURL=index-BvlI4c3f.js.map
+//# sourceMappingURL=index-BZMA0X7N.js.map

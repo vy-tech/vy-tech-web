@@ -37,7 +37,15 @@ class JobsData {
         return rejected.length;
     }
 
-    async queueJob(refType, refId, type, uid, oid, location = null) {
+    async queueJob(
+        refType,
+        refId,
+        type,
+        uid,
+        oid,
+        location = null,
+        params = null
+    ) {
         const jobDoc = {
             refType: refType,
             refId: refId,
@@ -47,6 +55,10 @@ class JobsData {
             oid: oid,
             location: location,
         };
+
+        if (params) {
+            jobDoc.params = params;
+        }
 
         return await database.set("jobs", jobDoc);
     }
@@ -485,6 +497,10 @@ class FileUploadPanel {
         );
         const uploading = van.state(false);
 
+        const org = orgContext.getCurrentOrg();
+        const betaPipelineEnabled = !!(org && org.flags && org.flags.betaPipeline);
+        const useBetaPipeline = van.state(false);
+
         if (existingFile) {
             this.watchRelatedJobs(existingFile.id, statusMsg);
         }
@@ -542,6 +558,31 @@ class FileUploadPanel {
                     class: "px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 rounded-md text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
                 }))
             ),
+            betaPipelineEnabled
+                ? div(
+                      { class: "flex flex-col space-y-1" },
+                      label(
+                          {
+                              class: "inline-flex items-center gap-2 cursor-pointer select-none text-sm font-medium text-gray-700 dark:text-gray-300",
+                          },
+                          input({
+                              id: "upload-beta-pipeline-input",
+                              type: "checkbox",
+                              checked: useBetaPipeline,
+                              onchange: (e) =>
+                                  (useBetaPipeline.val = e.target.checked),
+                              class: "rounded",
+                          }),
+                          "Enable beta pipeline features"
+                      ),
+                      p(
+                          {
+                              class: "text-xs text-gray-500 dark:text-gray-400",
+                          },
+                          "Process this upload with experimental pipeline features."
+                      )
+                  )
+                : null,
             () =>
                 uploading.val && uploadPct.val < 100
                     ? div(
@@ -597,7 +638,8 @@ class FileUploadPanel {
                                 file,
                                 filenameInputEl.value,
                                 uploadPct,
-                                statusMsg
+                                statusMsg,
+                                betaPipelineEnabled && useBetaPipeline.val
                             );
                         },
                     },
@@ -664,7 +706,7 @@ class FileUploadPanel {
         );
     }
 
-    async startUpload(file, filename, uploadPct, statusMsg) {
+    async startUpload(file, filename, uploadPct, statusMsg, useBetaPipeline = false) {
         const cfg = this.config;
         const orgId = orgContext.getCurrentOrgId();
         const files = new FilesData();
@@ -718,7 +760,10 @@ class FileUploadPanel {
             eventBus.fire(`${cfg.context}Upload.complete`, { file });
 
             if (cfg.requestProcessing) {
-                const jobId = await this.requestProcessing(fileId);
+                const jobId = await this.requestProcessing(
+                    fileId,
+                    useBetaPipeline
+                );
                 eventBus.fire(`${cfg.context}Upload.processingRequested`, {
                     file,
                 });
@@ -759,12 +804,12 @@ class FileUploadPanel {
         }
     }
 
-    async requestProcessing(fileId) {
+    async requestProcessing(fileId, useBetaPipeline = false) {
         const cfg = this.config;
         try {
             const result = await apiUtil.call(
                 `${cfg.processorEndpoint}${fileId}`,
-                {},
+                useBetaPipeline ? { betaPipeline: true } : {},
                 "POST"
             );
             return result.jobId;
@@ -791,4 +836,4 @@ class FileUploadPanel {
 }
 
 export { FileUploadPanel as F, UPLOAD_TYPES as U, effectiveStatus as e };
-//# sourceMappingURL=fileUpload-BzCYdCoW.js.map
+//# sourceMappingURL=fileUpload-CDAOBoMr.js.map

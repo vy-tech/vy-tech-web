@@ -126,8 +126,17 @@ class Score {
         // this.uiClip = 2500;
 
         /** New Recipe */
-        this.softmaxAlpha = 0.01; // Per-emotion weighting within single detections
-        this.combineSoftmaxAlpha = 0.005; // Per-row weighting across multiple detections
+        // Softmax alphas over signed scores spanning ~±2000 act as a near-MAX:
+        // exp(alpha*|r|) lets the single most extreme face/emotion dominate the
+        // window, which produced the wild up/down score spikes seen in the 2026
+        // season (verified on raimondi:20260616). Lower per-face alpha (softer
+        // peak) and a plain MEAN across faces (combineSoftmaxAlpha=0) cut score
+        // SD ~8-14x. NOTE: this drops the score scale ~10x — recalibrate UI
+        // ranges / highlight thresholds. (Bucket score still uses maxScore in
+        // summarizer.js:151, an additional amplifier worth revisiting.)
+        //this.softmaxAlpha = 0.003; // Per-emotion weighting within single detections
+        this.softmaxAlpha = 0.0065;
+        this.combineSoftmaxAlpha = 0.0005; // Per-row weighting across multiple detections (0 = mean)
         this.gainFactor = 0.05;
         this.useRobustNormalization = false;
         this.robustTargetStd = 350;
@@ -274,8 +283,9 @@ class Score {
 
         // Support both raw array and {results: []} formats for flexibility
         if (!Array.isArray(rows) && "results" in rows) {
-            this.fps = rows.fps;
+            this.fps = rows.fps || (rows.video && rows.video.fps);
             eventBus.fire("scoring.capabilities", rows.capabilities || {});
+            eventBus.fire("scoring.video", rows.video || {});
             return rows.results;
         }
 

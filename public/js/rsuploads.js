@@ -1,5 +1,5 @@
 import { e as eventBus, v as van } from './chunks/eventbus-c5hoJhOF.js';
-import { F as FileUploadPanel, U as UPLOAD_TYPES } from './chunks/fileUpload-BzCYdCoW.js';
+import { F as FileUploadPanel, U as UPLOAD_TYPES } from './chunks/fileUpload-CDAOBoMr.js';
 import './chunks/files-Ci600Yy3.js';
 import './chunks/hierarchy-HD-XXbBO.js';
 import './chunks/apiUtil-CDq4WBQY.js';
