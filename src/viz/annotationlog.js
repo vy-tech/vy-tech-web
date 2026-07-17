@@ -35,6 +35,7 @@ class AnnotationLog {
         this.userScrollPaused = false; // Track if auto-scrolling is paused
         this.scrollPauseTimer = null; // Timer for auto-scroll pause
         this.isProgrammaticScroll = false; // Flag to distinguish programmatic vs user scrolling
+        this.searchTerm = van.state(""); // Search filter for annotation content
 
         eventBus.on("playback.ready", async (e) => {
             this.hierarchy = new Hierarchy(e.detail.hierarchy);
@@ -64,7 +65,7 @@ class AnnotationLog {
     }
 
     createElement(options = {}) {
-        const { div, a, i } = van.tags;
+        const { div, a, i, input } = van.tags;
 
         let merged = {
             id: "report-annotation-log",
@@ -76,8 +77,21 @@ class AnnotationLog {
 
         this.buttonContainer = div(
             {
-                class: "flex-none h-[24px] flex justify-end mb-1",
+                class: "flex-none flex justify-end items-center gap-2 mb-1",
             },
+            // Search box to filter annotations by content text
+            input({
+                type: "text",
+                placeholder: "Search...",
+                value: this.searchTerm,
+                class:
+                    "w-60 mr-4 px-2 py-1 border border-gray-300 rounded text-xs " +
+                    "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-gray-900",
+                oninput: (e) => {
+                    this.searchTerm.val = e.target.value;
+                    this.reinitializeContainers();
+                },
+            }),
             a(
                 {
                     href: "#",
@@ -406,9 +420,17 @@ class AnnotationLog {
 
         const { div } = van.tags;
 
+        // Apply the search filter (case-insensitive substring on content)
+        const term = this.searchTerm.val.trim().toLowerCase();
+        const list = term
+            ? this.annotations.filter((a) =>
+                  (a.content || "").toLowerCase().includes(term)
+              )
+            : this.annotations;
+
         // Create and add annotation elements
-        if (this.annotations.length > 0) {
-            const elements = this.annotations.map((annotation) =>
+        if (list.length > 0) {
+            const elements = list.map((annotation) =>
                 this.createAnnotationElement(annotation)
             );
 
@@ -422,7 +444,7 @@ class AnnotationLog {
                 });
             }
 
-            let criticalElements = this.annotations.filter(
+            let criticalElements = list.filter(
                 (a) => a.importance === "critical"
             );
 
@@ -442,12 +464,14 @@ class AnnotationLog {
 
             eventBus.fire("ui.annotations.ready");
         } else {
-            // No annotations available
+            // No annotations available (or none match the search filter)
             van.add(
                 this.middleContainer,
                 div(
                     { class: "p-4 text-center text-gray-500 text-sm" },
-                    "No annotations for this event"
+                    term
+                        ? "No matching annotations"
+                        : "No annotations for this event"
                 )
             );
         }

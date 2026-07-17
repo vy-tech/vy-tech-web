@@ -135,8 +135,8 @@ class Score {
         // ranges / highlight thresholds. (Bucket score still uses maxScore in
         // summarizer.js:151, an additional amplifier worth revisiting.)
         //this.softmaxAlpha = 0.003; // Per-emotion weighting within single detections
-        this.softmaxAlpha = 0.0065;
-        this.combineSoftmaxAlpha = 0.0005; // Per-row weighting across multiple detections (0 = mean)
+        this.softmaxAlpha = /*0.01;*/ 0.0065;
+        this.combineSoftmaxAlpha = /*0.005;*/ 0.0005; // Per-row weighting across multiple detections (0 = mean)
         this.gainFactor = 0.05;
         this.useRobustNormalization = false;
         this.robustTargetStd = 350;
@@ -233,9 +233,11 @@ class Score {
         return rows;
     }
 
-    ensureTracking(rows) {
+    ensureTracking(rows, chunkKey = null) {
         if (!this.filterEnabled) return rows;
-        this.tracker.assign(rows, null);
+        // The expressions URL uniquely identifies the chunk, so it doubles as
+        // the key the tracker namespaces per-chunk person IDs against.
+        this.tracker.assign(rows, null, chunkKey);
         return rows;
     }
 
@@ -285,7 +287,10 @@ class Score {
         if (!Array.isArray(rows) && "results" in rows) {
             this.fps = rows.fps || (rows.video && rows.video.fps);
             eventBus.fire("scoring.capabilities", rows.capabilities || {});
-            eventBus.fire("scoring.video", rows.video || {});
+            // `url` is the resolved expressions endpoint (/api/v1/fetch/{id}/{path}),
+            // so listeners can derive sibling assets without knowing which storage
+            // backend the chunk lives on. See syntheticView's background plate.
+            eventBus.fire("scoring.video", { ...(rows.video || {}), url });
             return rows.results;
         }
 
@@ -307,10 +312,44 @@ class Score {
         var rows = await this.loadDetections(url);
 
         this.applyTime(rows, timeOffset);
-        this.ensureTracking(rows);
+        this.ensureTracking(rows, url);
+        this.linkSilhouetteChain(rows);
         this.applyFilters(rows);
         this.applyProfile(rows, profilesData.profile);
 
+        return rows;
+    }
+
+    linkSilhouetteChain(rows) {
+        /**
+         * Link each row to the next row of the same person that carries a
+         * silhouette, as `row.nextSilhouetteRow`.
+         *
+         * This is read-ahead for the renderer. Detections land at
+         * extraction_fps and a given person isn't outlined every time, so
+         * gaps between one person's silhouettes run from ~0.33s to well over
+         * a second. A renderer that only knows the *latest* outline can't pace
+         * a morph — it has no idea when the next one is due, so it either
+         * finishes early and sits (visible lerp-pause-lerp) or has to lag the
+         * video to wait. Knowing the next outline and its timestamp up front
+         * lets it interpolate across exactly the real interval, at zero lag.
+         *
+         * Must run after ensureTracking (needs final `person`) and after
+         * applyTime (needs `time` on the player clock). One O(n) pass at load,
+         * walking backwards so each row sees what it points at. Chunk-local:
+         * the last outline in a chunk links to nothing and the renderer holds.
+         */
+        const nextByPerson = new Map();
+        for (let i = rows.length - 1; i >= 0; i--) {
+            const row = rows[i];
+            const person = row.person;
+            if (person === undefined || person === null) continue;
+            row.nextSilhouetteRow = nextByPerson.get(person) || null;
+            // Set after linking, so a row is never its own "next".
+            if (row.silhouette && row.silhouette.length) {
+                nextByPerson.set(person, row);
+            }
+        }
         return rows;
     }
 
@@ -775,6 +814,12 @@ class Score {
                 score: row.score,
                 count: 1,
                 index: this.windowEndIndex,
+                // Detection time. ActiveBoxManager keeps the latest per track
+                // so renderers can tell how stale a box is. `expires` can't
+                // answer that: update() runs every tick over the whole
+                // windowSize-second window, so it stays pinned at max until
+                // the row falls out of the window entirely.
+                time: row.time,
                 // Threaded through for the synthetic-view renderer (x001).
                 // Reference, not copy — these objects are read-only downstream.
                 cores: row.cores,
@@ -786,6 +831,12 @@ class Score {
                 // interleaved, source-pixel space). Only present in newer
                 // pipeline output.
                 silhouette: row.silhouette,
+                // When this outline was observed, and the next one due for
+                // this person — see linkSilhouetteChain(). The renderer
+                // interpolates between the two across exactly this interval.
+                silhouetteTime: row.silhouette ? row.time : undefined,
+                nextSilhouette: row.nextSilhouetteRow?.silhouette,
+                nextSilhouetteTime: row.nextSilhouetteRow?.time,
             });
 
             this.windowEndIndex++;

@@ -1,6 +1,13 @@
 {
     "hosting": {
         "public": "public",
+        "redirects": [
+            {
+                "source": "/insights",
+                "destination": "https://gamma.app/docs/Vy-Fan-Engagement-Insights-for-MLB-ubkvqeajphz4cg4?mode=doc",
+                "type": 302
+            }
+        ],
         "rewrites": [
             {
                 "regex": "^/(user|users|home|dashboard|locations|schedule|settings|report|reports|profile|playlist|admin|chat|docs|bluesky|billing|uploads)(?:/.*)?$",

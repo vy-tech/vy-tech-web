@@ -96,6 +96,21 @@ const geomUtil = new Geometry();
 
 const EXPIRE_TIME = 5000;
 
+// The pipeline represents "couldn't compute this" as an explicit null rather
+// than by omitting the key (see `pose` in docs/sample-expressions.json: the
+// key is present on every row, null on the ones without data). So a guard
+// must reject null as well as undefined, or a null overwrites good data.
+function hasValue(v) {
+    return v !== undefined && v !== null;
+}
+
+// Silhouette payloads arrive as a flat coordinate array. Treat null, absent,
+// and empty-array alike as "this frame carried no outline" so none of them
+// clobber the last good shape.
+function hasSilhouetteData(v) {
+    return Array.isArray(v) && v.length > 0;
+}
+
 class ActiveBoxManager {
     constructor() {
         this.activeBoxes = [];
@@ -266,59 +281,152 @@ class ActiveBoxManager {
         /**
          * Updates the active boxes based on the current second,
          * adds any non-overlapping boxes to activeBoxes.
+         *
+         * Runs in two passes. Callers replay a whole windowSize-second slice
+         * of rows on every tick (see Score.updateCurrentFromWindow), so this
+         * sees many rows per track per call, in time order.
          */
 
+        // Active boxes claimed during this call. Pass 2 may only adopt a box
+        // that pass 1 left unclaimed.
+        const touched = new Set();
+        const unmatched = [];
+
+        // Pass 1 — identity. Every row gets the chance to claim its own box
+        // before any handoff runs. Doing this in a single interleaved pass is
+        // wrong: `touched` can only protect boxes already processed, so a new
+        // track's early row could adopt an established box whose own row just
+        // hadn't been reached yet, and the displaced row would then go adopt
+        // someone else's. With the whole window replayed every tick, that
+        // churns identities continuously — boxes jumping frame to frame, and
+        // sticky state (the silhouette) transferring to the wrong person.
         for (const box of boxes) {
-            // Check if the box is already active
-            var activeBox = this.activeBoxes.find((activeBox) => {
-                if (this.matches(activeBox, box)) {
-                    return activeBox;
-                }
-            });
-
-            // If the box is already active, update it's position and reset
-            // it's expire time.
+            const activeBox = this.activeBoxes.find((candidate) =>
+                this.matches(candidate, box)
+            );
             if (activeBox) {
-                activeBox.x = box.x;
-                activeBox.y = box.y;
-                activeBox.w = box.w;
-                activeBox.h = box.h;
-                activeBox.score = box.score / box.count;
-                activeBox.expires = EXPIRE_TIME;
-                activeBox.index = box.index;
-                // Keep the active box's person ID consistent with the
-                // latest detection. If the new detection has no ID, retain
-                // whatever the active box already had.
-                if (box.person !== undefined && box.person !== null) {
-                    activeBox.person = box.person;
-                }
-                // Refresh per-frame semantic fields from the new detection.
-                // The `undefined` guard preserves the previous value when a
-                // single frame drops the field (sticky last-known behavior),
-                // important for `silhouette` which the synthetic view reads
-                // every paint and which only some pipeline runs emit.
-                if (box.cores !== undefined) {
-                    activeBox.cores = box.cores;
-                }
-                if (box.emotion !== undefined) {
-                    activeBox.emotion = box.emotion;
-                }
-                if (box.silhouette !== undefined) {
-                    activeBox.silhouette = box.silhouette;
-                }
-            }
-            // If not active, create it and add it to activeBoxes
-            // Ensure score is averaged because we're reusing the count
-            else {
-                activeBox = { ...box };
-                activeBox.score = box.score / box.count;
-                activeBox.expires = EXPIRE_TIME;
-                activeBox.index = box.index;
-                this.newBoxCount += 1;
-
-                this.activeBoxes.push(activeBox);
+                this.refreshBox(activeBox, box);
+                touched.add(activeBox);
+            } else {
+                unmatched.push(box);
             }
         }
+
+        // Pass 2 — handoff. matches() treats two distinct person IDs as two
+        // distinct people. That's right when both are detected at once, but
+        // wrong when the pipeline loses a track and re-acquires the same human
+        // under a new ID — common under occlusion, and certain at every chunk
+        // boundary, since chunks are tracked independently. Left unhandled the
+        // stale box lingers for EXPIRE_TIME beside the new one: doubled-up
+        // silhouettes.
+        //
+        // A row nothing claimed that overlaps a box nothing claimed is a
+        // handoff, not an arrival — adopt the existing track and take on the
+        // new ID. Anything pass 1 claimed is genuinely someone else and is
+        // left alone, preserving the ID-authoritative intent where it earns
+        // its keep.
+        for (const box of unmatched) {
+            // Re-check identity first. Pass 1 tested against the box list as
+            // it stood then; this pass both creates boxes and reassigns person
+            // IDs via adoption, so a later row of the same track has something
+            // to match by the time it's reached. Without this, every row of a
+            // newly-arrived track spawns its own box — and a window replays
+            // ~windowSize * fps rows per track, so that's a pile of duplicates
+            // per tick, not just one.
+            let activeBox = this.activeBoxes.find((candidate) =>
+                this.matches(candidate, box)
+            );
+            if (!activeBox) {
+                activeBox = this.findHandoffCandidate(box, touched);
+            }
+            if (activeBox) {
+                this.refreshBox(activeBox, box);
+                touched.add(activeBox);
+            } else {
+                touched.add(this.createBox(box));
+            }
+        }
+    }
+
+    // Nearest unclaimed overlapping box, or null. Nearest-centre rather than
+    // first-found: in a dense crowd several boxes clear the overlap threshold,
+    // and picking by array order would hand the track to an arbitrary one.
+    findHandoffCandidate(box, touched) {
+        const cx = box.x + box.w / 2;
+        const cy = box.y + box.h / 2;
+        let best = null;
+        let bestDist = Infinity;
+
+        for (const candidate of this.activeBoxes) {
+            if (touched.has(candidate)) continue;
+            if (!geomUtil.boxesAreSame(candidate, box)) continue;
+            const d = Math.hypot(
+                candidate.x + candidate.w / 2 - cx,
+                candidate.y + candidate.h / 2 - cy
+            );
+            if (d < bestDist) {
+                bestDist = d;
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    // Fold a detection into an existing track, in place.
+    refreshBox(activeBox, box) {
+        activeBox.x = box.x;
+        activeBox.y = box.y;
+        activeBox.w = box.w;
+        activeBox.h = box.h;
+        activeBox.score = box.score / box.count;
+        activeBox.expires = EXPIRE_TIME;
+        activeBox.index = box.index;
+        // The box is live again, so re-arm it for the next expiry. Without
+        // this a box counts as lost only once per lifetime, undercounting
+        // lostVolatility for any track that recovers.
+        activeBox.markedAsLost = false;
+        // Keep the active box's person ID consistent with the latest
+        // detection. If the new detection has no ID, retain what it had.
+        if (hasValue(box.person)) {
+            activeBox.person = box.person;
+        }
+        // Refresh per-frame semantic fields, preserving the previous value
+        // when a frame carries no data for one (sticky last-known behavior).
+        // Matters most for `silhouette`: the synthetic view reads it every
+        // paint, and segmentation drops out on individual frames constantly,
+        // so without this the shape flickers out and back with no fade — the
+        // box itself is alive, so expiry never comes into it.
+        if (hasValue(box.cores)) {
+            activeBox.cores = box.cores;
+        }
+        if (hasValue(box.emotion)) {
+            activeBox.emotion = box.emotion;
+        }
+        if (hasSilhouetteData(box.silhouette)) {
+            activeBox.silhouette = box.silhouette;
+            // Sticky together: the timestamp must describe the outline we
+            // kept, not the row we're on, or the renderer would interpolate
+            // from the wrong start time.
+            activeBox.silhouetteTime = box.silhouetteTime;
+        }
+        // The next outline due, from the newest row seen. Unconditional: rows
+        // replay in time order, so the last one to land holds the furthest
+        // read-ahead — including when it carries no outline of its own, which
+        // is exactly the dropout case the renderer needs to coast through.
+        activeBox.nextSilhouette = box.nextSilhouette;
+        activeBox.nextSilhouetteTime = box.nextSilhouetteTime;
+        return activeBox;
+    }
+
+    // Start a new track. Score is averaged because we're reusing the count.
+    createBox(box) {
+        const activeBox = { ...box };
+        activeBox.score = box.score / box.count;
+        activeBox.expires = EXPIRE_TIME;
+        activeBox.index = box.index;
+        this.newBoxCount += 1;
+        this.activeBoxes.push(activeBox);
+        return activeBox;
     }
 
     getAt(x, y) {
@@ -866,14 +974,16 @@ class Tracker {
         this.signatureThreshold = signatureThreshold;
         this.nextTrackId = 0;
         this.priorSignatures = null;
+        this.chunkOffsets = new Map();
     }
 
     reset() {
         this.nextTrackId = 0;
         this.priorSignatures = null;
+        this.chunkOffsets = new Map();
     }
 
-    assign(rows, chunkSignatures = null) {
+    assign(rows, chunkSignatures = null, chunkKey = null) {
         if (!rows || rows.length === 0) return rows;
 
         const allHavePerson = rows.every(
@@ -882,6 +992,8 @@ class Tracker {
 
         if (!allHavePerson) {
             this._assignByIoU(rows);
+        } else {
+            this._namespaceChunkIds(rows, chunkKey);
         }
 
         if (chunkSignatures && this.priorSignatures) {
@@ -893,6 +1005,40 @@ class Tracker {
         }
 
         return rows;
+    }
+
+    // Shift a chunk's pass-through `person` IDs into a globally-unique range.
+    //
+    // The pipeline processes chunks in parallel, so its IDs are only unique
+    // *within* a chunk — chunk 2's person 5 is a different human than chunk
+    // 1's person 5. Left alone, ActiveBoxManager matches them by ID and
+    // teleports one track across the frame. Offsets are drawn from the same
+    // `nextTrackId` counter `_assignByIoU` uses, so the two paths can't
+    // collide, and within-chunk identity is preserved exactly.
+    //
+    // Memoized per chunk so reloading one (seek, rewind) reproduces the same
+    // IDs instead of burning a fresh range. The first chunk gets offset 0, so
+    // single-chunk videos are unchanged.
+    //
+    // This is a uniqueness fix, not re-identification: the same human across
+    // two chunks still gets two IDs. Stitching those together is what the
+    // signature re-id path (and the pipeline's person hash) is for.
+    _namespaceChunkIds(rows, chunkKey) {
+        if (!chunkKey) return;
+
+        let offset = this.chunkOffsets.get(chunkKey);
+        if (offset === undefined) {
+            offset = this.nextTrackId;
+            let maxId = -1;
+            for (const row of rows) {
+                if (row.person > maxId) maxId = row.person;
+            }
+            this.nextTrackId = offset + maxId + 1;
+            this.chunkOffsets.set(chunkKey, offset);
+        }
+
+        if (offset === 0) return;
+        for (const row of rows) row.person += offset;
     }
 
     _assignByIoU(rows) {
@@ -1329,8 +1475,8 @@ class Score {
         // ranges / highlight thresholds. (Bucket score still uses maxScore in
         // summarizer.js:151, an additional amplifier worth revisiting.)
         //this.softmaxAlpha = 0.003; // Per-emotion weighting within single detections
-        this.softmaxAlpha = 0.0065;
-        this.combineSoftmaxAlpha = 0.0005; // Per-row weighting across multiple detections (0 = mean)
+        this.softmaxAlpha = /*0.01;*/ 0.0065;
+        this.combineSoftmaxAlpha = /*0.005;*/ 0.0005; // Per-row weighting across multiple detections (0 = mean)
         this.gainFactor = 0.05;
         this.useRobustNormalization = false;
         this.robustTargetStd = 350;
@@ -1427,9 +1573,11 @@ class Score {
         return rows;
     }
 
-    ensureTracking(rows) {
+    ensureTracking(rows, chunkKey = null) {
         if (!this.filterEnabled) return rows;
-        this.tracker.assign(rows, null);
+        // The expressions URL uniquely identifies the chunk, so it doubles as
+        // the key the tracker namespaces per-chunk person IDs against.
+        this.tracker.assign(rows, null, chunkKey);
         return rows;
     }
 
@@ -1479,7 +1627,10 @@ class Score {
         if (!Array.isArray(rows) && "results" in rows) {
             this.fps = rows.fps || (rows.video && rows.video.fps);
             eventBus.fire("scoring.capabilities", rows.capabilities || {});
-            eventBus.fire("scoring.video", rows.video || {});
+            // `url` is the resolved expressions endpoint (/api/v1/fetch/{id}/{path}),
+            // so listeners can derive sibling assets without knowing which storage
+            // backend the chunk lives on. See syntheticView's background plate.
+            eventBus.fire("scoring.video", { ...(rows.video || {}), url });
             return rows.results;
         }
 
@@ -1501,10 +1652,44 @@ class Score {
         var rows = await this.loadDetections(url);
 
         this.applyTime(rows, timeOffset);
-        this.ensureTracking(rows);
+        this.ensureTracking(rows, url);
+        this.linkSilhouetteChain(rows);
         this.applyFilters(rows);
         this.applyProfile(rows, profilesData.profile);
 
+        return rows;
+    }
+
+    linkSilhouetteChain(rows) {
+        /**
+         * Link each row to the next row of the same person that carries a
+         * silhouette, as `row.nextSilhouetteRow`.
+         *
+         * This is read-ahead for the renderer. Detections land at
+         * extraction_fps and a given person isn't outlined every time, so
+         * gaps between one person's silhouettes run from ~0.33s to well over
+         * a second. A renderer that only knows the *latest* outline can't pace
+         * a morph — it has no idea when the next one is due, so it either
+         * finishes early and sits (visible lerp-pause-lerp) or has to lag the
+         * video to wait. Knowing the next outline and its timestamp up front
+         * lets it interpolate across exactly the real interval, at zero lag.
+         *
+         * Must run after ensureTracking (needs final `person`) and after
+         * applyTime (needs `time` on the player clock). One O(n) pass at load,
+         * walking backwards so each row sees what it points at. Chunk-local:
+         * the last outline in a chunk links to nothing and the renderer holds.
+         */
+        const nextByPerson = new Map();
+        for (let i = rows.length - 1; i >= 0; i--) {
+            const row = rows[i];
+            const person = row.person;
+            if (person === undefined || person === null) continue;
+            row.nextSilhouetteRow = nextByPerson.get(person) || null;
+            // Set after linking, so a row is never its own "next".
+            if (row.silhouette && row.silhouette.length) {
+                nextByPerson.set(person, row);
+            }
+        }
         return rows;
     }
 
@@ -1969,6 +2154,12 @@ class Score {
                 score: row.score,
                 count: 1,
                 index: this.windowEndIndex,
+                // Detection time. ActiveBoxManager keeps the latest per track
+                // so renderers can tell how stale a box is. `expires` can't
+                // answer that: update() runs every tick over the whole
+                // windowSize-second window, so it stays pinned at max until
+                // the row falls out of the window entirely.
+                time: row.time,
                 // Threaded through for the synthetic-view renderer (x001).
                 // Reference, not copy — these objects are read-only downstream.
                 cores: row.cores,
@@ -1980,6 +2171,12 @@ class Score {
                 // interleaved, source-pixel space). Only present in newer
                 // pipeline output.
                 silhouette: row.silhouette,
+                // When this outline was observed, and the next one due for
+                // this person — see linkSilhouetteChain(). The renderer
+                // interpolates between the two across exactly this interval.
+                silhouetteTime: row.silhouette ? row.time : undefined,
+                nextSilhouette: row.nextSilhouetteRow?.silhouette,
+                nextSilhouetteTime: row.nextSilhouetteRow?.time,
             });
 
             this.windowEndIndex++;
@@ -2731,4 +2928,4 @@ class Summarizer {
 const summarizer = new Summarizer();
 
 export { ProfilesData as P, Summarizer as S, activeBoxManager as a, scoring as b, profilesData as c, demographics as d, geomUtil as g, progress as p, summarizer as s };
-//# sourceMappingURL=summarizer-Cc70FNiY.js.map
+//# sourceMappingURL=summarizer-uI38jR6k.js.map
