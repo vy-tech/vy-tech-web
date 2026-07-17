@@ -311,17 +311,10 @@ class ActiveBoxManager {
         }
         if (hasSilhouetteData(box.silhouette)) {
             activeBox.silhouette = box.silhouette;
-            // Sticky together: the timestamp must describe the outline we
-            // kept, not the row we're on, or the renderer would interpolate
-            // from the wrong start time.
-            activeBox.silhouetteTime = box.silhouetteTime;
+            // Sticky together: the row must be the one that produced the
+            // outline we kept, since the renderer walks the chain from it.
+            activeBox.silhouetteRow = box.silhouetteRow;
         }
-        // The next outline due, from the newest row seen. Unconditional: rows
-        // replay in time order, so the last one to land holds the furthest
-        // read-ahead — including when it carries no outline of its own, which
-        // is exactly the dropout case the renderer needs to coast through.
-        activeBox.nextSilhouette = box.nextSilhouette;
-        activeBox.nextSilhouetteTime = box.nextSilhouetteTime;
         return activeBox;
     }
 

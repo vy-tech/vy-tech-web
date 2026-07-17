@@ -404,17 +404,10 @@ class ActiveBoxManager {
         }
         if (hasSilhouetteData(box.silhouette)) {
             activeBox.silhouette = box.silhouette;
-            // Sticky together: the timestamp must describe the outline we
-            // kept, not the row we're on, or the renderer would interpolate
-            // from the wrong start time.
-            activeBox.silhouetteTime = box.silhouetteTime;
+            // Sticky together: the row must be the one that produced the
+            // outline we kept, since the renderer walks the chain from it.
+            activeBox.silhouetteRow = box.silhouetteRow;
         }
-        // The next outline due, from the newest row seen. Unconditional: rows
-        // replay in time order, so the last one to land holds the furthest
-        // read-ahead — including when it carries no outline of its own, which
-        // is exactly the dropout case the renderer needs to coast through.
-        activeBox.nextSilhouette = box.nextSilhouette;
-        activeBox.nextSilhouetteTime = box.nextSilhouetteTime;
         return activeBox;
     }
 
@@ -2171,12 +2164,18 @@ class Score {
                 // interleaved, source-pixel space). Only present in newer
                 // pipeline output.
                 silhouette: row.silhouette,
-                // When this outline was observed, and the next one due for
-                // this person — see linkSilhouetteChain(). The renderer
-                // interpolates between the two across exactly this interval.
-                silhouetteTime: row.silhouette ? row.time : undefined,
-                nextSilhouette: row.nextSilhouetteRow?.silhouette,
-                nextSilhouetteTime: row.nextSilhouetteRow?.time,
+                // The row this outline came from — an entry point into the
+                // chain linkSilhouetteChain() built. The renderer walks it
+                // forward to whichever pair brackets the current video time.
+                //
+                // It has to walk, rather than be handed one pair: this box is
+                // rebuilt on the ~4Hz timeupdate tick, but the renderer draws
+                // at 60fps, so between ticks the pair goes stale. Handing over
+                // a fixed pair made every shape reach its target and freeze
+                // until the next tick caught up — and 250ms against the 333ms
+                // detection cadence beats at exactly 1s, so the whole crowd
+                // stuttered about once a second.
+                silhouetteRow: row.silhouette ? row : undefined,
             });
 
             this.windowEndIndex++;
@@ -2928,4 +2927,4 @@ class Summarizer {
 const summarizer = new Summarizer();
 
 export { ProfilesData as P, Summarizer as S, activeBoxManager as a, scoring as b, profilesData as c, demographics as d, geomUtil as g, progress as p, summarizer as s };
-//# sourceMappingURL=summarizer-uI38jR6k.js.map
+//# sourceMappingURL=summarizer-BHutMk1G.js.map

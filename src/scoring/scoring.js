@@ -831,12 +831,18 @@ class Score {
                 // interleaved, source-pixel space). Only present in newer
                 // pipeline output.
                 silhouette: row.silhouette,
-                // When this outline was observed, and the next one due for
-                // this person — see linkSilhouetteChain(). The renderer
-                // interpolates between the two across exactly this interval.
-                silhouetteTime: row.silhouette ? row.time : undefined,
-                nextSilhouette: row.nextSilhouetteRow?.silhouette,
-                nextSilhouetteTime: row.nextSilhouetteRow?.time,
+                // The row this outline came from — an entry point into the
+                // chain linkSilhouetteChain() built. The renderer walks it
+                // forward to whichever pair brackets the current video time.
+                //
+                // It has to walk, rather than be handed one pair: this box is
+                // rebuilt on the ~4Hz timeupdate tick, but the renderer draws
+                // at 60fps, so between ticks the pair goes stale. Handing over
+                // a fixed pair made every shape reach its target and freeze
+                // until the next tick caught up — and 250ms against the 333ms
+                // detection cadence beats at exactly 1s, so the whole crowd
+                // stuttered about once a second.
+                silhouetteRow: row.silhouette ? row : undefined,
             });
 
             this.windowEndIndex++;

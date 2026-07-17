@@ -1,6 +1,6 @@
 import { v as van, e as eventBus } from './chunks/eventbus-c5hoJhOF.js';
 import { M as Modal, T as Tabs } from './chunks/van-ui-D8yynE9H.js';
-import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-uI38jR6k.js';
+import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-BHutMk1G.js';
 import { e as events } from './chunks/events-DfSCAAk6.js';
 import { d as database } from './chunks/apiUtil-CDq4WBQY.js';
 import { t as timeUtil } from './chunks/time-Ckmoh8eN.js';
@@ -1433,37 +1433,46 @@ class SyntheticView {
     // due, positioned by the video clock. Returns a flat [x0,y0,...] array in
     // source-pixel space.
     _shapeFor(box) {
-        const from = box.silhouette;
-        const to = box.nextSilhouette;
-        const t0 = box.silhouetteTime;
-        const t1 = box.nextSilhouetteTime;
+        const now = this._videoTime();
+        let fromRow = box.silhouetteRow;
+        if (!fromRow || now === null) return box.silhouette;
 
-        // No read-ahead to work with — end of a track or of a chunk, or older
-        // pipeline output. Hold the outline we have.
+        // Walk to the detection pair bracketing `now`. The box only refreshes
+        // on the ~4Hz timeupdate tick, so by the time we draw, one or more
+        // detections it hasn't seen may already be due — walking here keeps
+        // the shape on the video clock instead of on ActiveBoxManager's.
+        while (
+            fromRow.nextSilhouetteRow &&
+            fromRow.nextSilhouetteRow.time <= now
+        ) {
+            fromRow = fromRow.nextSilhouetteRow;
+        }
+        const toRow = fromRow.nextSilhouetteRow;
+        const from = fromRow.silhouette || box.silhouette;
+
+        // Nothing ahead to interpolate toward — end of a track or of a chunk,
+        // or older pipeline output. Hold what we have.
         if (
-            !to ||
-            to.length !== from.length ||
-            !Number.isFinite(t0) ||
-            !Number.isFinite(t1) ||
-            t1 <= t0
+            !toRow ||
+            !toRow.silhouette ||
+            toRow.silhouette.length !== from.length ||
+            !(toRow.time > fromRow.time)
         ) {
             return from;
         }
-        const now = this._videoTime();
-        if (now === null) return from;
 
-        let u = (now - t0) / (t1 - t0);
+        let u = (now - fromRow.time) / (toRow.time - fromRow.time);
         if (u <= 0) return from;
         if (u > 1) u = 1;
 
         // Align once per (from, to) pair, not per frame — the rotation is a
         // property of the pair, and it's the expensive part.
         let st = this._morph.get(box);
-        if (!st || st.from !== from || st.to !== to) {
+        if (!st || st.fromRow !== fromRow || st.toRow !== toRow) {
             st = {
-                from,
-                to,
-                aligned: this._alignRotation(to, from),
+                fromRow,
+                toRow,
+                aligned: this._alignRotation(toRow.silhouette, from),
                 out: new Float64Array(from.length),
             };
             this._morph.set(box, st);
