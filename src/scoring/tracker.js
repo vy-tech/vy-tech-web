@@ -27,14 +27,16 @@ export class Tracker {
         this.signatureThreshold = signatureThreshold;
         this.nextTrackId = 0;
         this.priorSignatures = null;
+        this.chunkOffsets = new Map();
     }
 
     reset() {
         this.nextTrackId = 0;
         this.priorSignatures = null;
+        this.chunkOffsets = new Map();
     }
 
-    assign(rows, chunkSignatures = null) {
+    assign(rows, chunkSignatures = null, chunkKey = null) {
         if (!rows || rows.length === 0) return rows;
 
         const allHavePerson = rows.every(
@@ -43,6 +45,8 @@ export class Tracker {
 
         if (!allHavePerson) {
             this._assignByIoU(rows);
+        } else {
+            this._namespaceChunkIds(rows, chunkKey);
         }
 
         if (chunkSignatures && this.priorSignatures) {
@@ -54,6 +58,40 @@ export class Tracker {
         }
 
         return rows;
+    }
+
+    // Shift a chunk's pass-through `person` IDs into a globally-unique range.
+    //
+    // The pipeline processes chunks in parallel, so its IDs are only unique
+    // *within* a chunk — chunk 2's person 5 is a different human than chunk
+    // 1's person 5. Left alone, ActiveBoxManager matches them by ID and
+    // teleports one track across the frame. Offsets are drawn from the same
+    // `nextTrackId` counter `_assignByIoU` uses, so the two paths can't
+    // collide, and within-chunk identity is preserved exactly.
+    //
+    // Memoized per chunk so reloading one (seek, rewind) reproduces the same
+    // IDs instead of burning a fresh range. The first chunk gets offset 0, so
+    // single-chunk videos are unchanged.
+    //
+    // This is a uniqueness fix, not re-identification: the same human across
+    // two chunks still gets two IDs. Stitching those together is what the
+    // signature re-id path (and the pipeline's person hash) is for.
+    _namespaceChunkIds(rows, chunkKey) {
+        if (!chunkKey) return;
+
+        let offset = this.chunkOffsets.get(chunkKey);
+        if (offset === undefined) {
+            offset = this.nextTrackId;
+            let maxId = -1;
+            for (const row of rows) {
+                if (row.person > maxId) maxId = row.person;
+            }
+            this.nextTrackId = offset + maxId + 1;
+            this.chunkOffsets.set(chunkKey, offset);
+        }
+
+        if (offset === 0) return;
+        for (const row of rows) row.person += offset;
     }
 
     _assignByIoU(rows) {

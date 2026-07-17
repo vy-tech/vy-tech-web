@@ -4,8 +4,11 @@ const defaultProfileId = "BkBUQq4GiSfuwHN7YrK3";
 
 // Default scoring parameters based on rssettings.js
 const defaultScoringParams = {
-    softmaxAlpha: 0.01,
-    combineSoftmaxAlpha: 0.005,
+    // See scoring.js constructor: softmax alphas act as a near-MAX over ±2000
+    // signed scores; lowered to de-spike the score (mean combine). Recalibrate
+    // score-scale-dependent thresholds when changing these.
+    softmaxAlpha: 0.003,
+    combineSoftmaxAlpha: 0.0,
     gainFactor: 0.05,
     useRobustNormalization: false,
     robustTargetStd: 350,

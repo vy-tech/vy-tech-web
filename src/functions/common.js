@@ -22,6 +22,18 @@ async function isAdmin(uid) {
     }
 }
 
+async function getOrg(oid) {
+    if (!oid) return null;
+    try {
+        const orgsData = new OrganizationsData();
+        const org = await orgsData.getById(oid);
+        return org || null;
+    } catch (err) {
+        console.error("Error fetching organization:", err);
+        return null;
+    }
+}
+
 async function requireAdmin(req, res, next) {
     if (!(await isAdmin(req.uid))) {
         return res.status(403).json({ error: "Admin access required" });
@@ -88,4 +100,5 @@ export {
     VY_ADMIN_OID,
     isAdmin,
     requireAdmin,
+    getOrg,
 };

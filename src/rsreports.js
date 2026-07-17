@@ -379,7 +379,7 @@ class Reports {
         return div(
             {
                 id: "report-center",
-                class: "w-full max-w-4xl flex flex-col",
+                class: "w-full max-w-8xl flex flex-col",
             },
 
             div({ id: "report-title" }, "No Event Selected"),
@@ -416,8 +416,7 @@ class Reports {
                         {
                             id: "synthetic-toggle",
                             type: "button",
-                            class:
-                                "ml-auto text-xs px-2 py-1 rounded bg-gray-800/70 text-white hover:bg-gray-700 hidden",
+                            class: "ml-auto text-xs px-2 py-1 rounded bg-gray-800/70 text-white hover:bg-gray-700 hidden",
                             onclick: () => this.toggleSynthetic(),
                         },
                         "Synthetic"

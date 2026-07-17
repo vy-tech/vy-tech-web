@@ -97,7 +97,7 @@ router.post("/upload/request", async (req, res) => {
 
 // Completes an upload, saves a file record, and queues processing.
 router.post("/upload/complete", async (req, res) => {
-    const { uploadToken, location } = req.body || {};
+    const { uploadToken, location, betaPipeline } = req.body || {};
 
     if (!uploadToken) {
         return res.status(400).json({
@@ -123,6 +123,17 @@ router.post("/upload/complete", async (req, res) => {
             });
         }
 
+        if (betaPipeline) {
+            const org = orgContext.getCurrentOrg();
+            if (!org?.flags?.betaPipeline) {
+                return res.status(403).json({
+                    error: "Forbidden",
+                    message:
+                        "Beta pipeline access is not enabled for your organization",
+                });
+            }
+        }
+
         // Save file record — orgContext is set by requireApiKey middleware
         const files = new FilesData();
         const fileId = await files.save(
@@ -141,7 +152,8 @@ router.post("/upload/complete", async (req, res) => {
             "ProcessFootage",
             uid,
             upload.oid,
-            location || null
+            location || null,
+            betaPipeline ? { beta: true } : null
         );
 
         // Link job to file record

@@ -2,7 +2,7 @@ import "../firebase-shim.js";
 
 import express from "express";
 import { onRequest } from "firebase-functions/v2/https";
-import { requireAuth } from "../common.js";
+import { requireAuth, getOrg } from "../common.js";
 
 import { Storage } from "../../data/storage.js";
 import { JobsData } from "../../data/jobs.js";
@@ -91,6 +91,21 @@ fileApp.post("/process/:file_id", async (req, res) => {
         });
     }
 
+    // If opts includes a request for beta processing make sure the org has that flag
+    if (opts.betaPipeline) {
+        const org = await getOrg(file.oid);
+        if (!org || !org.flags || !org.flags.betaPipeline) {
+            console.warn(
+                `Org ${file.oid} does not have access to beta processing features`
+            );
+            return res.status(403).json({
+                error: "Forbidden",
+                message:
+                    "Organization does not have access to beta processing features",
+            });
+        }
+    }
+
     try {
         const jobId = await jobs.queueJob(
             "file",
@@ -98,7 +113,8 @@ fileApp.post("/process/:file_id", async (req, res) => {
             processor.jobType,
             req.uid,
             file.oid,
-            opts.location || null
+            opts.location || null,
+            opts.betaPipeline ? { beta: true } : null
         );
         console.log(
             `Queued processing job ${jobId} for file ${file_id} by user ${req.uid}`

@@ -9957,7 +9957,7 @@ async function initFirebaseStorage() {
         _firebaseStorageInstance = _firebaseStorageFunctions.getStorage();
     } else {
         const { getStorage, ref, uploadString, getDownloadURL } =
-            await import('./index.esm-CHhXho42.js');
+            await import('./index.esm-Cxbh_7km.js');
         _firebaseStorageFunctions = {
             getStorage,
             ref,
@@ -12096,7 +12096,15 @@ class JobsData {
         return rejected.length;
     }
 
-    async queueJob(refType, refId, type, uid, oid, location = null) {
+    async queueJob(
+        refType,
+        refId,
+        type,
+        uid,
+        oid,
+        location = null,
+        params = null
+    ) {
         const jobDoc = {
             refType: refType,
             refId: refId,
@@ -12106,6 +12114,10 @@ class JobsData {
             oid: oid,
             location: location,
         };
+
+        if (params) {
+            jobDoc.params = params;
+        }
 
         return await database.set("jobs", jobDoc);
     }
@@ -12292,7 +12304,7 @@ router$3.post("/upload/request", async (req, res) => {
 
 // Completes an upload, saves a file record, and queues processing.
 router$3.post("/upload/complete", async (req, res) => {
-    const { uploadToken, location } = req.body || {};
+    const { uploadToken, location, betaPipeline } = req.body || {};
 
     if (!uploadToken) {
         return res.status(400).json({
@@ -12318,6 +12330,17 @@ router$3.post("/upload/complete", async (req, res) => {
             });
         }
 
+        if (betaPipeline) {
+            const org = orgContext.getCurrentOrg();
+            if (!org?.flags?.betaPipeline) {
+                return res.status(403).json({
+                    error: "Forbidden",
+                    message:
+                        "Beta pipeline access is not enabled for your organization",
+                });
+            }
+        }
+
         // Save file record — orgContext is set by requireApiKey middleware
         const files = new FilesData();
         const fileId = await files.save(
@@ -12336,7 +12359,8 @@ router$3.post("/upload/complete", async (req, res) => {
             "ProcessFootage",
             uid,
             upload.oid,
-            location || null
+            location || null,
+            betaPipeline ? { beta: true } : null
         );
 
         // Link job to file record
@@ -21537,4 +21561,4 @@ const v1 = onRequest(
 );
 
 export { Component as C, FirebaseError as F, SDK_VERSION as S, _getProvider as _, getModularInstance as a, getDefaultEmulatorHostnameAndPort as b, createMockUserToken as c, _isFirebaseServerApp as d, _registerComponent as e, v1 as f, getApp$1 as g, isCloudWorkstation as i, pingServer as p, registerVersion as r, updateEmulatorBanner as u, v1App as v };
-//# sourceMappingURL=index-wt_5CQ32.js.map
+//# sourceMappingURL=index-BTxtc9HR.js.map
