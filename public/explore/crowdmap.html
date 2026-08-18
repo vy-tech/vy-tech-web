@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>crowdMap — dev harness</title>
+<style>
+    html, body { margin: 0; padding: 0; min-height: 100%; background: #0e0e12; color: #e8e8ea; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    #wrap { max-width: 1040px; margin: 0 auto; padding: 20px; }
+    h1 { font-size: 15px; font-weight: 600; opacity: 0.85; margin: 0 0 12px; }
+    #stage { width: 1000px; max-width: 100%; background: #1a1a20; border-radius: 8px; overflow: hidden; }
+    #stage canvas { display: block; width: 100%; height: auto; image-rendering: auto; }
+    #hud { margin-top: 14px; background: rgba(255,255,255,0.04); padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.8; }
+    #hud .row { display: flex; align-items: center; gap: 10px; }
+    #hud label { opacity: 0.7; min-width: 70px; }
+    #hud input[type=range] { flex: 1; }
+    #hud select { background: #22222a; color: #e8e8ea; border: 1px solid #3a3a44; border-radius: 4px; padding: 2px 6px; }
+    .v { font-variant-numeric: tabular-nums; min-width: 150px; }
+    #status { font-size: 12px; opacity: 0.7; min-height: 16px; margin-top: 6px; }
+    #readout { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+    <h1>crowdMap — dev harness</h1>
+    <div id="stage"></div>
+    <div id="hud">
+        <div class="row">
+            <label for="dataset">dataset</label>
+            <select id="dataset">
+                <option value="calm-few">calm-few (small)</option>
+                <option value="cheering-many">cheering-many (large)</option>
+            </select>
+        </div>
+        <div class="row">
+            <label for="camera">wedge</label>
+            <select id="camera">
+                <option value="all">all 5 wedges</option>
+                <option value="1">camera 1</option>
+                <option value="2">camera 2</option>
+                <option value="3">camera 3</option>
+                <option value="4">camera 4</option>
+                <option value="5">camera 5</option>
+            </select>
+        </div>
+        <div class="row">
+            <label for="frame">time</label>
+            <input id="frame" type="range" min="0" max="0" value="0" />
+            <div class="v" id="frameV">—</div>
+        </div>
+        <div id="readout">—</div>
+        <div id="status">initializing…</div>
+    </div>
+</div>
+<script type="module" src="/js/crowdmaptest.js"></script>
+</body>
+</html>

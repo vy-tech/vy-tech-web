@@ -82,14 +82,12 @@ class BrowserOrgContext {
         localStorage.setItem(STORAGE_KEY, orgId);
         console.log("Set current organization to:", orgId);
 
-        
         eventBus.fire("org.changed", {
             orgId,
             org,
             isPersonal: org.isPersonal || false,
-            initialized
+            initialized,
         });
-        
 
         return true;
     }

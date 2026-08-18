@@ -33,7 +33,7 @@ class EventsData {
     }
 
     async getById(id) {
-        return await database.get("events", id) || null;
+        return (await database.get("events", id)) || null;
     }
 
     async getByHierarchy(hierarchy) {
@@ -80,8 +80,8 @@ class EventsData {
         return await database.query("events", filters, "begin");
     }
 
-    async getAvailable() {
-        let orgId = orgContext.getCurrentOrgId();
+    async getAvailable(orgId) {
+        orgId = orgId || orgContext.getCurrentOrgId();
         console.log("Fetching events for org:", orgId);
         const events = await database.query(
             "events",

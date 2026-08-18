@@ -5,6 +5,7 @@ import { LocationsData } from "./data/locations.js";
 import { CamerasData } from "./data/cameras.js";
 import { ApplicationsData } from "./data/applications.js";
 import { ApiKeysData } from "./data/apiKeys.js";
+import { JobsData } from "./data/jobs.js";
 import { apiUtil } from "./util/apiUtil.js";
 import { Modal } from "vanjs-ui";
 
@@ -32,6 +33,7 @@ class Settings {
         this.camerasData = new CamerasData();
         this.applicationsData = new ApplicationsData();
         this.apiKeysData = new ApiKeysData();
+        this.jobsData = new JobsData();
 
         this.activeTab = van.state("locations");
         this.user = van.state(null);
@@ -182,6 +184,9 @@ class Settings {
         const { div, span, button, i } = van.tags;
 
         const addressParts = [loc.city, loc.state].filter(Boolean).join(", ");
+        const challengeModeEnabled =
+            !!orgContext.getCurrentOrg()?.flags?.challengeModeEnabled;
+        const challengeRunning = !!loc.challengeModeRunning;
 
         return div(
             {
@@ -214,6 +219,24 @@ class Settings {
                         i({ class: "las la-video mr-1" }),
                         "Cameras"
                     ),
+                    challengeModeEnabled
+                        ? button(
+                              {
+                                  class: challengeRunning
+                                      ? "text-sm px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                                      : "text-sm px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded transition-colors",
+                                  onclick: () => this.handleToggleChallenge(loc),
+                              },
+                              i({
+                                  class: challengeRunning
+                                      ? "las la-stop mr-1"
+                                      : "las la-play mr-1",
+                              }),
+                              challengeRunning
+                                  ? "Stop Challenge Mode"
+                                  : "Start Challenge Mode"
+                          )
+                        : null,
                     button(
                         {
                             class: "text-sm px-3 py-1 bg-red-100 hover:bg-red-200 dark:bg-red-900 dark:hover:bg-red-800 text-red-700 dark:text-red-300 rounded transition-colors",
@@ -626,6 +649,31 @@ class Settings {
             return;
         await this.locationsData.delete(loc.id);
         await this.loadLocations();
+    }
+
+    async handleToggleChallenge(loc) {
+        const running = !!loc.challengeModeRunning;
+        const oid = orgContext.getCurrentOrgId();
+        const uid = this.user.val?.uid;
+        const type = running ? "StopChallenge" : "StartChallenge";
+
+        try {
+            await this.jobsData.queueJob(
+                "feed",
+                "live",
+                type,
+                uid,
+                oid,
+                loc.id
+            );
+            await this.locationsData.update(loc.id, {
+                challengeModeRunning: !running,
+            });
+            await this.loadLocations();
+        } catch (err) {
+            console.error("Failed to toggle challenge mode:", err);
+            alert("Failed to toggle challenge mode. Please try again.");
+        }
     }
 
     // =========================================================================

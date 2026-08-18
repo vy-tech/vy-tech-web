@@ -1,3 +1,6 @@
+# Headless-test browser profile (contains a live auth session)
+.e2e-profile/
+
 # Secrets
 secret.py
 firebase-svc-cred.json

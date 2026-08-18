@@ -1,4 +1,4 @@
-export { f as v1, v as v1App } from './chunks/index-BTxtc9HR.js';
+export { v as v1, f as v1App } from './chunks/index-M5loArCG.js';
 import 'express';
 import 'firebase-functions/v2/https';
 import 'firebase-admin/app';

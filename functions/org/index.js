@@ -10711,14 +10711,12 @@ class BrowserOrgContext {
         localStorage.setItem(STORAGE_KEY, orgId);
         console.log("Set current organization to:", orgId);
 
-        
         eventBus.fire("org.changed", {
             orgId,
             org,
             isPersonal: org.isPersonal || false,
-            initialized
+            initialized,
         });
-        
 
         return true;
     }
@@ -19368,7 +19366,7 @@ class EventsData {
     }
 
     async getById(id) {
-        return await database.get("events", id) || null;
+        return (await database.get("events", id)) || null;
     }
 
     async getByHierarchy(hierarchy) {
@@ -19415,8 +19413,8 @@ class EventsData {
         return await database.query("events", filters, "begin");
     }
 
-    async getAvailable() {
-        let orgId = orgContext.getCurrentOrgId();
+    async getAvailable(orgId) {
+        orgId = orgId || orgContext.getCurrentOrgId();
         console.log("Fetching events for org:", orgId);
         const events = await database.query(
             "events",

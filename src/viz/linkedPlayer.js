@@ -6,6 +6,7 @@ import { eventBus } from "../eventbus.js";
 class LinkedPlayer {
     constructor() {
         this.container = null;
+        this.embedPlayer = null;
 
         eventBus.addEventListener("playback.play", () => {
             if (this.embedPlayer) {
@@ -26,6 +27,7 @@ class LinkedPlayer {
         eventBus.addEventListener("ui.hierarchyChanged", (e) => {
             console.log("Hierarchy changed, reinitializing linked player...");
             this.container.innerHTML = "";
+            this.embedPlayer = null;
             this.init();
         });
     }

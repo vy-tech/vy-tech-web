@@ -90,6 +90,13 @@ class SummaryMinutesTool {
         }
 
         const hierarchy = new Hierarchy(args.hierarchy);
+
+        if (hierarchy.camera == null) {
+            throw new Error(
+                "Hierarchy must include a camera for minute summary"
+            );
+        }
+
         const summarizer = new Summarizer();
         const summary = await summarizer.loadFromStorage(
             hierarchy.toString("-")

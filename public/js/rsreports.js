@@ -1,16 +1,18 @@
-import { v as van, e as eventBus } from './chunks/eventbus-c5hoJhOF.js';
-import { M as Modal, T as Tabs } from './chunks/van-ui-D8yynE9H.js';
-import { P as ProfilesData, p as progress, s as summarizer, a as activeBoxManager, b as scoring, g as geomUtil, d as demographics, c as profilesData } from './chunks/summarizer-BHutMk1G.js';
-import { e as events } from './chunks/events-DfSCAAk6.js';
-import { d as database } from './chunks/apiUtil-CDq4WBQY.js';
-import { t as timeUtil } from './chunks/time-Ckmoh8eN.js';
+import { v as van } from './chunks/van-t8DywzvC.js';
+import { M as Modal, T as Tabs } from './chunks/van-ui-YSP0ZuSh.js';
+import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
+import { P as ProfilesData, b as progress, s as summarizer, d as activeBoxManager, e as scoring, g as geomUtil, f as demographics, p as profilesData } from './chunks/summarizer-CyWVFprU.js';
+import { e as events } from './chunks/events-C1O1eUlD.js';
+import { d as database } from './chunks/apiUtil-BPgA2fJq.js';
+import { t as timeUtil } from './chunks/time-9Nm7-07Z.js';
 import { H as Hierarchy } from './chunks/hierarchy-HD-XXbBO.js';
-import { A as AnnotationsData } from './chunks/annotations-BN4rneuv.js';
-import { o as orgContext } from './chunks/orgContext-CvnztG5e.js';
-import { F as FilesData } from './chunks/files-Ci600Yy3.js';
-import { e as effectiveStatus } from './chunks/fileUpload-CDAOBoMr.js';
-import './chunks/storage-Dh8pfopK.js';
-import './chunks/events-gMoU96vh.js';
+import { A as AnnotationsData } from './chunks/annotations-WMCd3Oh_.js';
+import { o as orgContext } from './chunks/orgContext-DoenZFJu.js';
+import { F as FilesData } from './chunks/files-wyS461qA.js';
+import { e as effectiveStatus } from './chunks/fileUpload-RxsMCknE.js';
+import './chunks/storage-CEVLtaX9.js';
+import './chunks/events-CMPTefcC.js';
+import './chunks/jobs-L0jCg4oH.js';
 
 class Profiles extends ProfilesData {
     constructor() {
@@ -2401,6 +2403,7 @@ const ageDemo = new Demographics("Age Group", ["adult", "child"], [0, 0]);
 class LinkedPlayer {
     constructor() {
         this.container = null;
+        this.embedPlayer = null;
 
         eventBus.addEventListener("playback.play", () => {
             if (this.embedPlayer) {
@@ -2421,6 +2424,7 @@ class LinkedPlayer {
         eventBus.addEventListener("ui.hierarchyChanged", (e) => {
             console.log("Hierarchy changed, reinitializing linked player...");
             this.container.innerHTML = "";
+            this.embedPlayer = null;
             this.init();
         });
     }

@@ -6,6 +6,7 @@ import { AnnotationsTool } from "./annotations.js";
 import { WeatherTool } from "./weather.js";
 import { ConversationsTool } from "./conversations.js";
 import { MessagesTool } from "./messages.js";
+import { CrowdSnapshotTool } from "./crowdSnapshot.js";
 
 class ToolBox {
     constructor() {
@@ -19,6 +20,7 @@ class ToolBox {
             new WeatherTool(),
             new ConversationsTool(),
             new MessagesTool(),
+            new CrowdSnapshotTool(),
         ];
         this.toolsLookup = {};
         this.toolsList.forEach((tool) => {
@@ -81,7 +83,9 @@ class ToolBox {
     }
 
     getMessageForResult(result, resultJSON) {
-        if (Array.isArray(result)) {
+        if (result === null || result === undefined) {
+            return "  - Returned no value.";
+        } else if (Array.isArray(result)) {
             return `  - Returned ${result.length} rows.`;
         } else if (result.from_cursor) {
             return `  - Returned the next page of ${
@@ -98,9 +102,14 @@ class ToolBox {
     }
 
     isRows(result) {
-        if (result.keys && result.rows) {
+        // A tool that returned nothing, or an empty list, has no columns to
+        // infer — both used to throw here and take the turn down.
+        if (!result || typeof result !== "object") {
+            return false;
+        } else if (result.keys && result.rows) {
             return true;
         } else if (Array.isArray(result)) {
+            if (!result.length) return false;
             // If all values of the first row are "flat" (not objects), treat as rows
             const vals = Object.values(result[0]);
             if (vals.every((v) => typeof v !== "object")) {
@@ -248,7 +257,10 @@ class ToolBox {
     }
 
     addObjectResult(output, msgs, tool, result, maxSize) {
-        const resultJSON = JSON.stringify(result);
+        // JSON.stringify(undefined) is undefined, not a string — a tool that
+        // returned nothing would blow up on .length below and be reported as a
+        // failure. Returning nothing isn't an error; the model gets null.
+        const resultJSON = JSON.stringify(result ?? null);
         const msg = this.getMessageForResult(result, resultJSON);
 
         msgs.push(msg);
@@ -274,18 +286,69 @@ class ToolBox {
         }
     }
 
+    /**
+     * Invoke every requested tool and produce exactly one output per call.
+     *
+     * Every call_id the model issued must come back with something, including a
+     * failing one. Under Promise.all a single thrown tool rejected the whole
+     * batch, so no outputs were posted for *any* call in the turn and the
+     * conversation sat waiting on a response that could never arrive. A failure
+     * is now reported to the model as an error result for that one call, and
+     * the rest of the turn still answers.
+     */
     async invokeAll(tools) {
         const outputMaxSize = 100000 / tools.length;
-        const promises = tools.map(({ name, args }) => this.invoke(name, args));
-        const results = await Promise.all(promises);
+        const settled = await Promise.allSettled(
+            tools.map(({ name, args }) => this.invoke(name, args))
+        );
+
         const output = [];
         let msgs = ["Tool results:", ""];
 
         for (let i = 0; i < tools.length; i++) {
-            this.addResult(output, msgs, tools[i], results[i], outputMaxSize);
+            const result = settled[i];
+
+            if (result.status === "rejected") {
+                this.addErrorResult(output, msgs, tools[i], result.reason);
+                continue;
+            }
+
+            // Where this call's message and output start, so a formatter that
+            // fails partway through doesn't leave half an entry behind next to
+            // the error — one call, one message, one output.
+            const msgCount = msgs.length;
+            const outputCount = output.length;
+
+            try {
+                this.addResult(
+                    output,
+                    msgs,
+                    tools[i],
+                    result.value,
+                    outputMaxSize
+                );
+            } catch (error) {
+                // Formatting an unexpected result shape would otherwise strand
+                // the turn just as a thrown tool did.
+                msgs.length = msgCount;
+                output.length = outputCount;
+                this.addErrorResult(output, msgs, tools[i], error);
+            }
         }
 
         return { content: msgs.join("\n"), output: output };
+    }
+
+    addErrorResult(output, msgs, tool, error) {
+        const message = (error && error.message) || String(error);
+
+        console.error(`Tool ${tool.name} failed:`, error);
+        msgs.push(`  - ${tool.name} failed: ${message}`);
+
+        output.push({
+            call_id: tool.call_id,
+            output: JSON.stringify({ error: message }),
+        });
     }
 }
 

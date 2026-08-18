@@ -8,6 +8,10 @@ import { eventBus } from "../eventbus.js";
 
 const SUMMARIZE_EVERY_MS = 1 * 60 * 1000;
 
+// Tools that draw something on screen as well as returning data to the model,
+// and so need re-invoking when a conversation is reopened.
+const VISUAL_TOOLS = ["show_crowd_snapshot"];
+
 class ChatClient {
     constructor() {
         this.auth = null;
@@ -332,8 +336,85 @@ class ChatClient {
             role: "assistant",
             type: "tool_request",
             content: ["Requesting tools:", "", ...msg].join("\n"),
+            // Stored alongside the rendered text so replaying a call on
+            // conversation load doesn't have to parse `content` — that string
+            // is a display format, and reformatting it would silently break
+            // replay. See parseToolCallsFromContent() for the fallback that
+            // covers conversations written before this field existed.
+            toolCalls: toolRequests,
             ...options,
         });
+    }
+
+    // --- Replaying visual tools on conversation load -----------------------
+    //
+    // Most tools only feed the model, but show_crowd_snapshot also paints the
+    // chat banner. Reopening a conversation restores the transcript, so the
+    // banner should come back too — otherwise the assistant is discussing a
+    // map that isn't on screen.
+
+    /**
+     * Tool calls recorded on a message, preferring the structured field and
+     * falling back to the rendered content for older messages.
+     */
+    getToolCallsFromMessage(message) {
+        if (Array.isArray(message.toolCalls)) return message.toolCalls;
+        return this.parseToolCallsFromContent(message.content);
+    }
+
+    // "  - show_crowd_snapshot({"hierarchy":"raimondi:20260621",...})" per line.
+    // Args are always one line of JSON, so the greedy match to the final ")"
+    // recovers them intact.
+    parseToolCallsFromContent(content) {
+        const calls = [];
+        for (const line of (content || "").split("\n")) {
+            const match = line.match(/^\s*-\s*([A-Za-z0-9_]+)\((.*)\)\s*$/);
+            if (match) calls.push({ name: match[1], args: match[2] });
+        }
+        return calls;
+    }
+
+    /**
+     * The most recent visual tool call in `messages`, or null.
+     *
+     * Only the last one matters: the banner shows a single map at a time, so
+     * replaying every call in a long conversation would be a burst of fetches
+     * for maps nobody sees.
+     */
+    findLastVisualCall(messages) {
+        let last = null;
+
+        for (const message of messages || []) {
+            if (message.type !== "tool_request") continue;
+            for (const call of this.getToolCallsFromMessage(message)) {
+                if (VISUAL_TOOLS.includes(call.name)) last = call;
+            }
+        }
+
+        return last;
+    }
+
+    /**
+     * Re-invoke the most recent visual tool call in `messages`, if any.
+     *
+     * Goes through toolBox so the tool's eventBus side effect fires exactly as
+     * it does live; the returned summary is discarded rather than posted, since
+     * the model already has it in context from the original exchange.
+     */
+    async replayLastVisual(messages) {
+        const last = this.findLastVisualCall(messages);
+        if (!last) return null;
+
+        console.log("Replaying visual tool call:", last);
+        try {
+            await toolBox.invoke(last.name, last.args);
+            return last;
+        } catch (error) {
+            // A replay failing is not worth blocking the transcript over — the
+            // event may have been deleted, or its chunks may no longer load.
+            console.error("Error replaying visual tool call:", error);
+            return null;
+        }
     }
 
     async invokeTools(tools) {

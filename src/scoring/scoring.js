@@ -135,6 +135,15 @@ class Score {
         // ranges / highlight thresholds. (Bucket score still uses maxScore in
         // summarizer.js:151, an additional amplifier worth revisiting.)
         //this.softmaxAlpha = 0.003; // Per-emotion weighting within single detections
+
+        // TODO FIXME This is a quick patch to deal with the differences
+        // for scoring Hume data vs. our model's data.  This should be refactored
+        // and made a part of profiles.
+
+        this.dataVersion = 0;
+        this.softmaxAlphaVersions = [0.01, 0.0065];
+        this.combineSoftmaxAlphaVersions = [0.005, 0.0005];
+
         this.softmaxAlpha = /*0.01;*/ 0.0065;
         this.combineSoftmaxAlpha = /*0.005;*/ 0.0005; // Per-row weighting across multiple detections (0 = mean)
         this.gainFactor = 0.05;
@@ -269,6 +278,10 @@ class Score {
     }
 
     async loadDetections(url) {
+        if (!url) {
+            console.error(`Invalid URL for loading detections`);
+            return [];
+        }
         const response = await fetch(url);
         if (!response.ok) {
             console.error(`Error loading ${url}: ${response.statusText}`);
@@ -285,6 +298,13 @@ class Score {
 
         // Support both raw array and {results: []} formats for flexibility
         if (!Array.isArray(rows) && "results" in rows) {
+            // TODO FIXME: This is a quick patch for scoring Hume vs us differently
+            // refactor into profiles..
+            this.dataVersion = 1;
+            this.softmaxAlpha = this.softmaxAlphaVersions[this.dataVersion];
+            this.combineSoftmaxAlpha =
+                this.combineSoftmaxAlphaVersions[this.dataVersion];
+
             this.fps = rows.fps || (rows.video && rows.video.fps);
             eventBus.fire("scoring.capabilities", rows.capabilities || {});
             // `url` is the resolved expressions endpoint (/api/v1/fetch/{id}/{path}),
@@ -292,6 +312,11 @@ class Score {
             // backend the chunk lives on. See syntheticView's background plate.
             eventBus.fire("scoring.video", { ...(rows.video || {}), url });
             return rows.results;
+        } else {
+            this.dataVersion = 0;
+            this.softmaxAlpha = this.softmaxAlphaVersions[this.dataVersion];
+            this.combineSoftmaxAlpha =
+                this.combineSoftmaxAlphaVersions[this.dataVersion];
         }
 
         eventBus.fire("scoring.capabilities", {});

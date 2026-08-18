@@ -1,15 +1,17 @@
-import { e as eventBus, v as van } from './chunks/eventbus-c5hoJhOF.js';
+import { v as van } from './chunks/van-t8DywzvC.js';
 import { k } from './chunks/marked.esm-DDAYIbNt.js';
-import { d as database, g as getApp, b as getAuth } from './chunks/apiUtil-CDq4WBQY.js';
-import { E as EventsData } from './chunks/events-gMoU96vh.js';
+import { d as database, g as getApp, b as getAuth } from './chunks/apiUtil-BPgA2fJq.js';
+import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
+import { E as EventsData } from './chunks/events-CMPTefcC.js';
 import { H as Hierarchy } from './chunks/hierarchy-HD-XXbBO.js';
-import { S as Summarizer, p as progress } from './chunks/summarizer-BHutMk1G.js';
-import { A as AnnotationsData } from './chunks/annotations-BN4rneuv.js';
-import { a as auth } from './chunks/rsauth-kcYSBLKs.js';
-import { t as timeUtil } from './chunks/time-Ckmoh8eN.js';
-import './chunks/orgContext-CvnztG5e.js';
-import './chunks/storage-Dh8pfopK.js';
-import './chunks/van-ui-D8yynE9H.js';
+import { S as Summarizer, c as chunksData, a as Score, p as profilesData, T as Tracker, b as progress } from './chunks/summarizer-CyWVFprU.js';
+import { A as AnnotationsData } from './chunks/annotations-WMCd3Oh_.js';
+import { a as auth } from './chunks/rsauth-DL3edqp_.js';
+import { t as timeUtil } from './chunks/time-9Nm7-07Z.js';
+import { c as crowdMap } from './chunks/crowdMap-Dm3_Rrha.js';
+import './chunks/orgContext-DoenZFJu.js';
+import './chunks/storage-CEVLtaX9.js';
+import './chunks/van-ui-YSP0ZuSh.js';
 
 class MessagesData {
     constructor(conversation) {
@@ -169,18 +171,36 @@ class EventsTool {
     async invoke(args = {}) {
         const events = await this.data.getAvailable();
 
-        const result = events.map((event) => ({
-            hierarchy: new Hierarchy(event.hierarchy).toEventString(),
-            location: event.location,
-            name: event.name.replace(/\(Baseball\) /, "").trim(),
-            summary: event.summary,
-            begin: event.begin.toDate(),
-            end: event.end.toDate(),
-            duration: event.summary.seconds,
-            cameras: event.summary.cameras,
-        }));
+        // An event becomes "available" when it's captured, but `summary` is
+        // written by a later processing pass — so a recently captured event
+        // legitimately has no summary yet, and one such event used to throw
+        // here and take the whole tool call (and the conversation waiting on
+        // it) down with it. Report those events with the fields they do have
+        // rather than dropping them, so the model still knows they exist.
+        const result = events.map((event) => {
+            const summary = event.summary || {};
+
+            return {
+                hierarchy: new Hierarchy(event.hierarchy).toEventString(),
+                location: event.location,
+                name: (event.name || "").replace(/\(Baseball\) /, "").trim(),
+                summary: event.summary,
+                begin: this.toDate(event.begin),
+                end: this.toDate(event.end),
+                duration: summary.seconds,
+                cameras: summary.cameras,
+            };
+        });
 
         return result;
+    }
+
+    // Firestore hands back Timestamps here, but the same records arrive as
+    // plain Dates through other paths, and an unprocessed event may carry
+    // neither.
+    toDate(value) {
+        if (!value) return null;
+        return typeof value.toDate === "function" ? value.toDate() : value;
     }
 }
 
@@ -318,6 +338,13 @@ class SummaryMinutesTool {
         }
 
         const hierarchy = new Hierarchy(args.hierarchy);
+
+        if (hierarchy.camera == null) {
+            throw new Error(
+                "Hierarchy must include a camera for minute summary"
+            );
+        }
+
         const summarizer = new Summarizer();
         const summary = await summarizer.loadFromStorage(
             hierarchy.toString("-")
@@ -665,6 +692,595 @@ class MessagesTool {
     }
 }
 
+// Default width of one scrub step, in seconds. Detections arrive ~3/sec, so a
+// few seconds is enough to have seen everyone present without smearing across
+// real movement.
+const DEFAULT_WINDOW_SECONDS = 4;
+
+/**
+ * Load expression detections for a hierarchy over a time range, addressed
+ * through the chunks API rather than an HLS playlist.
+ *
+ * The playback path discovers expression URLs by parsing them off the HLS
+ * fragment init-segment query string (Score.createLoadSchedule) — that is built
+ * around a single player driving a single camera, and needs a playlist load per
+ * camera just to learn where the JSON lives. Chunk docs already carry
+ * `expressionsPath` + `storage`, so any consumer that isn't a player (the chat
+ * crowd map, offline analysis) can go straight to the data.
+ *
+ * Chunks are one minute long and keyed by `minuteOfDay`; video time is mapped
+ * onto that axis via the first chunk's `creationTime`, matching the convention
+ * in src/ga/scenario.js.
+ */
+class ExpressionsData {
+    constructor() {
+        // hierarchy string -> Promise<chunks[]>. The promise (not the result)
+        // is cached so concurrent per-camera loads share one Firestore query.
+        this.chunkCache = new Map();
+    }
+
+    async getChunks(hierarchy) {
+        if (!(hierarchy instanceof Hierarchy)) {
+            hierarchy = new Hierarchy(hierarchy);
+        }
+        const key = hierarchy.toString();
+
+        if (!this.chunkCache.has(key)) {
+            this.chunkCache.set(
+                key,
+                chunksData.getByHierarchy(hierarchy).then((chunks) => {
+                    chunks = chunks || [];
+                    chunks.sort((a, b) => a.minuteOfDay - b.minuteOfDay);
+                    return chunks;
+                })
+            );
+        }
+        return await this.chunkCache.get(key);
+    }
+
+    clearCache() {
+        this.chunkCache.clear();
+    }
+
+    // Video time (seconds from event start) -> minuteOfDay.
+    minuteOfDayFor(firstCreationTime, videoTime) {
+        const start = new Date(firstCreationTime);
+        const target = new Date(start.getTime() + videoTime * 1000);
+        return target.getUTCHours() * 60 + target.getUTCMinutes();
+    }
+
+    // A chunk's start offset, in video-time seconds from the event start.
+    chunkOffset(firstCreationTime, chunkCreationTime) {
+        return (
+            (new Date(chunkCreationTime) - new Date(firstCreationTime)) / 1000.0
+        );
+    }
+
+    /**
+     * Detection rows for [startTime, endTime] on one hierarchy (camera
+     * included). Rows carry `time` on the event clock and, when a scoring
+     * profile is loaded, a computed `score`.
+     *
+     * @param {Hierarchy|string} hierarchy
+     * @param {number} startTime seconds from event start
+     * @param {number} endTime seconds from event start
+     * @param {number} maxRows soft cap on rows returned; chunks are evenly
+     *   sampled to stay under it so a wide range can't balloon memory.
+     */
+    async loadRange(hierarchy, startTime, endTime, maxRows = 4000) {
+        const chunks = await this.getChunks(hierarchy);
+        if (!chunks.length) return [];
+
+        if (endTime < startTime) [startTime, endTime] = [endTime, startTime];
+
+        const first = chunks[0].creationTime;
+        const startMinute = this.minuteOfDayFor(first, startTime);
+        const endMinute = this.minuteOfDayFor(first, endTime);
+
+        const wanted = chunks.filter(
+            (c) => c.minuteOfDay >= startMinute && c.minuteOfDay <= endMinute
+        );
+        if (!wanted.length) return [];
+
+        // Budget the cap across the chunks we're about to read, so the result
+        // is bounded regardless of how wide the requested range is.
+        const perChunkCap = Math.max(1, Math.floor(maxRows / wanted.length));
+
+        const scoring = new Score();
+        const profile = profilesData.profile;
+        const out = [];
+
+        for (const chunk of wanted) {
+            const url = chunk.getExpressionsUrl && chunk.getExpressionsUrl();
+            if (!url) continue;
+
+            // A chunk's full row set is transient — it is filtered and sampled
+            // here, and goes out of scope before the next chunk is read.
+            const rows = await scoring.loadDetections(url);
+            if (!rows || !rows.length) continue;
+
+            scoring.applyTime(rows, this.chunkOffset(first, chunk.creationTime));
+
+            // applyProfile computes row.score (and rescales emotion.score in
+            // place). Without a loaded profile it would throw on
+            // `profile.emotions`, so skip it and let consumers fall back to
+            // their own scoring of the untouched emotions.
+            if (profile && profile.emotions) {
+                scoring.applyProfile(rows, profile);
+            }
+
+            // A zero-width request (endTime omitted, so end === start) can't be
+            // served by a range filter: row.time is frame/fps + chunkOffset and
+            // will essentially never equal the requested second exactly. Snap
+            // to the single nearest frame instead — that's the "instant" case.
+            const selected =
+                endTime > startTime
+                    ? rows.filter(
+                          (row) => row.time >= startTime && row.time <= endTime
+                      )
+                    : this.nearestFrame(rows, startTime);
+
+            out.push(...this.sample(selected, perChunkCap));
+        }
+
+        return out;
+    }
+
+    /**
+     * Detections for [startTime, endTime] as a sequence of time windows, with
+     * each person collapsed to a single entry per window.
+     *
+     * This is the scrubbing/animation shape. Flattening a span into one cloud
+     * plots every per-frame detection, so one person visible for a minute
+     * becomes ~180 dots — not a headcount, and because depth is derived from
+     * box height, per-frame height jitter smears them along the camera axis.
+     * Bucketing by window and averaging each person's boxes fixes both: one
+     * dot per person, and an averaged box height that damps the jitter.
+     *
+     * Stable `person` IDs are carried through so the view can animate a person
+     * between windows rather than popping. Note the tracker only guarantees
+     * identity *within* a chunk (one minute), so IDs change across a chunk
+     * boundary — see Tracker._namespaceChunkIds.
+     *
+     * @returns {Promise<Array>} [{ index, time, people: [{id, box, score, detections}] }]
+     */
+    async loadWindows(
+        hierarchy,
+        startTime,
+        endTime,
+        windowSeconds = DEFAULT_WINDOW_SECONDS,
+        maxRows = 20000
+    ) {
+        const chunks = await this.getChunks(hierarchy);
+        if (!chunks.length) return [];
+
+        if (endTime < startTime) [startTime, endTime] = [endTime, startTime];
+
+        const first = chunks[0].creationTime;
+        const startMinute = this.minuteOfDayFor(first, startTime);
+        const endMinute = this.minuteOfDayFor(first, endTime);
+
+        const wanted = chunks.filter(
+            (c) => c.minuteOfDay >= startMinute && c.minuteOfDay <= endMinute
+        );
+        if (!wanted.length) return [];
+
+        const scoring = new Score();
+        const profile = profilesData.profile;
+        // One tracker across all chunks so its per-chunk ID namespacing keeps
+        // IDs globally unique for this load.
+        //
+        // timeGapS is raised from the 0.5s default because that default is
+        // tuned for consecutive video frames, not detection cadence. Rows here
+        // arrive ~0.33s apart (p50 0.33s, max 0.65s in the samples), so one
+        // missed detection puts a person's next sighting ~0.66s out — past
+        // 0.5s — and their track breaks. Measured over both samples, going
+        // 0.5 -> 2.0 cuts distinct tracks roughly in half (calm-few 166 -> 87,
+        // cheering-many 2880 -> 1313) and plateaus after that.
+        const tracker = new Tracker({ timeGapS: 2.0 });
+        const perChunkCap = Math.max(1, Math.floor(maxRows / wanted.length));
+
+        // window index -> Map(personId -> accumulator)
+        const windows = new Map();
+
+        for (const chunk of wanted) {
+            const url = chunk.getExpressionsUrl && chunk.getExpressionsUrl();
+            if (!url) continue;
+
+            const rows = await scoring.loadDetections(url);
+            if (!rows || !rows.length) continue;
+
+            scoring.applyTime(rows, this.chunkOffset(first, chunk.creationTime));
+            if (profile && profile.emotions) {
+                scoring.applyProfile(rows, profile);
+            }
+            // Assigns `person` by bbox-IoU when the pipeline didn't supply it.
+            tracker.assign(rows, null, url);
+
+            const inRange = rows.filter(
+                (row) => row.time >= startTime && row.time <= endTime
+            );
+
+            for (const row of this.sample(inRange, perChunkCap)) {
+                if (!row.box) continue;
+                const index = Math.floor(
+                    (row.time - startTime) / windowSeconds
+                );
+                if (!windows.has(index)) windows.set(index, new Map());
+                const people = windows.get(index);
+
+                // Rows with no identity can't be collapsed; keep them distinct
+                // so they're still drawn rather than merged into one blob.
+                const id =
+                    typeof row.person === "number"
+                        ? row.person
+                        : `anon:${row.frame}:${Math.round(row.box.x)}`;
+
+                let person = people.get(id);
+                if (!person) {
+                    person = {
+                        id,
+                        x: 0,
+                        y: 0,
+                        w: 0,
+                        h: 0,
+                        score: 0,
+                        detections: 0,
+                    };
+                    people.set(id, person);
+                }
+                person.x += row.box.x;
+                person.y += row.box.y;
+                person.w += row.box.w;
+                person.h += row.box.h;
+                person.score += typeof row.score === "number" ? row.score : 0;
+                person.detections += 1;
+            }
+        }
+
+        return [...windows.entries()]
+            .sort((a, b) => a[0] - b[0])
+            .map(([index, people]) => ({
+                index,
+                time: startTime + index * windowSeconds,
+                people: [...people.values()].map((p) => ({
+                    id: p.id,
+                    // Mean box over the window — collapses the person to one
+                    // position and damps per-frame box-height noise.
+                    box: {
+                        x: p.x / p.detections,
+                        y: p.y / p.detections,
+                        w: p.w / p.detections,
+                        h: p.h / p.detections,
+                    },
+                    score: p.score / p.detections,
+                    detections: p.detections,
+                })),
+            }));
+    }
+
+    /**
+     * loadWindows across several cameras, aligned on a shared window index so
+     * every step of the sequence is the same slice of time on all cameras.
+     * @returns {Promise<Array>} [{ index, time, byCamera: {cam: people[]} }]
+     */
+    async loadWindowsForCameras(
+        hierarchy,
+        cameras,
+        startTime,
+        endTime,
+        windowSeconds = DEFAULT_WINDOW_SECONDS,
+        maxRows
+    ) {
+        if (!(hierarchy instanceof Hierarchy)) {
+            hierarchy = new Hierarchy(hierarchy);
+        }
+
+        const perCamera = await Promise.all(
+            cameras.map(async (camera) => {
+                const hier = new Hierarchy(hierarchy);
+                hier.camera = camera;
+                try {
+                    const windows = await this.loadWindows(
+                        hier,
+                        startTime,
+                        endTime,
+                        windowSeconds,
+                        maxRows
+                    );
+                    return { camera, windows };
+                } catch (error) {
+                    console.error(
+                        `expressions: camera ${camera} failed`,
+                        error
+                    );
+                    return {
+                        camera,
+                        windows: [],
+                        error: String(error.message || error),
+                    };
+                }
+            })
+        );
+
+        const byIndex = new Map();
+        for (const { camera, windows } of perCamera) {
+            for (const window of windows) {
+                if (!byIndex.has(window.index)) {
+                    byIndex.set(window.index, {
+                        index: window.index,
+                        time: window.time,
+                        byCamera: {},
+                    });
+                }
+                byIndex.get(window.index).byCamera[camera] = window.people;
+            }
+        }
+
+        const steps = [...byIndex.values()].sort((a, b) => a.index - b.index);
+        const errors = perCamera.filter((c) => c.error);
+        return { steps, errors };
+    }
+
+    // All rows belonging to the frame closest to `time`. One frame is one
+    // coherent instant across everyone the camera saw.
+    nearestFrame(rows, time) {
+        let frame = null;
+        let best = Infinity;
+        for (const row of rows) {
+            const delta = Math.abs(row.time - time);
+            if (delta < best) {
+                best = delta;
+                frame = row.frame;
+            }
+        }
+        return frame === null ? [] : rows.filter((row) => row.frame === frame);
+    }
+
+    // Evenly sample an array down to at most `cap` entries. Iterates a fixed
+    // count rather than accumulating a float step, which drifts and can
+    // overrun the cap by one on some lengths.
+    sample(rows, cap) {
+        if (rows.length <= cap) return rows;
+        const step = rows.length / cap;
+        const out = [];
+        for (let k = 0; k < cap; k++) {
+            out.push(rows[Math.min(rows.length - 1, Math.floor(k * step))]);
+        }
+        return out;
+    }
+
+    /**
+     * Load several cameras of one event in parallel.
+     * @returns {Promise<Object>} rows keyed by camera number.
+     */
+    async loadRangeForCameras(hierarchy, cameras, startTime, endTime, maxRows) {
+        if (!(hierarchy instanceof Hierarchy)) {
+            hierarchy = new Hierarchy(hierarchy);
+        }
+
+        const results = await Promise.all(
+            cameras.map(async (camera) => {
+                const hier = new Hierarchy(hierarchy);
+                hier.camera = camera;
+                try {
+                    const rows = await this.loadRange(
+                        hier,
+                        startTime,
+                        endTime,
+                        maxRows
+                    );
+                    return { camera, rows };
+                } catch (error) {
+                    // One unavailable camera shouldn't sink the others.
+                    console.error(
+                        `expressions: camera ${camera} failed`,
+                        error
+                    );
+                    return { camera, rows: [], error: String(error.message || error) };
+                }
+            })
+        );
+
+        const byCamera = {};
+        for (const result of results) byCamera[result.camera] = result;
+        return byCamera;
+    }
+}
+
+const expressionsData = new ExpressionsData();
+
+// Exposed for console debugging, matching the window._vy_* convention used by
+// eventbus/toolbox/etc. Lets a chunk lookup or a window load be run directly,
+// which separates "no chunk data for this hierarchy" from a fault further up.
+if (typeof window !== "undefined") {
+    window._vy_expressions = expressionsData;
+}
+
+const ALL_CAMERAS = [1, 2, 3, 4, 5];
+
+// Soft cap on rows loaded per camera. The crowd map samples again on the way
+// in (crowdMap.maxPointsPerCamera), so this only bounds transient memory.
+const MAX_ROWS_PER_CAMERA = 20000;
+
+// Width of one scrub step. Detections arrive ~3/sec, so a few seconds sees
+// everyone present without smearing across real movement.
+const WINDOW_SECONDS = 4;
+
+/**
+ * Show the user a crowd sentiment map for a moment or span during an event.
+ *
+ * Unlike the other tools in this directory, this one has a side effect beyond
+ * its return value: it fires `ui.showCrowdSnapshot` on the eventBus so the chat
+ * banner (Chat.showCrowdSnapshot in src/rschat.js) renders it. The returned
+ * JSON is the compact version the model reasons about; the banner receives the
+ * detection rows, which it immediately reduces to plotted points.
+ *
+ * Data is addressed through the chunks API (src/data/expressions.js), not the
+ * HLS playlist path — the latter is built for a single player driving a single
+ * camera and needs a playlist load per camera just to locate the JSON.
+ */
+class CrowdSnapshotTool {
+    constructor() {}
+
+    get name() {
+        return "show_crowd_snapshot";
+    }
+
+    get description() {
+        return (
+            "Display a visual crowd map to the user for a moment or span of " +
+            "time during an event. Shows approximately where people were " +
+            "sitting in each camera's view and how positive or negative their " +
+            "expressions were. Use this when a moment is worth showing rather " +
+            "than only describing. Returns a per-camera summary of how many " +
+            "people were visible and their average sentiment."
+        );
+    }
+
+    get parameters() {
+        return {
+            type: "object",
+            properties: {
+                hierarchy: {
+                    type: "string",
+                    description:
+                        'The hierarchy identifier for the event ("location:date" ' +
+                        'eg:"raimondi:20250711"). Any camera segment is ignored; ' +
+                        "cameras are chosen with the `cameras` argument.",
+                },
+                startTime: {
+                    type: "number",
+                    description:
+                        "Start of the span to show, in seconds from the start of the event.",
+                },
+                endTime: {
+                    type: "number",
+                    description:
+                        "End of the span, in seconds from the start of the event. " +
+                        "Omit to show a single instant at startTime.",
+                },
+                cameras: {
+                    type: "array",
+                    items: { type: "number" },
+                    description:
+                        "Which cameras to show (1-5). Omit to show all five.",
+                },
+            },
+            required: ["hierarchy", "startTime"],
+        };
+    }
+
+    get supportsCursors() {
+        return false;
+    }
+
+    normalizeCameras(cameras) {
+        if (!Array.isArray(cameras) || !cameras.length) return ALL_CAMERAS;
+        const picked = cameras
+            .map((c) => parseInt(c, 10))
+            .filter((c) => ALL_CAMERAS.includes(c));
+        return picked.length ? [...new Set(picked)] : ALL_CAMERAS;
+    }
+
+    async invoke(args = {}) {
+        if (!args.hierarchy) {
+            throw new Error("Hierarchy argument is required");
+        }
+        if (typeof args.startTime !== "number") {
+            throw new Error("startTime argument is required");
+        }
+
+        const hier = new Hierarchy(args.hierarchy);
+        const cameras = this.normalizeCameras(args.cameras);
+        const startTime = args.startTime;
+        const endTime =
+            typeof args.endTime === "number" ? args.endTime : args.startTime;
+
+        // A bare instant still gets one window, so the view model is uniform.
+        const spanEnd =
+            endTime > startTime ? endTime : startTime + WINDOW_SECONDS;
+
+        const { steps, errors } = await expressionsData.loadWindowsForCameras(
+            hier,
+            cameras,
+            startTime,
+            spanEnd,
+            WINDOW_SECONDS,
+            MAX_ROWS_PER_CAMERA
+        );
+
+        const label = this.buildLabel(hier, startTime, endTime);
+        eventBus.fire("ui.showCrowdSnapshot", {
+            steps,
+            label,
+            hierarchy: hier.toString(":"),
+            startTime,
+            endTime: spanEnd,
+            windowSeconds: WINDOW_SECONDS,
+        });
+
+        return {
+            displayed: true,
+            hierarchy: hier.toString(":"),
+            startTime,
+            endTime: spanEnd,
+            windowSeconds: WINDOW_SECONDS,
+            steps: steps.length,
+            // Per-step, per-camera people counts and mean sentiment, so the
+            // model can talk about how the crowd changed across the span
+            // rather than only its average.
+            timeline: steps.map((step) => ({
+                time: Math.round(step.time),
+                cameras: this.summarizeStep(step, cameras),
+            })),
+            errors: errors.length ? errors : undefined,
+        };
+    }
+
+    // One step's per-camera counts. Each person is collapsed to one entry per
+    // window, so this counts distinct tracks rather than raw detections.
+    //
+    // `approximatePeople` is deliberately hedged: it is the number of distinct
+    // tracks seen during the window, which overcounts. Some of that is real
+    // (more people pass through a 4s window than are visible in any one
+    // frame), and some is track fragmentation the tracker can't fully avoid on
+    // ~0.33s detection cadence. Measured against the samples it runs ~2x the
+    // per-frame headcount. It is a good relative signal across cameras and
+    // across time; it is not an attendance figure.
+    summarizeStep(step, cameras) {
+        const out = {};
+        for (const camera of cameras) {
+            const people = (step.byCamera && step.byCamera[camera]) || [];
+            if (!people.length) continue;
+            let sum = 0;
+            for (const person of people) sum += person.score || 0;
+            out[camera] = {
+                approximatePeople: people.length,
+                averageSentiment: Math.round(sum / people.length),
+            };
+        }
+        return out;
+    }
+
+    buildLabel(hier, startTime, endTime) {
+        const span =
+            endTime > startTime
+                ? `${this.formatTime(startTime)}–${this.formatTime(endTime)}`
+                : this.formatTime(startTime);
+        return `${hier.toString(":")} @ ${span}`;
+    }
+
+    formatTime(seconds) {
+        const s = Math.max(0, Math.floor(seconds));
+        const hh = Math.floor(s / 3600);
+        const mm = Math.floor((s % 3600) / 60);
+        const ss = s % 60;
+        const pad = (n) => n.toString().padStart(2, "0");
+        return hh ? `${hh}:${pad(mm)}:${pad(ss)}` : `${mm}:${pad(ss)}`;
+    }
+}
+
 class ToolBox {
     constructor() {
         this.toolsList = [
@@ -677,6 +1293,7 @@ class ToolBox {
             new WeatherTool(),
             new ConversationsTool(),
             new MessagesTool(),
+            new CrowdSnapshotTool(),
         ];
         this.toolsLookup = {};
         this.toolsList.forEach((tool) => {
@@ -739,7 +1356,9 @@ class ToolBox {
     }
 
     getMessageForResult(result, resultJSON) {
-        if (Array.isArray(result)) {
+        if (result === null || result === undefined) {
+            return "  - Returned no value.";
+        } else if (Array.isArray(result)) {
             return `  - Returned ${result.length} rows.`;
         } else if (result.from_cursor) {
             return `  - Returned the next page of ${
@@ -756,9 +1375,14 @@ class ToolBox {
     }
 
     isRows(result) {
-        if (result.keys && result.rows) {
+        // A tool that returned nothing, or an empty list, has no columns to
+        // infer — both used to throw here and take the turn down.
+        if (!result || typeof result !== "object") {
+            return false;
+        } else if (result.keys && result.rows) {
             return true;
         } else if (Array.isArray(result)) {
+            if (!result.length) return false;
             // If all values of the first row are "flat" (not objects), treat as rows
             const vals = Object.values(result[0]);
             if (vals.every((v) => typeof v !== "object")) {
@@ -906,7 +1530,10 @@ class ToolBox {
     }
 
     addObjectResult(output, msgs, tool, result, maxSize) {
-        const resultJSON = JSON.stringify(result);
+        // JSON.stringify(undefined) is undefined, not a string — a tool that
+        // returned nothing would blow up on .length below and be reported as a
+        // failure. Returning nothing isn't an error; the model gets null.
+        const resultJSON = JSON.stringify(result ?? null);
         const msg = this.getMessageForResult(result, resultJSON);
 
         msgs.push(msg);
@@ -932,18 +1559,69 @@ class ToolBox {
         }
     }
 
+    /**
+     * Invoke every requested tool and produce exactly one output per call.
+     *
+     * Every call_id the model issued must come back with something, including a
+     * failing one. Under Promise.all a single thrown tool rejected the whole
+     * batch, so no outputs were posted for *any* call in the turn and the
+     * conversation sat waiting on a response that could never arrive. A failure
+     * is now reported to the model as an error result for that one call, and
+     * the rest of the turn still answers.
+     */
     async invokeAll(tools) {
         const outputMaxSize = 100000 / tools.length;
-        const promises = tools.map(({ name, args }) => this.invoke(name, args));
-        const results = await Promise.all(promises);
+        const settled = await Promise.allSettled(
+            tools.map(({ name, args }) => this.invoke(name, args))
+        );
+
         const output = [];
         let msgs = ["Tool results:", ""];
 
         for (let i = 0; i < tools.length; i++) {
-            this.addResult(output, msgs, tools[i], results[i], outputMaxSize);
+            const result = settled[i];
+
+            if (result.status === "rejected") {
+                this.addErrorResult(output, msgs, tools[i], result.reason);
+                continue;
+            }
+
+            // Where this call's message and output start, so a formatter that
+            // fails partway through doesn't leave half an entry behind next to
+            // the error — one call, one message, one output.
+            const msgCount = msgs.length;
+            const outputCount = output.length;
+
+            try {
+                this.addResult(
+                    output,
+                    msgs,
+                    tools[i],
+                    result.value,
+                    outputMaxSize
+                );
+            } catch (error) {
+                // Formatting an unexpected result shape would otherwise strand
+                // the turn just as a thrown tool did.
+                msgs.length = msgCount;
+                output.length = outputCount;
+                this.addErrorResult(output, msgs, tools[i], error);
+            }
         }
 
         return { content: msgs.join("\n"), output: output };
+    }
+
+    addErrorResult(output, msgs, tool, error) {
+        const message = (error && error.message) || String(error);
+
+        console.error(`Tool ${tool.name} failed:`, error);
+        msgs.push(`  - ${tool.name} failed: ${message}`);
+
+        output.push({
+            call_id: tool.call_id,
+            output: JSON.stringify({ error: message }),
+        });
     }
 }
 
@@ -1055,6 +1733,10 @@ class WebHooksData {
 }
 
 const SUMMARIZE_EVERY_MS = 1 * 60 * 1000;
+
+// Tools that draw something on screen as well as returning data to the model,
+// and so need re-invoking when a conversation is reopened.
+const VISUAL_TOOLS = ["show_crowd_snapshot"];
 
 class ChatClient {
     constructor() {
@@ -1380,8 +2062,85 @@ class ChatClient {
             role: "assistant",
             type: "tool_request",
             content: ["Requesting tools:", "", ...msg].join("\n"),
+            // Stored alongside the rendered text so replaying a call on
+            // conversation load doesn't have to parse `content` — that string
+            // is a display format, and reformatting it would silently break
+            // replay. See parseToolCallsFromContent() for the fallback that
+            // covers conversations written before this field existed.
+            toolCalls: toolRequests,
             ...options,
         });
+    }
+
+    // --- Replaying visual tools on conversation load -----------------------
+    //
+    // Most tools only feed the model, but show_crowd_snapshot also paints the
+    // chat banner. Reopening a conversation restores the transcript, so the
+    // banner should come back too — otherwise the assistant is discussing a
+    // map that isn't on screen.
+
+    /**
+     * Tool calls recorded on a message, preferring the structured field and
+     * falling back to the rendered content for older messages.
+     */
+    getToolCallsFromMessage(message) {
+        if (Array.isArray(message.toolCalls)) return message.toolCalls;
+        return this.parseToolCallsFromContent(message.content);
+    }
+
+    // "  - show_crowd_snapshot({"hierarchy":"raimondi:20260621",...})" per line.
+    // Args are always one line of JSON, so the greedy match to the final ")"
+    // recovers them intact.
+    parseToolCallsFromContent(content) {
+        const calls = [];
+        for (const line of (content || "").split("\n")) {
+            const match = line.match(/^\s*-\s*([A-Za-z0-9_]+)\((.*)\)\s*$/);
+            if (match) calls.push({ name: match[1], args: match[2] });
+        }
+        return calls;
+    }
+
+    /**
+     * The most recent visual tool call in `messages`, or null.
+     *
+     * Only the last one matters: the banner shows a single map at a time, so
+     * replaying every call in a long conversation would be a burst of fetches
+     * for maps nobody sees.
+     */
+    findLastVisualCall(messages) {
+        let last = null;
+
+        for (const message of messages || []) {
+            if (message.type !== "tool_request") continue;
+            for (const call of this.getToolCallsFromMessage(message)) {
+                if (VISUAL_TOOLS.includes(call.name)) last = call;
+            }
+        }
+
+        return last;
+    }
+
+    /**
+     * Re-invoke the most recent visual tool call in `messages`, if any.
+     *
+     * Goes through toolBox so the tool's eventBus side effect fires exactly as
+     * it does live; the returned summary is discarded rather than posted, since
+     * the model already has it in context from the original exchange.
+     */
+    async replayLastVisual(messages) {
+        const last = this.findLastVisualCall(messages);
+        if (!last) return null;
+
+        console.log("Replaying visual tool call:", last);
+        try {
+            await toolBox.invoke(last.name, last.args);
+            return last;
+        } catch (error) {
+            // A replay failing is not worth blocking the transcript over — the
+            // event may have been deleted, or its chunks may no longer load.
+            console.error("Error replaying visual tool call:", error);
+            return null;
+        }
     }
 
     async invokeTools(tools) {
@@ -1492,6 +2251,10 @@ class Messages {
             }
 
             this.list.innerHTML = "";
+            // The first batch the listener delivers is the whole history, so
+            // that's the one to replay a visual tool call from. Later batches
+            // are live messages, which paint themselves as they arrive.
+            this.replayPending = true;
             this.data = new MessagesData(this.conversation);
             this.data.listen((messages) => this.appendMessages(messages));
 
@@ -1767,6 +2530,16 @@ class Messages {
         }
 
         eventBus.fire("ui.updateMessages", { messages: messages });
+
+        if (this.replayPending) {
+            // Cleared before the await so a second batch arriving mid-replay
+            // can't start a second one.
+            this.replayPending = false;
+            // Replay against the accumulated history rather than this batch:
+            // the two are the same on load, but the history is the honest
+            // source if that ever stops being true.
+            chatClient.replayLastVisual(this.data.history);
+        }
     }
 }
 
@@ -4086,6 +4859,21 @@ class Chat {
     constructor() {
         this.messages = new Messages();
         this.conversations = new Conversations();
+
+        // Crowd sentiment banner. Hidden until a snapshot arrives, so the chat
+        // looks unchanged until the assistant actually has a moment to show.
+        this.showBanner = van.state(false);
+        // Caption, split across two lines: which event, then which moment.
+        this.bannerTitle = van.state("");
+        this.bannerRange = van.state("");
+        // Scrubber position over the loaded window sequence. stepCount 0 means
+        // a single instant, so no scrubber is shown.
+        this.stepCount = van.state(0);
+        this.stepIndex = van.state(0);
+        this.playing = van.state(false);
+        // Bumped per snapshot. The score panel reads it so a single-instant
+        // snapshot (which never moves stepIndex) still re-renders.
+        this.dataVersion = van.state(0);
     }
 
     async init() {
@@ -4095,7 +4883,242 @@ class Chat {
         eventBus.on("ui.updateMessages", () => {
             this.scrollToBottom();
         });
+        eventBus.on("ui.showCrowdSnapshot", (e) => {
+            this.showCrowdSnapshot(e.detail);
+        });
+        // Switching conversations drops the map with the transcript that
+        // explained it. If the incoming conversation has one of its own,
+        // ChatClient.replayLastVisual re-fires showCrowdSnapshot once its
+        // history loads.
+        eventBus.on("ui.requestConversation", () => {
+            if (this.showBanner.val) this.hideCrowdSnapshot();
+        });
         console.log("rschat Init complete");
+    }
+
+    /**
+     * Render a crowd snapshot in the banner.
+     * @param {Object} detail
+     * @param {Object} detail.byCamera - rows keyed by camera number (1-5)
+     * @param {string} [detail.label] - caption describing the moment shown
+     */
+    showCrowdSnapshot(detail = {}) {
+        const { steps, byCamera } = detail;
+
+        if (Array.isArray(steps) && steps.length) {
+            // Follow the animation so the slider tracks playback.
+            crowdMap.onStepChange = (index) => {
+                this.stepIndex.val = index;
+            };
+            const count = crowdMap.setSequence(steps);
+            this.stepCount.val = count;
+            this.stepIndex.val = 0;
+            this.playing.val = false;
+        } else {
+            // Single-instant form (no sequence) — used by direct callers.
+            crowdMap.setAllDetections(byCamera || {});
+            this.stepCount.val = 0;
+            this.stepIndex.val = 0;
+        }
+
+        this.setBannerLabels(detail);
+        this.dataVersion.val = this.dataVersion.val + 1;
+        this.showBanner.val = true;
+    }
+
+    /**
+     * Split the caption into "which event" and "which moment". Prefers the
+     * structured fields the tool sends; falls back to splitting the composed
+     * `label` for callers (and the e2e fixture) that only pass that.
+     */
+    setBannerLabels(detail = {}) {
+        const label = detail.label || "";
+        let title = detail.hierarchy || "";
+        let range = "";
+
+        if (typeof detail.startTime === "number") {
+            range =
+                detail.endTime > detail.startTime
+                    ? `${this.formatTime(detail.startTime)}–${this.formatTime(
+                          detail.endTime
+                      )}`
+                    : this.formatTime(detail.startTime);
+        }
+
+        if (!title || !range) {
+            const at = label.lastIndexOf(" @ ");
+            if (at > -1) {
+                title = title || label.slice(0, at);
+                range = range || label.slice(at + 3);
+            } else {
+                title = title || label;
+            }
+        }
+
+        this.bannerTitle.val = title;
+        this.bannerRange.val = range;
+    }
+
+    // Scrub to a step of the loaded sequence. Dragging stops playback so the
+    // animation doesn't fight the user's own seeking.
+    showCrowdStep(index) {
+        if (crowdMap.playing) {
+            crowdMap.pause();
+            this.playing.val = false;
+        }
+        const step = crowdMap.showStep(index);
+        if (step) this.stepIndex.val = crowdMap.step;
+    }
+
+    toggleCrowdPlay() {
+        this.playing.val = crowdMap.togglePlay();
+    }
+
+    // Second caption line: the span being shown and, once there's a sequence,
+    // where in it you are. Reading stepIndex/stepCount here is what makes van
+    // re-render it as you scrub or as playback advances.
+    bannerTimeLine() {
+        const index = this.stepIndex.val;
+        const range = this.bannerRange.val;
+        if (!this.stepCount.val) return range;
+        const step = crowdMap.sequence && crowdMap.sequence[index];
+        return step ? `${range} · ${this.formatTime(step.time)}` : range;
+    }
+
+    /**
+     * Per-camera sentiment for the window on screen, plus an overall figure.
+     *
+     * Read from the sequence by index rather than from crowdMap.stats: during
+     * playback the map swaps its own stats inside the rAF tick, so going
+     * through the index keeps the numbers matched to the step the caption and
+     * scrubber are reporting.
+     *
+     * The overall score is weighted by plotted points, not a mean of the five
+     * camera means — a wedge with two people shouldn't count as much as one
+     * with forty.
+     */
+    crowdScores() {
+        // Reactive dependencies. Both are read unconditionally so van
+        // re-renders on a scrub *and* on a fresh single-instant snapshot.
+        const index = this.stepIndex.val;
+        this.dataVersion.val;
+
+        const step = this.stepCount.val
+            ? crowdMap.sequence && crowdMap.sequence[index]
+            : null;
+        const stats = (step && step.stats) || crowdMap.stats || {};
+
+        const cameras = [];
+        let weighted = 0;
+        let plotted = 0;
+        let people = 0;
+
+        for (const camera of [1, 2, 3, 4, 5]) {
+            const stat = stats[camera];
+            if (!stat || !stat.plotted) continue;
+            cameras.push({
+                camera,
+                score: Math.round(stat.mean),
+                people: stat.count,
+            });
+            weighted += stat.mean * stat.plotted;
+            plotted += stat.plotted;
+            people += stat.count;
+        }
+
+        return {
+            cameras,
+            people,
+            total: plotted ? Math.round(weighted / plotted) : 0,
+        };
+    }
+
+    // Left-side score readout. Sits in the letterbox beside the map — the seat
+    // map is 2:1 and the banner rarely is, so there's usually dead space there.
+    //
+    // Always returns an element, hidden when there's nothing plotted, rather
+    // than returning null for the empty case: van drops a binding whose
+    // function returned null (keepConnected filters bindings on
+    // `_dom?.isConnected`), and this one renders empty on first paint, so a
+    // null would mean the panel never appears at all.
+    crowdScorePanel() {
+        const { div, span } = van.tags;
+        const { cameras, total, people } = this.crowdScores();
+
+        // Same hue ramp as the plotted dots, so a number and its dots agree.
+        const swatch = (score) =>
+            span({
+                class: "inline-block w-2 h-2 rounded-full flex-shrink-0",
+                style: `background: hsl(${crowdMap.scoreToHue(
+                    score
+                )}, 90%, 45%);`,
+            });
+
+        const row = (label, score, count, emphasis) =>
+            div(
+                {
+                    class: `flex items-center gap-1.5 ${
+                        emphasis ? "font-semibold" : ""
+                    }`,
+                },
+                swatch(score),
+                span({ class: "w-8" }, label),
+                span({ class: "w-12 text-right" }, `${score}`),
+                span({ class: "w-12 text-right text-gray-500" }, `${count}`)
+            );
+
+        return div(
+            {
+                id: "crowdmap-scores",
+                class: "absolute top-1 left-2 bg-white/85 rounded px-2 py-1 text-sm text-gray-800 tabular-nums",
+                style: cameras.length ? "" : "display: none;",
+            },
+            div(
+                { class: "flex items-center gap-1.5 text-gray-500 mb-0.5" },
+                span({ class: "inline-block w-2 flex-shrink-0" }),
+                span({ class: "w-8" }, "Cam"),
+                span({ class: "w-12 text-right" }, "Score"),
+                // Distinct tracks in the window, which overcounts a headcount —
+                // see the note on approximatePeople in the tool.
+                span(
+                    {
+                        class: "w-12 text-right",
+                        title: "Approximate people seen during this window",
+                    },
+                    "People"
+                )
+            ),
+            ...cameras.map((c) => row(`${c.camera}`, c.score, c.people)),
+            div({ class: "border-t border-gray-300 my-0.5" }),
+            row("All", total, people, true)
+        );
+    }
+
+    stepLabel() {
+        if (!this.stepCount.val) return "";
+        return `${this.stepIndex.val + 1} / ${this.stepCount.val}`;
+    }
+
+    formatTime(seconds) {
+        const s = Math.max(0, Math.floor(seconds || 0));
+        const hh = Math.floor(s / 3600);
+        const mm = Math.floor((s % 3600) / 60);
+        const ss = s % 60;
+        const pad = (n) => n.toString().padStart(2, "0");
+        // Events run past an hour, so don't let minutes climb to "73:20".
+        return hh ? `${hh}:${pad(mm)}:${pad(ss)}` : `${mm}:${pad(ss)}`;
+    }
+
+    hideCrowdSnapshot() {
+        this.showBanner.val = false;
+        // clear() stops the rAF loop, so dismissing the banner can't leave an
+        // animation running against a hidden canvas.
+        crowdMap.clear();
+        this.playing.val = false;
+        this.stepCount.val = 0;
+        // Drop the score panel with the data it described, so a later snapshot
+        // can't flash the previous event's numbers before its own arrive.
+        this.dataVersion.val = this.dataVersion.val + 1;
     }
 
     scrollToBottom() {
@@ -4138,6 +5161,114 @@ class Chat {
                             class: "flex space-x-4 flex-shrink-0 mb-4 lg:hidden",
                         },
                         this.conversations.createSelectorElement()
+                    ),
+                    // Crowd sentiment banner — a top strip showing where the
+                    // crowd was and how it felt at a moment the assistant
+                    // chose. Hidden until a ui.showCrowdSnapshot event fires.
+                    div(
+                        {
+                            id: "chat-crowdmap",
+                            class: "w-full flex-shrink-0 mb-4 rounded-lg overflow-hidden bg-white flex flex-col",
+                            // Height is set inline rather than via a Tailwind
+                            // class: the banner must never grow to eat the
+                            // conversation, and an inline style can't be missed
+                            // by a stale CSS build or a cached stylesheet.
+                            //
+                            // The map keeps its 30vh; the scrubber row is added
+                            // on top of that rather than laid over the canvas,
+                            // because a video-player-style overlay covers the
+                            // front rows of cameras 3 and 4.
+                            style: () =>
+                                this.showBanner.val
+                                    ? "height: calc(30vh + 2.25rem);"
+                                    : "display: none;",
+                        },
+                        // Map area. Relative so the caption, close button and
+                        // score readout can sit over the canvas — the seat map
+                        // is 2:1 and the banner rarely is, so `object-fit:
+                        // contain` usually leaves empty margin on both sides.
+                        div(
+                            { class: "relative flex-1 min-h-0" },
+                            crowdMap.createElement({
+                                class: "block mx-auto",
+                                style: "width: 100%; height: 100%; object-fit: contain;",
+                            }),
+                            () => this.crowdScorePanel(),
+                            div(
+                                {
+                                    class: "absolute top-1 right-2 flex items-start gap-2",
+                                },
+                                div(
+                                    {
+                                        class: "bg-white/85 rounded px-2 py-1 text-right",
+                                    },
+                                    div(
+                                        {
+                                            id: "crowdmap-title",
+                                            class: "text-sm font-medium text-gray-800",
+                                        },
+                                        () => this.bannerTitle.val
+                                    ),
+                                    div(
+                                        {
+                                            id: "crowdmap-time",
+                                            class: "text-xs text-gray-600 tabular-nums",
+                                        },
+                                        () => this.bannerTimeLine()
+                                    )
+                                ),
+                                button(
+                                    {
+                                        class: "text-gray-500 hover:text-gray-800 bg-white/85 rounded px-2 py-1 text-sm",
+                                        title: "Hide crowd map",
+                                        onclick: () => this.hideCrowdSnapshot(),
+                                    },
+                                    van.tags.i({ class: "las la-times" })
+                                )
+                            )
+                        ),
+                        // Scrubber — only when the tool returned a sequence of
+                        // time windows rather than a single instant.
+                        div(
+                            {
+                                class: "flex-shrink-0 flex items-center gap-2 px-2 py-1 border-t border-gray-200 bg-white",
+                                style: () =>
+                                    this.stepCount.val > 1
+                                        ? ""
+                                        : "display: none;",
+                            },
+                            button(
+                                {
+                                    class: "text-gray-700 hover:text-black px-1",
+                                    title: () =>
+                                        this.playing.val ? "Pause" : "Play",
+                                    onclick: () => this.toggleCrowdPlay(),
+                                },
+                                van.tags.i({
+                                    class: () =>
+                                        this.playing.val
+                                            ? "las la-pause"
+                                            : "las la-play",
+                                })
+                            ),
+                            input({
+                                type: "range",
+                                class: "flex-1",
+                                min: 0,
+                                max: () => Math.max(0, this.stepCount.val - 1),
+                                value: () => this.stepIndex.val,
+                                oninput: (e) =>
+                                    this.showCrowdStep(
+                                        parseInt(e.target.value, 10)
+                                    ),
+                            }),
+                            div(
+                                {
+                                    class: "text-sm text-gray-700 tabular-nums whitespace-nowrap",
+                                },
+                                () => this.stepLabel()
+                            )
+                        )
                     ),
                     // Chat messages area
                     div(
@@ -4231,6 +5362,14 @@ class Chat {
 }
 
 const chat = new Chat();
+
+// Exposed for console debugging, matching the window._vy_* convention used by
+// rsreports/rsadmin/toolbox. Handy for inspecting banner state (stepCount,
+// stepIndex) and driving the scrubber without a tool call.
+if (typeof window !== "undefined") {
+    window._vy_chat = chat;
+    window._vy_crowdMap = crowdMap;
+}
 
 export { Chat, chat };
 //# sourceMappingURL=rschat.js.map

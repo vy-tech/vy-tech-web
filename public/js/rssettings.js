@@ -1,7 +1,9 @@
-import { v as van, e as eventBus } from './chunks/eventbus-c5hoJhOF.js';
-import { o as orgContext } from './chunks/orgContext-CvnztG5e.js';
-import { d as database, a as apiUtil } from './chunks/apiUtil-CDq4WBQY.js';
-import { M as Modal } from './chunks/van-ui-D8yynE9H.js';
+import { v as van } from './chunks/van-t8DywzvC.js';
+import { eventBus } from './chunks/eventbus-CgpxZhAr.js';
+import { o as orgContext } from './chunks/orgContext-DoenZFJu.js';
+import { d as database, a as apiUtil } from './chunks/apiUtil-BPgA2fJq.js';
+import { J as JobsData } from './chunks/jobs-L0jCg4oH.js';
+import { M as Modal } from './chunks/van-ui-YSP0ZuSh.js';
 
 /**
  * LocationsData manages physical location records for an organization.
@@ -223,6 +225,7 @@ class Settings {
         this.camerasData = new CamerasData();
         this.applicationsData = new ApplicationsData();
         this.apiKeysData = new ApiKeysData();
+        this.jobsData = new JobsData();
 
         this.activeTab = van.state("locations");
         this.user = van.state(null);
@@ -373,6 +376,9 @@ class Settings {
         const { div, span, button, i } = van.tags;
 
         const addressParts = [loc.city, loc.state].filter(Boolean).join(", ");
+        const challengeModeEnabled =
+            !!orgContext.getCurrentOrg()?.flags?.challengeModeEnabled;
+        const challengeRunning = !!loc.challengeModeRunning;
 
         return div(
             {
@@ -405,6 +411,24 @@ class Settings {
                         i({ class: "las la-video mr-1" }),
                         "Cameras"
                     ),
+                    challengeModeEnabled
+                        ? button(
+                              {
+                                  class: challengeRunning
+                                      ? "text-sm px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                                      : "text-sm px-3 py-1 bg-green-500 hover:bg-green-600 text-white rounded transition-colors",
+                                  onclick: () => this.handleToggleChallenge(loc),
+                              },
+                              i({
+                                  class: challengeRunning
+                                      ? "las la-stop mr-1"
+                                      : "las la-play mr-1",
+                              }),
+                              challengeRunning
+                                  ? "Stop Challenge Mode"
+                                  : "Start Challenge Mode"
+                          )
+                        : null,
                     button(
                         {
                             class: "text-sm px-3 py-1 bg-red-100 hover:bg-red-200 dark:bg-red-900 dark:hover:bg-red-800 text-red-700 dark:text-red-300 rounded transition-colors",
@@ -817,6 +841,31 @@ class Settings {
             return;
         await this.locationsData.delete(loc.id);
         await this.loadLocations();
+    }
+
+    async handleToggleChallenge(loc) {
+        const running = !!loc.challengeModeRunning;
+        const oid = orgContext.getCurrentOrgId();
+        const uid = this.user.val?.uid;
+        const type = running ? "StopChallenge" : "StartChallenge";
+
+        try {
+            await this.jobsData.queueJob(
+                "feed",
+                "live",
+                type,
+                uid,
+                oid,
+                loc.id
+            );
+            await this.locationsData.update(loc.id, {
+                challengeModeRunning: !running,
+            });
+            await this.loadLocations();
+        } catch (err) {
+            console.error("Failed to toggle challenge mode:", err);
+            alert("Failed to toggle challenge mode. Please try again.");
+        }
     }
 
     // =========================================================================

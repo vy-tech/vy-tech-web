@@ -1100,7 +1100,7 @@ class MessagesData {
     }
 }
 
-const MODEL = "gpt-5.2";
+const MODEL = "gpt-5.6-terra";
 const SUMMARIZATION_MODEL = "gpt-5-nano";
 
 const openaiApiKey = defineSecret("OPENAI_API_KEY");

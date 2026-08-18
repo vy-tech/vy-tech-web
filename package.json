@@ -12,11 +12,17 @@
         "dev": "npm run dev:css & npm run dev:js",
         "start": "node server.js",
         "cf-dev-mode": "node scripts/enable-cf-dev-mode.js",
-        "test": "node tests/h019-filter.test.js"
+        "test": "node tests/h019-filter.test.js",
+        "e2e": "node tests/e2e/crowdmap.e2e.mjs && node tests/e2e/chatbanner.e2e.mjs && node tests/e2e/toolbox.e2e.mjs",
+        "e2e:viz": "node tests/e2e/crowdmap.e2e.mjs",
+        "e2e:chat": "node tests/e2e/chatbanner.e2e.mjs",
+        "e2e:tools": "node tests/e2e/toolbox.e2e.mjs",
+        "e2e:login": "node tests/e2e/login.mjs"
     },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.0.0",
         "@aws-sdk/s3-request-presigner": "^3.0.0",
+        "@google-cloud/storage": "^7.21.0",
         "@pixiv/three-vrm": "^3.1.6",
         "@tailwindcss/typography": "^0.5.19",
         "ag-grid-community": "^34.2.0",
@@ -47,6 +53,7 @@
         "dotenv": "^17.2.3",
         "glob": "^11.0.3",
         "postcss": "^8.5.6",
+        "puppeteer": "^25.3.0",
         "rollup": "^4.50.0",
         "rollup-plugin-delete": "^3.0.2",
         "rollup-plugin-postcss": "^4.0.2",

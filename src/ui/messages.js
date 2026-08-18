@@ -23,6 +23,10 @@ class Messages {
             }
 
             this.list.innerHTML = "";
+            // The first batch the listener delivers is the whole history, so
+            // that's the one to replay a visual tool call from. Later batches
+            // are live messages, which paint themselves as they arrive.
+            this.replayPending = true;
             this.data = new MessagesData(this.conversation);
             this.data.listen((messages) => this.appendMessages(messages));
 
@@ -298,6 +302,16 @@ class Messages {
         }
 
         eventBus.fire("ui.updateMessages", { messages: messages });
+
+        if (this.replayPending) {
+            // Cleared before the await so a second batch arriving mid-replay
+            // can't start a second one.
+            this.replayPending = false;
+            // Replay against the accumulated history rather than this batch:
+            // the two are the same on load, but the history is the honest
+            // source if that ever stops being true.
+            chatClient.replayLastVisual(this.data.history);
+        }
     }
 }
 
